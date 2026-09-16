@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.infra.delegation_log import DelegationLog
+from adda._src.infra.delegation_log import DelegationLog
 
 
 def _make_log(tmp_path: Path) -> DelegationLog:
@@ -307,7 +307,7 @@ def test_terminal_row_is_written_before_the_registry_publishes_done(tmp_path):
     """
     import inspect
 
-    from a3dasm._src.nodes.tools.routing import delegation
+    from adda._src.nodes.tools.routing import delegation
 
     for fn_name in ("_finish_ok", "_finish_error"):
         src = inspect.getsource(getattr(delegation.WorkerSession, fn_name))

@@ -28,11 +28,11 @@ decision.
 
 ## Primary evidence — the seams already exist
 
-**Agent base contract** (`src/a3dasm/_src/backends/base.py:143-273`): a
+**Agent base contract** (`src/adda/_src/backends/base.py:143-273`): a
 subclass sets `system_prompt`, `tools: frozenset[str]`, `role`,
 `description` (required), optionally `report_sections`. Concrete skeleton
 to mirror directly (not just structurally — the tool *set*, not just the
-pattern): `F3dasmImplementerAgent` (`src/a3dasm/_src/agents/implementer.py:518-571`)
+pattern): `F3dasmImplementerAgent` (`src/adda/_src/agents/implementer.py:518-571`)
 — `tools = frozenset({"Bash","Edit","Read","Write","Glob","Grep",
 "ReportEvals","RecallStore","QueryStore","OracleStatus","HypothesisList",
 "HypothesisGet","BashOutput","KillShell","ReadProblemStatement"})`. It does
@@ -41,7 +41,7 @@ pattern): `F3dasmImplementerAgent` (`src/a3dasm/_src/agents/implementer.py:518-5
 the same: no closure-injection machinery at all (see Design §1, a deliberate
 simplification from two earlier drafts of this spec).
 
-**Graph wiring**: `src/a3dasm/_src/agents/_graphs.py` — `Edge("source",
+**Graph wiring**: `src/adda/_src/agents/_graphs.py` — `Edge("source",
 "target")` tuples; existing fan-in precedent for "a specialist any worker
 might need mid-task" is `literature_reviewer` (`Edge("strategizer",...)`,
 `Edge("datagenerator",...)`, `Edge("implementer",...)`), and `implementer`
@@ -117,11 +117,11 @@ matching this project's convention for a normal sync-time dependency — see
 is about an ephemeral subprocess env with an observed breaking release, a
 different situation).
 
-New first-party library, `src/a3dasm/_src/math_dsl.py`, exposing a
-`Workspace` class, re-exported publicly as `a3dasm.Workspace` (mirroring how
+New first-party library, `src/adda/_src/math_dsl.py`, exposing a
+`Workspace` class, re-exported publicly as `adda.Workspace` (mirroring how
 `get_evaluator` is re-exported for agent-authored pipeline scripts) so a
 derivation script imports it the same way any other agent-authored script
-imports a3dasm's own API: `from a3dasm import Workspace`. A derivation is a
+imports adda's own API: `from adda import Workspace`. A derivation is a
 **`.py` script** written against it,
 one file per "edition" (namespace), under `study_dir/runs/math_workspace/`
 — e.g. `main.py` (a transcribed paper, as published) and `high_re.py` (a
@@ -272,14 +272,14 @@ No new primitive needed — same reasoning that cut `equation()` earlier.
 Corrected from an earlier draft of this spec, which said to add MathExpert
 to `_default_graph()`'s standard topology. Checked the actual precedent for
 "a shipped, tested Agent subclass not every study needs": `DebuggerAgent`
-(`src/a3dasm/_src/agents/debugger.py`) is exported publicly
-(`a3dasm.__init__.__all__`) but never instantiated inside `_default_graph()`
+(`src/adda/_src/agents/debugger.py`) is exported publicly
+(`adda.__init__.__all__`) but never instantiated inside `_default_graph()`
 — confirmed by grep, it appears nowhere else in `_src`. A user opts into it
 by building their own `Graph`, the documented pattern in
 `docs/customizing-a-run.md`. Silently adding a 6th node to the default
 topology would change every existing study's graph without anyone asking
 for it — the literal opposite of "opt-in." `MathExpertAgent` follows the
-same precedent: exported from `a3dasm.__init__`, never added to
+same precedent: exported from `adda.__init__`, never added to
 `_default_graph()`.
 
 For a custom graph that does include it, mirror `literature_reviewer`'s fan-in
@@ -292,7 +292,7 @@ the corpus); that outbound edge is what grants `Delegate`/`Wait`/`Reply`/
 special-casing needed, only present in a graph that wires it that way.
 
 ### 4.5. Know-how lives in the KB, not in the agent's own code or this spec
-`src/a3dasm/_src/knowledge/entries/0011-symbolic-derivation-patterns.md`
+`src/adda/_src/knowledge/entries/0011-symbolic-derivation-patterns.md`
 (`audience: [math_expert]`, consultable via `ConsultHandbook`) carries the
 distilled literature/internet survey (`sympy-mcp`'s vocabulary shape,
 AlphaGeometry's engine-verifies/agent-proposes split, SymPy's three-valued

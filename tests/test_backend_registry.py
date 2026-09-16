@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from a3dasm._src.backends import registry
+from adda._src.backends import registry
 
 
 def test_available_backends_includes_all_four():

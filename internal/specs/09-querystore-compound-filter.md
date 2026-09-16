@@ -2,7 +2,7 @@
 
 ## Problem
 
-`QueryStore` (`src/a3dasm/_src/nodes/tools/routing.py`) is the read tool agents use to
+`QueryStore` (`src/adda/_src/nodes/tools/routing.py`) is the read tool agents use to
 ground design decisions in the evaluation ledger. As shipped it could filter only by
 `delegation_ids`/`source`, and its default listing hard-capped at 20 rows. Its `n_best`
 mode already drops the *objective* infeasibility sentinel (`_select_best_index`), but it
@@ -14,7 +14,7 @@ The single most common discovery question — *"of everything evaluated, which d
 feasible, and which is best?"* — was therefore inexpressible, so agents fell back to
 `ExperimentData.from_file()` + pandas by hand every run (attested: run `20260715T002538`
 D005 implementer and critic-1; recurs in ≥3 prior runs). This is the one source-verified,
-a3dasm-owned friction that survived a recency audit (many others were already fixed).
+adda-owned friction that survived a recency audit (many others were already fixed).
 
 ## Design (backward-compatible; two optional params)
 

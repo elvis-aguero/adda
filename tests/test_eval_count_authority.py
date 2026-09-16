@@ -5,7 +5,7 @@ from __future__ import annotations
 
 
 def test_recallstore_summary_labels_count_authoritative():
-    from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+    from adda._src.evaluation.ledger_summary import RunStateSummary
 
     s = RunStateSummary(
         n_rows=4313, n_per_delegation={"D001": 4313}, n_per_source={},
@@ -18,7 +18,7 @@ def test_recallstore_summary_labels_count_authoritative():
 
 
 def test_strategizer_prompt_directs_eval_count_to_ledger():
-    from a3dasm._src.agents.strategizer import (
+    from adda._src.agents.strategizer import (
         STRATEGIZER_SYSTEM_PROMPT,
     )
 

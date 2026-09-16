@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.viewer.readers import (
+from adda._src.viewer.readers import (
     read_artifacts,
     read_oracle,
     read_vitals,
@@ -272,8 +272,8 @@ def test_list_node_transcripts_entry_empty_when_no_turn_files(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_graph_spec_json_reuses_bfs_layers_and_node_tools():
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.runtime.run_diagram import _bfs_layers, _node_tools
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.runtime.run_diagram import _bfs_layers, _node_tools
 
     class _Strategizer(Agent):
         role = "strategizer"
@@ -306,7 +306,7 @@ def test_graph_spec_json_reuses_bfs_layers_and_node_tools():
 
 
 def _three_node_graph():
-    from a3dasm._src.backends.base import Agent, Edge, Graph
+    from adda._src.backends.base import Agent, Edge, Graph
 
     class _Strategizer(Agent):
         role = "strategizer"
@@ -370,7 +370,7 @@ def test_graph_spec_json_layout_is_stable_under_node_reordering():
     would silently reshuffle a study's diagram the day someone reorders its
     node registrations. Positions are keyed on (layer, name) instead.
     """
-    from a3dasm._src.backends.base import Graph
+    from adda._src.backends.base import Graph
 
     graph = _three_node_graph()
     shuffled = Graph(
@@ -403,7 +403,7 @@ def test_graph_spec_json_identity_index_excludes_the_entry_node():
 
 
 def test_graph_spec_json_exposes_model_system_prompt_and_tool_docs(tmp_path):
-    from a3dasm._src.backends.base import Agent, Graph
+    from adda._src.backends.base import Agent, Graph
 
     class _Strategizer(Agent):
         role = "strategizer"
@@ -431,7 +431,7 @@ def test_graph_spec_json_exposes_model_system_prompt_and_tool_docs(tmp_path):
 
 
 def test_graph_spec_json_instance_model_overrides_study_config(tmp_path):
-    from a3dasm._src.backends.base import Agent, Graph
+    from adda._src.backends.base import Agent, Graph
 
     class _Strategizer(Agent):
         role = "strategizer"
@@ -453,7 +453,7 @@ def test_graph_spec_json_instance_model_overrides_study_config(tmp_path):
 
 def test_load_graph_for_study_uses_run_py_build_graph(tmp_path):
     (tmp_path / "run.py").write_text(
-        "from a3dasm._src.backends.base import Agent, Edge, Graph\n"
+        "from adda._src.backends.base import Agent, Edge, Graph\n"
         "class _S(Agent):\n"
         "    role = 'strategizer'\n"
         "    description = 'hub'\n"
@@ -470,7 +470,7 @@ def test_load_graph_for_study_uses_run_py_build_graph(tmp_path):
 
 
 def test_load_graph_for_study_falls_back_to_default_graph_when_no_run_py(tmp_path):
-    from a3dasm._src.agents import _default_graph
+    from adda._src.agents import _default_graph
 
     graph = load_graph_for_study(tmp_path)
     expected = _default_graph()
@@ -480,7 +480,7 @@ def test_load_graph_for_study_falls_back_to_default_graph_when_no_run_py(tmp_pat
 
 def test_load_graph_for_study_falls_back_when_run_py_has_no_build_graph(tmp_path):
     (tmp_path / "run.py").write_text("X = 1\n", encoding="utf-8")
-    from a3dasm._src.agents import _default_graph
+    from adda._src.agents import _default_graph
 
     graph = load_graph_for_study(tmp_path)
     expected = _default_graph()
@@ -794,7 +794,7 @@ def test_every_tool_an_agent_is_handed_has_a_description():
     docstring, or moved to a module the parser does not scan, silently
     reappears here as "no description available".
     """
-    from a3dasm._src.agents import _default_graph
+    from adda._src.agents import _default_graph
 
     graph = _default_graph()
     spec = graph_spec_json(graph)
@@ -808,7 +808,7 @@ def test_every_tool_an_agent_is_handed_has_a_description():
 def test_routing_tool_docs_ignores_non_tool_helpers():
     """Tools are PascalCase; a lowercase local helper sharing a tool's name
     must not be mistaken for one."""
-    from a3dasm._src.viewer.readers import _routing_tool_docs
+    from adda._src.viewer.readers import _routing_tool_docs
 
     docs = _routing_tool_docs()
     assert docs, "expected some tool docstrings to be parsed out of source"
@@ -994,7 +994,7 @@ def test_vitals_prefer_the_runs_own_recorded_start(tmp_path):
     been going 1h58m report 67 seconds."""
     import time as _t
 
-    from a3dasm._src.viewer.readers import read_vitals
+    from adda._src.viewer.readers import read_vitals
 
     run = tmp_path / "20260101T000000"
     debug = run / "debug"
@@ -1012,7 +1012,7 @@ def test_vitals_prefer_the_runs_own_recorded_start(tmp_path):
 
 def test_vitals_fall_back_when_there_is_no_anchor(tmp_path):
     """Runs recorded before the anchor existed must still report a clock."""
-    from a3dasm._src.viewer.readers import read_vitals
+    from adda._src.viewer.readers import read_vitals
 
     run = tmp_path / "20260101T000000"
     debug = run / "debug"
@@ -1025,7 +1025,7 @@ def test_vitals_fall_back_when_there_is_no_anchor(tmp_path):
 
 
 def test_vitals_ignore_a_corrupt_anchor(tmp_path):
-    from a3dasm._src.viewer.readers import read_vitals
+    from adda._src.viewer.readers import read_vitals
 
     run = tmp_path / "20260101T000000"
     debug = run / "debug"
@@ -1053,7 +1053,7 @@ def test_graph_spec_json_prefers_the_runs_own_model_record(tmp_path):
     """
     import json as _json
 
-    from a3dasm._src.backends.base import Agent, Graph
+    from adda._src.backends.base import Agent, Graph
 
     class _Hub(Agent):
         role = "strategizer"
@@ -1092,7 +1092,7 @@ def test_graph_spec_json_prefers_the_runs_own_model_record(tmp_path):
 
 def test_graph_spec_json_survives_a_corrupt_model_record(tmp_path):
     """A viewer must never 500 on a malformed artifact; it degrades."""
-    from a3dasm._src.backends.base import Agent, Graph
+    from adda._src.backends.base import Agent, Graph
 
     class _Hub(Agent):
         role = "strategizer"

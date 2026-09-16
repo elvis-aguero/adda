@@ -8,8 +8,8 @@ in isolation by stubbing the two count helpers.
 """
 from __future__ import annotations
 
-import a3dasm._src.nodes.parsing as parsing
-from a3dasm._src.nodes import _reconcile_delegation_evals
+import adda._src.nodes.parsing as parsing
+from adda._src.nodes import _reconcile_delegation_evals
 
 
 def _stub_store(monkeypatch, *, stamped: int, resolved: int) -> None:

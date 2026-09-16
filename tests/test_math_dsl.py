@@ -11,7 +11,7 @@ import json
 import pytest
 import sympy as sp
 
-from a3dasm._src.epistemics.math_dsl import Workspace
+from adda._src.epistemics.math_dsl import Workspace
 
 
 def test_workspace_records_steps_in_call_order():
@@ -102,7 +102,7 @@ def test_write_summary_envelope_is_self_describing(tmp_path):
     bare list, so two consumers independently sniffed its shape with an
     isinstance() guard. A record that does not name its own format makes every
     reader infer it, and breaks them silently when it changes."""
-    from a3dasm._src.epistemics.math_dsl import SUMMARY_SCHEMA
+    from adda._src.epistemics.math_dsl import SUMMARY_SCHEMA
 
     ws = Workspace("main")
     x = ws.symbols("x", real=True)[0]
@@ -145,7 +145,7 @@ def test_write_summary_carries_residual_for_non_confirmed(tmp_path):
 def test_rerunning_the_same_script_reconstructs_identical_steps(tmp_path):
     script = tmp_path / "edition.py"
     script.write_text(
-        "from a3dasm._src.epistemics.math_dsl import Workspace\n"
+        "from adda._src.epistemics.math_dsl import Workspace\n"
         "ws = Workspace('rerun')\n"
         "x = ws.symbols('x', real=True)[0]\n"
         "ws.assume('a1', 'a step', expr=x + 1)\n"
@@ -174,7 +174,7 @@ def test_check_equals_verdict_is_reproducible_across_process_runs(tmp_path):
     whole design depends on."""
     script = tmp_path / "borderline.py"
     script.write_text(
-        "from a3dasm._src.epistemics.math_dsl import Workspace\n"
+        "from adda._src.epistemics.math_dsl import Workspace\n"
         "import sympy as sp\n"
         "ws = Workspace('borderline')\n"
         "u = sp.Symbol('u')\n"
@@ -287,7 +287,7 @@ def test_write_summary_journals_every_execution(tmp_path):
 def test_write_summary_survives_an_unwritable_journal(tmp_path, monkeypatch):
     """The summary is the contract; a journal that cannot be written costs a
     warning, not the derivation."""
-    from a3dasm._src.epistemics import math_dsl
+    from adda._src.epistemics import math_dsl
 
     def _boom(*a, **k):
         raise OSError("read-only filesystem")

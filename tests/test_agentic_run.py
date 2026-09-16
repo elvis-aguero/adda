@@ -5,7 +5,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from a3dasm._src.runtime.agent_runtime import (
+from adda._src.runtime.agent_runtime import (
     DEFAULT_MODEL,
     AgenticRun,
     AgenticRunError,
@@ -13,14 +13,14 @@ from a3dasm._src.runtime.agent_runtime import (
     StrategizerAgent,
     _default_graph,
 )
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.runtime.graph_builder import build_graph
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.runtime.graph_builder import build_graph
 
 
 def make_stub_run(tmp_path, strat_responses=None, impl_responses=None):
     """Build an AgenticRun with stub adapters (no real LLM)."""
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.runtime.graph_builder import build_graph
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.runtime.graph_builder import build_graph
 
     (tmp_path / "PROBLEM_STATEMENT.md").write_text("Solve: find minimum of f(x)=x^2")
     (tmp_path / "pipeline.py").write_text("# test pipeline\n")

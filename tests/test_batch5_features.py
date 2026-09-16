@@ -12,7 +12,7 @@ from pathlib import Path
 from f3dasm._src.experimentdata import ExperimentData
 from f3dasm._src.experimentsample import ExperimentSample, JobStatus
 
-_SRC = Path(__file__).resolve().parents[1] / "src" / "a3dasm" / "_src"
+_SRC = Path(__file__).resolve().parents[1] / "src" / "adda" / "_src"
 
 
 # --- #5: escape is a silent backstop, never advertised ----------------------
@@ -31,7 +31,7 @@ def test_three_strikes_escape_not_coached_to_agent():
     # the live constant rather than grepping for a literal — a source grep
     # passes just as happily on a branch that has become dead code.
     feedback = importlib.import_module(
-        "a3dasm._src.nodes.tools.routing.feedback")
+        "adda._src.nodes.tools.routing.feedback")
     assert feedback._REVISE_MAX == 3
     assert "_revise_count >= _REVISE_MAX" in nodes
 
@@ -39,7 +39,7 @@ def test_three_strikes_escape_not_coached_to_agent():
 # --- #6: extensible, oracle-stamped provenance -------------------------------
 
 def test_extra_provenance_stamped_and_persisted(tmp_path, monkeypatch):
-    from a3dasm._src.evaluation.oracle_resolution import get_evaluator
+    from adda._src.evaluation.oracle_resolution import get_evaluator
 
     study = tmp_path / "study"
     study.mkdir()
@@ -84,7 +84,7 @@ def test_extra_provenance_stamped_and_persisted(tmp_path, monkeypatch):
 
 def test_no_provenance_block_means_no_extra_columns(tmp_path):
     """Open schema is opt-in: absent 'provenance' → only the fixed three."""
-    from a3dasm._src.evaluation.instrumented import InstrumentedDataGenerator
+    from adda._src.evaluation.instrumented import InstrumentedDataGenerator
     from f3dasm._src.core import DataGenerator
 
     class _Const(DataGenerator):
@@ -105,7 +105,7 @@ def test_no_provenance_block_means_no_extra_columns(tmp_path):
 def test_recursion_limit_default_raised():
     # Now a config.yaml runtime knob (F3DASM_RECURSION_LIMIT overrides); the
     # default stays high (2000) so long multi-delegation runs don't crash.
-    from a3dasm._src.runtime import settings
+    from adda._src.runtime import settings
     settings.configure({})
     assert settings.get_int("recursion_limit", 2000) == 2000
     rt = (_SRC / "runtime" / "agent_runtime.py").read_text()

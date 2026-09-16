@@ -26,7 +26,7 @@ specialists be swapped or removed.
 *Costs:* the hub is a bottleneck and carries the longest context. Removing a
 specialist is a graph edit, which the evaluation exploits.
 
-HARVEST: `src/a3dasm/_src/nodes/orchestration.py` module docstring;
+HARVEST: `src/adda/_src/nodes/orchestration.py` module docstring;
 `graph_builder.py`; `internal/CODE_TOUR.md`.
 
 ## 3.2 The epistemic layer
@@ -74,7 +74,7 @@ no attributable owner — and escalate repeated drift to the critic.
 *Costs:* activation **19.6%**; descriptive rather than inferential in any
 ablation.
 
-HARVEST: `src/a3dasm/_src/epistemics/*` docstrings; `knowledge/charter.py`;
+HARVEST: `src/adda/_src/epistemics/*` docstrings; `knowledge/charter.py`;
 `internal/FEATURES.md` §A.
 
 ## 3.3 The deliverable and the reproduction gate

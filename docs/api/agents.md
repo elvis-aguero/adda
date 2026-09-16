@@ -2,16 +2,16 @@
 
 The specialist roles the strategizer delegates to.
 
-::: a3dasm.StrategizerAgent
+::: adda.StrategizerAgent
 
-::: a3dasm.ImplementerAgent
+::: adda.ImplementerAgent
 
-::: a3dasm.DataGeneratorAgent
+::: adda.DataGeneratorAgent
 
-::: a3dasm.LiteratureReviewAgent
+::: adda.LiteratureReviewAgent
 
-::: a3dasm.AdversarialCritiqueAgent
+::: adda.AdversarialCritiqueAgent
 
-::: a3dasm.DebuggerAgent
+::: adda.DebuggerAgent
 
-::: a3dasm.MathExpertAgent
+::: adda.MathExpertAgent

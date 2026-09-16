@@ -3,8 +3,8 @@ CancelDelegation tool lets the strategizer detach a still-running delegation so
 it stops blocking Done() (instead of bouncing on "wait for all delegations")."""
 from __future__ import annotations
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.nodes import Node
 
 
 class _Stub:
@@ -113,7 +113,7 @@ def test_poll_escalation_offers_options():
 
 
 def _seed_store(store_dir, delegation_id):
-    from a3dasm._src.evaluation.instrumented import InstrumentedDataGenerator
+    from adda._src.evaluation.instrumented import InstrumentedDataGenerator
     from f3dasm._src.core import DataGenerator
     from f3dasm._src.experimentsample import ExperimentSample, JobStatus
 
@@ -248,7 +248,7 @@ def _write_nb(study_dir, source):
     """Write study_dir/pipeline.ipynb with a single code cell running `source`."""
     import nbformat
 
-    from a3dasm._src.evaluation.notebook_exec import build_notebook
+    from adda._src.evaluation.notebook_exec import build_notebook
     nb = build_notebook([{"type": "code", "name": "analysis", "source": source}])
     nbformat.write(nb, str(study_dir / "pipeline.ipynb"))
 
@@ -341,7 +341,7 @@ def test_repro_failure_closes_FAILED_not_ungated(tmp_path):
 def test_retrospectives_probe_capability_gaps():
     """Both interview prompts ask the BLOCKED capability-gap question (so 'I
     couldn't run my own deliverable' can surface)."""
-    from a3dasm._src.nodes.tools.routing import (
+    from adda._src.nodes.tools.routing import (
         _EXIT_INTERVIEW, _FAILED_RETROSPECTIVE)
     for txt in (_EXIT_INTERVIEW, _FAILED_RETROSPECTIVE):
         assert "BLOCKED" in txt
@@ -376,8 +376,8 @@ def test_ghost_delegation_flushed_interrupted_at_run_close(tmp_path):
     """
     import time as _t
 
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.infra.delegation_log import DelegationLog
 
     run_dir = tmp_path / "runs" / "T0"
     (run_dir / "debug" / "strategizer_notes").mkdir(parents=True)

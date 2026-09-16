@@ -57,7 +57,7 @@ def _run_and_check(study_dir: Path) -> None:
     study_dir/config.yaml's `backend:` key to "openrouter" before calling
     this.
     """
-    from a3dasm import AgenticRun
+    from adda import AgenticRun
 
     report = AgenticRun(
         study_dir=study_dir,

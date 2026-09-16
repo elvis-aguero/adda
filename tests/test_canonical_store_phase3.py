@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.infra.delegation_log import DelegationLog
+from adda._src.infra.delegation_log import DelegationLog
 from f3dasm._src.design.domain import Domain
 from f3dasm._src.experimentdata import ExperimentData
 from f3dasm._src.experimentsample import ExperimentSample, JobStatus
@@ -126,12 +126,12 @@ def _make_dlog_record(
 
 class TestRunStateSummaryEmpty:
     def test_from_store_returns_none_when_no_store(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         result = RunStateSummary.from_store(tmp_path)
         assert result is None
 
     def test_from_store_returns_none_when_only_dir_exists(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         (tmp_path / "experiment_data").mkdir()
         result = RunStateSummary.from_store(tmp_path)
         assert result is None
@@ -139,7 +139,7 @@ class TestRunStateSummaryEmpty:
 
 class TestRunStateSummaryPopulated:
     def test_n_rows(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [
             (0.1, 1.0, "D001"),
             (0.2, 2.0, "D001"),
@@ -152,7 +152,7 @@ class TestRunStateSummaryPopulated:
         assert s.n_rows == 5
 
     def test_n_per_delegation(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [
             (0.1, 1.0, "D001"),
             (0.2, 2.0, "D001"),
@@ -162,7 +162,7 @@ class TestRunStateSummaryPopulated:
         assert s.n_per_delegation == {"D001": 2, "D002": 1}
 
     def test_n_per_source(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         # source column is always "test" in _build_store
         _build_store(tmp_path, [(0.1, 1.0, "D001"), (0.2, 2.0, "D001")])
         s = RunStateSummary.from_store(tmp_path)
@@ -170,7 +170,7 @@ class TestRunStateSummaryPopulated:
         assert s.n_per_source["test"] == 2
 
     def test_output_stats_excludes_provenance(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [
             (0.1, 1.0, "D001"),
             (0.2, 2.0, "D001"),
@@ -188,13 +188,13 @@ class TestRunStateSummaryPopulated:
         assert stats["mean"] == pytest.approx(2.0)
 
     def test_n_per_fidelity_none_when_no_column(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(0.1, 1.0, "D001")])
         s = RunStateSummary.from_store(tmp_path, fidelity_column="fidelity")
         assert s.n_per_fidelity is None
 
     def test_n_per_fidelity_populated_when_column_present(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [
             (0.1, 1.0, "D001", 1.0),
             (0.2, 2.0, "D001", 2.0),
@@ -207,7 +207,7 @@ class TestRunStateSummaryPopulated:
 
     def test_mean_eval_wall_ms_excludes_pool_and_nan(self, tmp_path):
         """Spec A: overall mean per-eval wall-time, dropping D000/pool rows."""
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         dom = Domain()
         dom.add_float("x0", 0.0, 1.0)
         for k in ("f", "_delegation_id", "_source", "_ts", "_wall_ms"):
@@ -235,14 +235,14 @@ class TestRunStateSummaryPopulated:
         assert "mean eval wall-time" in s.format()
 
     def test_mean_eval_wall_ms_none_without_column(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(0.1, 1.0, "D001")])  # no _wall_ms column
         s = RunStateSummary.from_store(tmp_path)
         assert s.mean_eval_wall_ms is None
         assert "mean eval wall-time" not in s.format()
 
     def test_fidelity_ignored_when_not_in_input_columns(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         # Store has no fidelity column in inputs
         _build_store(tmp_path, [(0.1, 1.0, "D001"), (0.2, 2.0, "D002")])
         s = RunStateSummary.from_store(tmp_path, fidelity_column="fidelity")
@@ -251,7 +251,7 @@ class TestRunStateSummaryPopulated:
 
 class TestRunStateSummaryFormat:
     def test_format_returns_string(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(0.1, i * 0.1, "D001") for i in range(5)])
         s = RunStateSummary.from_store(tmp_path)
         text = s.format()
@@ -259,14 +259,14 @@ class TestRunStateSummaryFormat:
         assert len(text) > 0
 
     def test_format_within_25_lines(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(i * 0.1, i * 0.5, f"D{(i % 3) + 1:03d}") for i in range(10)])
         s = RunStateSummary.from_store(tmp_path)
         lines = s.format().splitlines()
         assert len(lines) <= 25, f"format() returned {len(lines)} lines (max 25)"
 
     def test_format_mentions_row_count(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(0.1, 1.0, "D001")] * 7)
         s = RunStateSummary.from_store(tmp_path)
         assert "7" in s.format()
@@ -274,14 +274,14 @@ class TestRunStateSummaryFormat:
 
 class TestRunStateSummaryMtimeCache:
     def test_same_object_returned_on_repeated_calls(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(0.1, 1.0, "D001")])
         s1 = RunStateSummary.from_store(tmp_path)
         s2 = RunStateSummary.from_store(tmp_path)
         assert s1 is s2
 
     def test_new_object_when_file_changes(self, tmp_path):
-        from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+        from adda._src.evaluation.ledger_summary import RunStateSummary
         _build_store(tmp_path, [(0.1, 1.0, "D001")])
         s1 = RunStateSummary.from_store(tmp_path)
         # Touch output.csv to change mtime
@@ -309,8 +309,8 @@ def _build_run_layout(tmp_path: Path) -> tuple[Path, Path]:
 
 def _make_strategizer_with_notes(tmp_path: Path, notes_dir: Path):
     """Build a minimal Node with _current_notes_dir set."""
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.nodes import Node
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.nodes import Node
 
     class StubAdapter:
         def __init__(self):
@@ -382,8 +382,8 @@ class TestRecallStoreClosure:
     def test_recall_store_injected_without_delegation_log(self, tmp_path):
         """RecallStore must be injected even when delegation_log is None."""
         run_dir, notes_dir = _build_run_layout(tmp_path)
-        from a3dasm._src.backends.base import Agent, Edge, Graph
-        from a3dasm._src.nodes import Node
+        from adda._src.backends.base import Agent, Edge, Graph
+        from adda._src.nodes import Node
 
         class StubAdapter:
             def __init__(self):
@@ -561,8 +561,8 @@ class TestDelegationLogEvalsField:
 
 
 def _make_monitor(tmp_path, store_dir=None):
-    from a3dasm._src.epistemics.hypothesis_ledger import HypothesisLedger
-    from a3dasm._src.epistemics.science_monitor import ScienceMonitor
+    from adda._src.epistemics.hypothesis_ledger import HypothesisLedger
+    from adda._src.epistemics.science_monitor import ScienceMonitor
     ledger = HypothesisLedger(tmp_path)
     dlog = DelegationLog(tmp_path / "log.jsonl")
     mon = ScienceMonitor(ledger, dlog, store_dir=store_dir)
@@ -581,7 +581,7 @@ def _propose(ledger) -> str:
 
 class TestUnledgeredEvalsRule:
     def test_fires_when_evals_positive_and_store_empty(self, tmp_path):
-        from a3dasm._src.epistemics.science_monitor import ScienceMonitor
+        from adda._src.epistemics.science_monitor import ScienceMonitor
         store_dir = tmp_path / "run"
         store_dir.mkdir()
         ledger, dlog, mon = _make_monitor(tmp_path, store_dir=store_dir)
@@ -592,7 +592,7 @@ class TestUnledgeredEvalsRule:
         assert "UNLEDGERED_EVALS" in rules
 
     def test_message_mentions_delegation_id(self, tmp_path):
-        from a3dasm._src.epistemics.science_monitor import ScienceMonitor
+        from adda._src.epistemics.science_monitor import ScienceMonitor
         store_dir = tmp_path / "run"
         store_dir.mkdir()
         ledger, dlog, mon = _make_monitor(tmp_path, store_dir=store_dir)
@@ -604,7 +604,7 @@ class TestUnledgeredEvalsRule:
         assert "D001" in msgs[0]
 
     def test_silent_when_store_has_rows_for_delegation(self, tmp_path):
-        from a3dasm._src.epistemics.science_monitor import ScienceMonitor
+        from adda._src.epistemics.science_monitor import ScienceMonitor
         store_dir = tmp_path / "run"
         store_dir.mkdir()
         # Populate store with D001 rows
@@ -670,9 +670,9 @@ class TestNodesDelegationLogEvalsWiring:
 
     def test_delegation_log_record_has_evals(self, tmp_path):
         """After a delegation completes, the log record should have evals set."""
-        from a3dasm._src.backends.base import Agent, Edge, Graph
-        from a3dasm._src.infra.delegation_log import DelegationLog
-        from a3dasm._src.nodes import Node
+        from adda._src.backends.base import Agent, Edge, Graph
+        from adda._src.infra.delegation_log import DelegationLog
+        from adda._src.nodes import Node
 
         class CountingAdapter:
             """Calls ReportEvals(7) and then returns a report."""
@@ -756,11 +756,11 @@ class TestScienceMonitorStoreDirWiring:
         from langchain_core.messages import HumanMessage
         from langgraph.types import Command
 
-        from a3dasm._src.backends.base import Agent, Edge, Graph
-        from a3dasm._src.infra.delegation_log import DelegationLog
-        from a3dasm._src.runtime.graph_state import AgenticState
-        from a3dasm._src.epistemics.hypothesis_ledger import HypothesisLedger
-        from a3dasm._src.nodes import Node
+        from adda._src.backends.base import Agent, Edge, Graph
+        from adda._src.infra.delegation_log import DelegationLog
+        from adda._src.runtime.graph_state import AgenticState
+        from adda._src.epistemics.hypothesis_ledger import HypothesisLedger
+        from adda._src.nodes import Node
 
         run_dir = tmp_path / "run"
         (run_dir / "debug" / "strategizer_notes").mkdir(parents=True)
@@ -834,7 +834,7 @@ def test_surrogate_generator_not_metered(tmp_path):
     stamps _delegation_id rows. Documents the identity-metering invariant
     that keeps exploration free."""
     from f3dasm import datagenerator
-    from a3dasm._src.evaluation.ledger_summary import RunStateSummary
+    from adda._src.evaluation.ledger_summary import RunStateSummary
 
     store_dir = tmp_path / "store"
     _build_store(store_dir, [(0.1, 1.0, "D001"), (0.2, 2.0, "D001")])
@@ -869,7 +869,7 @@ def test_surrogate_generator_not_metered(tmp_path):
 def test_stamped_eval_count_counts_only_provenance_rows(tmp_path):
     """_stamped_eval_count reports ONLY provenance-stamped rows, so a
     delegation that evaluated off-ledger reads as 0 (flagged off-ledger)."""
-    from a3dasm._src.nodes import _stamped_eval_count
+    from adda._src.nodes import _stamped_eval_count
     _build_store(tmp_path, [
         (1.0, 0.5, "D001"),
         (2.0, 0.6, "D001"),
@@ -887,8 +887,8 @@ def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
     """LedgerBreakdown() reads the live stores under run_dir/experiment_data and
     renders a per-experiment / per-delegation split — the report-time provenance
     that prevents hardcoding stale counts (run 20260628T001710 UNGATED)."""
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.nodes import Node
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.nodes import Node
     from f3dasm._src.design.domain import Domain
     from f3dasm._src.experimentdata import ExperimentData
     from f3dasm._src.experimentsample import ExperimentSample, JobStatus

@@ -5,10 +5,10 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.runtime.graph_builder import build_graph
-from a3dasm._src.runtime.graph_state import AgenticState
-from a3dasm._src.nodes import Node, Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.runtime.graph_builder import build_graph
+from adda._src.runtime.graph_state import AgenticState
+from adda._src.nodes import Node, Node
 
 
 class StubAdapter:
@@ -88,7 +88,7 @@ def test_build_graph_strategizer_role_creates_strategizer_node():
         entry="s",
     )
 
-    import a3dasm._src.runtime.graph_builder as gb
+    import adda._src.runtime.graph_builder as gb
     original_strat = gb.Node
     original_impl = gb.Node
     try:
@@ -286,7 +286,7 @@ def test_repr_arrow_shows_preamble():
 def test_to_mermaid_styles_nodes_and_edges():
     """Styled mermaid: classDef per agent class, class assignments,
     and dotted (consultation) arrows from non-entry sources."""
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     m = _default_graph().to_mermaid()
     # colour styling present
     assert "classDef StrategizerAgent fill:#" in m

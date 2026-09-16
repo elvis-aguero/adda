@@ -1,20 +1,20 @@
 """Prompts must match the runtime — no stale references."""
 
-from a3dasm._src.prompts.agent_prompts import (
+from adda._src.prompts.agent_prompts import (
     CHECKPOINT_STRATEGIZER_PROMPT,
     IMPLEMENTER_SYSTEM_PROMPT_OLLAMA,
     RUN_PATHS_PREAMBLE_TEMPLATE,
 )
-from a3dasm._src.agents.critic import (
+from adda._src.agents.critic import (
     ADVERSARIAL_CRITIQUE_SYSTEM_PROMPT,
 )
-from a3dasm._src.agents.strategizer import (
+from adda._src.agents.strategizer import (
     STRATEGIZER_SYSTEM_PROMPT,
 )
 
 
 def test_no_stale_hypotheses_md_references():
-    from a3dasm._src.prompts.agent_prompts import (
+    from adda._src.prompts.agent_prompts import (
         RUN_PATHS_PREAMBLE_TEMPLATE,
     )
     assert "hypotheses.md" not in STRATEGIZER_SYSTEM_PROMPT
@@ -37,7 +37,7 @@ def test_implementer_doe_example_has_no_store_after_evaluator():
     """B7 (run 20260624T021359): the implementer's DoE example must not show a
     data.store() AFTER get_evaluator()/flush() — that re-writes FINISHED rows as
     IN_PROGRESS and corrupts the ledger (contradicts the prompt's own rule)."""
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     assert 'data.store("{delegation_id}/results")' not in IMPLEMENTER_SYSTEM_PROMPT
     assert "Do NOT call data.store() afterwards" in IMPLEMENTER_SYSTEM_PROMPT
 
@@ -46,7 +46,7 @@ def test_deliverable_spec_requires_explicit_objective_column():
     """B3 (run 20260624T021359): the notebook spec must NOT recommend the
     sort-order auto-detect idiom (a constraint flag sorts before the objective
     and is silently picked); it must require naming the objective explicitly."""
-    from a3dasm._src.evaluation.notebook_exec import notebook_deliverable_spec
+    from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
     spec = notebook_deliverable_spec()
     assert "not c.startswith('_')" not in spec  # the fragile idiom is gone
     assert "EXPLICITLY" in spec
@@ -77,10 +77,10 @@ def test_prompts_are_case_generic():
     # elsewhere until a full corpus audit found them (see
     # test_agent_prompts.test_no_domain_specific_leakage_extended for the
     # broader forbidden-term list and the shared-tool-docstring check).
-    from a3dasm._src.agents.datagenerator import DATA_GENERATOR_SYSTEM_PROMPT
-    from a3dasm._src.agents.debugger import DEBUGGER_SYSTEM_PROMPT
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
-    from a3dasm._src.agents.literature import LITERATURE_REVIEW_SYSTEM_PROMPT
+    from adda._src.agents.datagenerator import DATA_GENERATOR_SYSTEM_PROMPT
+    from adda._src.agents.debugger import DEBUGGER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.literature import LITERATURE_REVIEW_SYSTEM_PROMPT
 
     for prompt in (STRATEGIZER_SYSTEM_PROMPT,
                    CHECKPOINT_STRATEGIZER_PROMPT,
@@ -99,7 +99,7 @@ def test_strategizer_mentions_science_monitor():
 
 
 def test_run_paths_preamble_has_experiment_data_dir():
-    from a3dasm._src.prompts.agent_prompts import (
+    from adda._src.prompts.agent_prompts import (
         RUN_PATHS_PREAMBLE_TEMPLATE,
     )
     # must format cleanly with the new required field
@@ -121,7 +121,7 @@ def test_pipeline_deliverable_is_lazy_and_self_asserting():
     # <deliverable_format> spec, not a second copy in the strategizer base
     # prompt. Assert against the assembled prompt the strategizer actually
     # receives (base + injected spec).
-    from a3dasm._src.evaluation.notebook_exec import notebook_deliverable_spec
+    from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
     p = STRATEGIZER_SYSTEM_PROMPT + notebook_deliverable_spec("strategizer")
     # the deliverable is the notebook; its code cells load the ledger and reach
     # the oracle via get_evaluator()
@@ -140,7 +140,7 @@ def test_strategizer_has_pipeline_authoring_primer():
     carry a concrete f3dasm primer — load the ledger, read its frames, cache
     heavy blocks, and derive (not hardcode) the headline. The reproduction
     rules live in the injected spec (BF-12), so assert the assembled prompt."""
-    from a3dasm._src.evaluation.notebook_exec import notebook_deliverable_spec
+    from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
     base = STRATEGIZER_SYSTEM_PROMPT
     p = base + notebook_deliverable_spec("strategizer")
     # concrete ledger-read API, not just from_file (lives in the base primer)
@@ -161,10 +161,10 @@ def test_strategizer_has_pipeline_authoring_primer():
 
 def test_no_two_agent_framing_in_any_prompt():
     """No prompt should use the stale 'two-agent' framing."""
-    from a3dasm._src.agents.implementer import (
+    from adda._src.agents.implementer import (
         IMPLEMENTER_SYSTEM_PROMPT,
     )
-    from a3dasm._src.agents.literature import (
+    from adda._src.agents.literature import (
         LITERATURE_REVIEW_SYSTEM_PROMPT,
     )
     for name, prompt in (
@@ -186,9 +186,9 @@ def test_strategizer_ledger_read_tools_documented(tmp_path):
     of truth, derived from the live closures), not the static base prompt — so
     assert the catalog of a real strategizer node, which is what the model
     actually receives appended to its system prompt."""
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.nodes import Node
-    from a3dasm._src.prompts.tool_catalog import render_tool_catalog
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.nodes import Node
+    from adda._src.prompts.tool_catalog import render_tool_catalog
 
     class _Stub:
         def __init__(self):
@@ -211,7 +211,7 @@ def test_strategizer_ledger_read_tools_documented(tmp_path):
     spec = Graph(
         nodes={"strategizer": A(), "implementer": B()},
         edges=(Edge("strategizer", "implementer"),), entry="strategizer")
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.infra.delegation_log import DelegationLog
     n = Node(
         _Stub(), name="strategizer", outgoing=["implementer"], spec=spec,
         worker_adapters={"implementer": _Stub()},

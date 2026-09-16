@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import os
 
-from a3dasm._src.runtime.run_setup import (
+from adda._src.runtime.run_setup import (
     DEFAULT_MEM_CAP_BYTES,
     _init_canonical_store,
 )

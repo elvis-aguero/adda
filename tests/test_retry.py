@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from a3dasm._src.backends.base import (
+from adda._src.backends.base import (
     is_transient_error,
     retry_on_transient,
 )
@@ -71,7 +71,7 @@ def test_retry_does_not_retry_nontransient(monkeypatch):
 
 def test_ollama_invoke_retries_invoke_once(monkeypatch):
     monkeypatch.setattr(time, "sleep", lambda *_: None)
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
     a = OllamaAdapter.__new__(OllamaAdapter)  # bypass __init__/server
     a._lock = threading.Lock()
     calls = {"n": 0}
@@ -89,7 +89,7 @@ def test_ollama_invoke_retries_invoke_once(monkeypatch):
 
 def test_claude_invoke_retries(monkeypatch):
     monkeypatch.setattr(time, "sleep", lambda *_: None)
-    from a3dasm._src.backends import claude as cl
+    from adda._src.backends import claude as cl
     a = cl.ClaudeAdapter.__new__(cl.ClaudeAdapter)
     a._lock = threading.Lock()
     calls = {"n": 0}

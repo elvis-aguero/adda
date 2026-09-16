@@ -7,7 +7,7 @@ delegation. The nudge must NEVER fire on the correct get_evaluator() path.
 """
 from __future__ import annotations
 
-from a3dasm._src.backends.base import (
+from adda._src.backends.base import (
     ORACLE_NUDGE_CAP,
     OracleNudgeBudget,
     detect_raw_oracle_access,
@@ -37,7 +37,7 @@ class TestDetector:
 
     # ---- must NOT fire on the correct path or innocent text ----------------
     def test_silent_on_get_evaluator(self):
-        cmd = ("from a3dasm import get_evaluator\n"
+        cmd = ("from adda import get_evaluator\n"
                "gen = get_evaluator()\ndata = gen.call(data, mode='sequential')\n"
                "gen.flush()")
         assert detect_raw_oracle_access("Bash", {"command": cmd}) is None
@@ -98,7 +98,7 @@ class TestOllamaWiring:
     """The Ollama bash/write closures append the nudge to their output."""
 
     def test_bash_tool_appends_nudge(self):
-        from a3dasm._src.backends.ollama import _make_bash_tool
+        from adda._src.backends.ollama import _make_bash_tool
         budget = OracleNudgeBudget()
         tool = _make_bash_tool(None, budget.check)
         # `:` is a no-op shell builtin; the pattern lives in a comment so the
@@ -107,7 +107,7 @@ class TestOllamaWiring:
         assert "ORACLE ACCESS" in out
 
     def test_bash_tool_no_nudge_on_clean_command(self):
-        from a3dasm._src.backends.ollama import _make_bash_tool
+        from adda._src.backends.ollama import _make_bash_tool
         budget = OracleNudgeBudget()
         tool = _make_bash_tool(None, budget.check)
         out = tool.func(command="echo hello")
@@ -115,7 +115,7 @@ class TestOllamaWiring:
         assert "hello" in out
 
     def test_write_tool_appends_nudge_and_still_writes(self, tmp_path):
-        from a3dasm._src.backends.ollama import _make_write_tool
+        from adda._src.backends.ollama import _make_write_tool
         budget = OracleNudgeBudget()
         tool = _make_write_tool(tmp_path, budget.check)
         out = tool.func(
@@ -126,7 +126,7 @@ class TestOllamaWiring:
         assert (tmp_path / "phase1.py").exists()
 
     def test_no_nudge_when_callable_absent(self, tmp_path):
-        from a3dasm._src.backends.ollama import _make_bash_tool
+        from adda._src.backends.ollama import _make_bash_tool
         tool = _make_bash_tool(None)  # nudge defaults to None
         out = tool.func(command=": # from evaluator import evaluate")
         assert "ORACLE ACCESS" not in out
@@ -169,13 +169,13 @@ class TestCorrectPathApiIsReal:
         # stands — never teach the broken data.run( form — and the message
         # names get_evaluator() + the canonical source (KB 0001) rather than
         # restate the API, which now lives in one place.
-        from a3dasm._src.backends.base import _ORACLE_NUDGE_MESSAGE
+        from adda._src.backends.base import _ORACLE_NUDGE_MESSAGE
         assert "data.run(" not in _ORACLE_NUDGE_MESSAGE
         assert "get_evaluator()" in _ORACLE_NUDGE_MESSAGE
         assert "evaluate-through-get-evaluator" in _ORACLE_NUDGE_MESSAGE
 
     def test_implementer_prompt_uses_real_api(self):
-        from a3dasm._src.agents.implementer import (
+        from adda._src.agents.implementer import (
             IMPLEMENTER_SYSTEM_PROMPT,
         )
         assert "data.run(" not in IMPLEMENTER_SYSTEM_PROMPT
@@ -183,7 +183,7 @@ class TestCorrectPathApiIsReal:
     def test_handbook_entry_uses_real_api(self):
         from pathlib import Path
 
-        import a3dasm._src.knowledge as _kb
+        import adda._src.knowledge as _kb
         entry = (
             Path(_kb.__file__).parent
             / "entries" / "0001-evaluate-through-get-evaluator.md"

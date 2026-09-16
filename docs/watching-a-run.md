@@ -15,15 +15,15 @@ delegation's full transcript, the evaluation ledger as it fills, and the
 deliverable as it is written. It ships as an optional extra.
 
 ```bash
-pip install "a3dasm[viewer]"
-python -m a3dasm.viewer my_study
+pip install "adda[viewer]"
+python -m adda.viewer my_study
 ```
 
 Then open <http://127.0.0.1:8765>. It binds to localhost only and has **no
 authentication** — don't put it on a public interface.
 
 ```bash
-python -m a3dasm.viewer my_study --host 0.0.0.0 --port 9000  # only on a network you trust
+python -m adda.viewer my_study --host 0.0.0.0 --port 9000  # only on a network you trust
 ```
 
 The viewer is a separate process from the run, so start it in its own
@@ -49,7 +49,7 @@ default graph).
 - **The graph** — every node, its resolved backend and model, and the
   delegation edges between them.
 - **Delegations** — each one's task, status, and full transcript, with
-  a3dasm's own injected text marked `<a3dasm-note>` so you can tell what the
+  adda's own injected text marked `<adda-note>` so you can tell what the
   tool returned from what the runtime said to the agent.
 - **The ledger** — every real evaluation as it is recorded, and the oracle's
   state.

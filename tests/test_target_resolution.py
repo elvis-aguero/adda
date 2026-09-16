@@ -10,7 +10,7 @@ errors with the valid-target list, and the agent self-corrects).
 """
 from __future__ import annotations
 
-from a3dasm._src.nodes.tools.routing import resolve_target
+from adda._src.nodes.tools.routing import resolve_target
 
 # Canonical 5-node topology; here role == node name.
 _OUT = ["implementer", "datagenerator", "literature_reviewer", "critic"]

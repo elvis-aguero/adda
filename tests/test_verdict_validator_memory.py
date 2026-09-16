@@ -7,8 +7,8 @@ guard — the proven pattern the gate critic already uses.
 """
 from __future__ import annotations
 
-from a3dasm._src.epistemics.verdict_validator import build_judge_prompt
-from a3dasm._src.nodes.critic_gate import _prior_rulings_digest
+from adda._src.epistemics.verdict_validator import build_judge_prompt
+from adda._src.nodes.critic_gate import _prior_rulings_digest
 
 
 def _base_kwargs(**over):

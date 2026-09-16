@@ -25,7 +25,7 @@ requires_ollama = pytest.mark.skipif(
 
 
 def _make_adapter(**kwargs):
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
     defaults = dict(model="llama3.2", system_prompt="You are helpful.")
     defaults.update(kwargs)
     return OllamaAdapter(**defaults)

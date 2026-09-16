@@ -19,7 +19,7 @@ from pathlib import Path
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
+from adda._src.backends.base import Agent, Edge, Graph
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -56,7 +56,7 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
 
 
 def _make_state(study_dir=None, messages=None, **kwargs):
-    from a3dasm._src.runtime.graph_state import AgenticState
+    from adda._src.runtime.graph_state import AgenticState
 
     if study_dir is None:
         d = Path(tempfile.mkdtemp(prefix="f3dasm_rat_"))
@@ -81,7 +81,7 @@ def _make_state(study_dir=None, messages=None, **kwargs):
 
 def test_unaccepted_termination_reprompts():
     """When adapter doesn't call Done(), node loops back with diagnostic message."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     # Adapter never calls Done
     adapter = StubAdapter(response="Final analysis complete.")
@@ -112,7 +112,7 @@ def test_unaccepted_termination_reprompts():
 
 def test_ungated_finish_after_three_attempts():
     """After 3 loopbacks, 4th call terminates with UNGATED banner."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     # Adapter never calls Done; pipeline.py present so only Done is missing
     study_dir = Path(tempfile.mkdtemp(prefix="f3dasm_rat_"))
@@ -150,7 +150,7 @@ def test_ungated_finish_after_three_attempts():
 
 def test_accepted_done_no_banner():
     """Full Done() dance → END with no UNGATED banner; _finish_attempts stays 0."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = Path(tempfile.mkdtemp(prefix="f3dasm_rat_"))
     (study_dir / "pipeline.ipynb").write_text("# test\n")
@@ -188,7 +188,7 @@ def test_run_backstop_halts_resumable_past_multiple(tmp_path):
     """Past RUN_BACKSTOP_MULTIPLE x budget: invoke skipped, the run HALTS
     cleanly and resumably — a HALTED banner is prefixed (conclusion kept
     below it) and debug/run_status.json marks it resumable."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = tmp_path / "study"
     study_dir.mkdir()
@@ -233,7 +233,7 @@ def test_run_backstop_halts_resumable_past_multiple(tmp_path):
 
 def test_usd_budget_exhausted_halts_resumable(tmp_path):
     """When accrued cost reaches budget_usd, the run halts resumably."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = tmp_path / "study"
     study_dir.mkdir()
@@ -268,7 +268,7 @@ def test_usd_budget_exhausted_halts_resumable(tmp_path):
 def test_usd_budget_inactive_under_ollama_does_not_halt(tmp_path):
     """No per-call cost (ollama) → the USD ceiling is inactive: the run is
     NOT halted even with a budget_usd set, and the strategizer runs."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = tmp_path / "study"
     study_dir.mkdir()
@@ -295,7 +295,7 @@ def test_usd_budget_inactive_under_ollama_does_not_halt(tmp_path):
 
 def test_repeated_errors_halt_resumable(tmp_path, monkeypatch):
     """N consecutive Errored delegations from one target → resumable halt."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     monkeypatch.setenv("F3DASM_MAX_CONSECUTIVE_ERRORS", "3")
     study_dir = tmp_path / "study"
@@ -324,7 +324,7 @@ def test_repeated_errors_halt_resumable(tmp_path, monkeypatch):
 def test_soft_budget_does_not_terminate_below_backstop():
     """Time budget is SOFT: past 100% but below the backstop, the run
     CONTINUES (adapter.invoke is called) — warning only, no force-end."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = Path(tempfile.mkdtemp(prefix="f3dasm_rat_"))
     (study_dir / "pipeline.ipynb").write_text("# test\n")
@@ -354,7 +354,7 @@ def test_soft_budget_does_not_terminate_below_backstop():
 
 def test_working_delegations_survive_loopback():
     """A Working registry entry is not cleared by the A1/A2 reset on loopback."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = Path(tempfile.mkdtemp(prefix="f3dasm_rat_"))
     (study_dir / "pipeline.ipynb").write_text("# test\n")
@@ -402,7 +402,7 @@ def test_running_delegation_does_not_burn_finish_attempts():
     bounded finish-attempt budget. Waiting it out is work, not a failed finish —
     otherwise a slow-but-healthy delegation force-terminates the run UNGATED with
     wall budget to spare. The run's time backstop bounds a true hang instead."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     study_dir = Path(tempfile.mkdtemp(prefix="f3dasm_rat_"))
     (study_dir / "pipeline.ipynb").write_text("# test\n")
@@ -446,7 +446,7 @@ def test_running_delegation_does_not_burn_finish_attempts():
 
 def test_propose_rejects_duplicate_statement(tmp_path):
     """Proposing an identical statement twice returns ERROR citing the first H-id."""
-    from a3dasm._src.epistemics.hypothesis_ledger import HypothesisLedger
+    from adda._src.epistemics.hypothesis_ledger import HypothesisLedger
 
     ledger = HypothesisLedger(tmp_path)
 
@@ -475,7 +475,7 @@ def test_propose_rejects_duplicate_statement(tmp_path):
 
 def test_propose_rejects_duplicate_case_whitespace(tmp_path):
     """Duplicate detection is case- and whitespace-insensitive."""
-    from a3dasm._src.epistemics.hypothesis_ledger import HypothesisLedger
+    from adda._src.epistemics.hypothesis_ledger import HypothesisLedger
 
     ledger = HypothesisLedger(tmp_path)
 
@@ -510,7 +510,7 @@ def test_propose_rejects_duplicate_case_whitespace(tmp_path):
 def test_readnote_directory_returns_listing(tmp_path):
     """ReadNote on a directory returns a file LISTING (not an error) so the agent
     can discover and reuse the implementers' delegation code."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# test\n")
     # Create a subdirectory with a file to pass as the ReadNote path
@@ -552,7 +552,7 @@ def test_readnote_rejects_paths_escaping_study_dir(tmp_path):
     (Path(study)/'/' == Path('/')) and rglob('*') walked the WHOLE filesystem,
     hanging the run. ReadNote must contain to the study dir and reject escapes
     fast — never walk outside it."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# test\n")
     results: list[str] = []

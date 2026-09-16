@@ -1,6 +1,6 @@
 # `paper/` — the draft, and the record it is drawn from
 
-This tree is the working draft of a paper about a3dasm. It is **not** user
+This tree is the working draft of a paper about adda. It is **not** user
 documentation. `docs/` is for someone trying to run a study; this is for
 someone deciding whether to believe the design.
 

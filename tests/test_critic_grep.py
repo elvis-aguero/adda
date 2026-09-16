@@ -12,7 +12,7 @@ never mutates.
 """
 from __future__ import annotations
 
-from a3dasm._src.agents import AdversarialCritiqueAgent
+from adda._src.agents import AdversarialCritiqueAgent
 
 
 def test_critic_declares_grep():

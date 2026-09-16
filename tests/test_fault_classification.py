@@ -7,7 +7,7 @@ corrupting the agent-vs-system error KPI the run-analysis protocol relies on.
 """
 from __future__ import annotations
 
-from a3dasm._src.nodes.recording import _classify_fault
+from adda._src.nodes.recording import _classify_fault
 
 
 def test_agent_error_with_advice_word_is_not_system():

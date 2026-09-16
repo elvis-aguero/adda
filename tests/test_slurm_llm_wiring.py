@@ -9,8 +9,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from a3dasm._src.infra import slurm_llm
-from a3dasm._src.runtime.agent_runtime import DEFAULT_MODEL, AgenticRun
+from adda._src.infra import slurm_llm
+from adda._src.runtime.agent_runtime import DEFAULT_MODEL, AgenticRun
 
 
 def _bare_run(tmp_path: Path, backend: str = "vllm") -> AgenticRun:

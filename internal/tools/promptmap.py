@@ -46,7 +46,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 SRC = REPO / "src"
-PKG = SRC / "a3dasm" / "_src"
+PKG = SRC / "adda" / "_src"
 TEMPLATE = Path(__file__).with_name("promptmap_template.html")
 DEFAULT_OUT = REPO / "internal" / "promptmap.html"
 
@@ -414,7 +414,7 @@ _VOLATILE = (
 
 def _resources_text(for_worker: bool) -> str:
     """The resource stanza, obtained by CALLING the code that emits it."""
-    from a3dasm._src.runtime.agent_runtime import AgenticRun
+    from adda._src.runtime.agent_runtime import AgenticRun
 
     class _Stub:
         _mem_cap_bytes = None
@@ -428,7 +428,7 @@ def _resources_text(for_worker: bool) -> str:
 
 def _knowledge_text(role: str) -> str:
     """The handbook menu for *role*, obtained by CALLING the live KnowledgeBase."""
-    from a3dasm._src.runtime.agent_runtime import AgenticRun
+    from adda._src.runtime.agent_runtime import AgenticRun
 
     class _Stub:
         _kb = None
@@ -794,9 +794,9 @@ def annotate_edits(roles: list[dict]) -> None:
 
 
 def build_roles(shared: list[dict]) -> list[dict]:
-    from a3dasm._src.agents import _graphs
-    from a3dasm._src.evaluation.notebook_exec import notebook_deliverable_spec
-    from a3dasm._src.prompts.agent_prompts import (
+    from adda._src.agents import _graphs
+    from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
+    from adda._src.prompts.agent_prompts import (
         RUN_PATHS_PREAMBLE_TEMPLATE,
         WORKSPACE_PREAMBLE_TEMPLATE,
     )
@@ -1091,7 +1091,7 @@ def build() -> dict:
 def _switches() -> list[dict]:
     """Every knob a reviewer can point at, read from settings.KNOWN_KEYS plus
     the env-only kill switches actually consulted in the source."""
-    from a3dasm._src.runtime import settings
+    from adda._src.runtime import settings
     path = PKG / "runtime" / "settings.py"
     keys = [{"key": k, "kind": "config.yaml runtime:", "env": f"F3DASM_{k.upper()}",
              "file": _rel(path)} for k in sorted(settings.KNOWN_KEYS)]

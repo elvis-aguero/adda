@@ -1,6 +1,6 @@
 # How a run is kept honest
 
-An autonomous run can talk itself into a conclusion. Most of a3dasm's
+An autonomous run can talk itself into a conclusion. Most of adda's
 machinery exists to stop that. This page is the inventory: every check
 between an agent deciding something and that decision counting, what each
 one does, and which ones you can turn off.

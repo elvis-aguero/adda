@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.runtime import settings
+from adda._src.runtime import settings
 
-_SRC = Path(__file__).resolve().parent.parent / "src" / "a3dasm" / "_src"
+_SRC = Path(__file__).resolve().parent.parent / "src" / "adda" / "_src"
 _DOC = (Path(__file__).resolve().parent.parent
         / "docs" / "authoring-a-study.md")
 

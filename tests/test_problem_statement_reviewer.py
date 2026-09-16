@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 
-from a3dasm._src.runtime.agent_runtime import AgenticRun
-from a3dasm._src.epistemics.reviewer import (
+from adda._src.runtime.agent_runtime import AgenticRun
+from adda._src.epistemics.reviewer import (
     REVIEW_ELEMENTS,
     REVIEWER_SYSTEM_PROMPT,
     ProblemStatementReviewerAgent,

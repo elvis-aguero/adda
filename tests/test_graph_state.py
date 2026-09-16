@@ -1,6 +1,6 @@
 import pytest
-from a3dasm._src.runtime.graph_state import AgenticState, Task, Report, Delegation, StudyConfig
-from a3dasm._src.backends.base import Agent, Edge, Graph
+from adda._src.runtime.graph_state import AgenticState, Task, Report, Delegation, StudyConfig
+from adda._src.backends.base import Agent, Edge, Graph
 
 
 def test_agentic_state_is_dict_like():

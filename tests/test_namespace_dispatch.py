@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def test_namespace_threadlocal_roundtrip():
-    from a3dasm._src.backends.base import (
+    from adda._src.backends.base import (
         get_namespace,
         set_namespace,
     )
@@ -25,12 +25,12 @@ def test_namespace_threadlocal_roundtrip():
 
 
 def test_session_env_injects_namespace(tmp_path, monkeypatch):
-    from a3dasm._src.backends.base import (
+    from adda._src.backends.base import (
         set_delegation_id,
         set_namespace,
         set_run_config_path,
     )
-    from a3dasm._src.backends.claude import _build_session_env
+    from adda._src.backends.claude import _build_session_env
 
     rc = tmp_path / "run_config.json"
     rc.write_text(json.dumps({"store_dir": str(tmp_path / "store")}))
@@ -49,11 +49,11 @@ def test_session_env_injects_namespace(tmp_path, monkeypatch):
 
 
 def test_session_env_omits_namespace_when_unset(tmp_path):
-    from a3dasm._src.backends.base import (
+    from adda._src.backends.base import (
         set_delegation_id,
         set_namespace,
     )
-    from a3dasm._src.backends.claude import _build_session_env
+    from adda._src.backends.claude import _build_session_env
 
     set_namespace(None)
     set_delegation_id("D003")
@@ -65,7 +65,7 @@ def test_session_env_omits_namespace_when_unset(tmp_path):
 
 
 def test_delegation_dataclass_has_namespace_default_none():
-    from a3dasm._src.runtime.graph_state import Delegation
+    from adda._src.runtime.graph_state import Delegation
 
     d = Delegation(target="implementer", task="optimize")
     assert d.namespace is None
@@ -77,7 +77,7 @@ def test_delegation_dataclass_has_namespace_default_none():
 def test_namespace_capability_is_documented_for_the_strategizer():
     """The strategizer must KNOW it can open a namespace (else Axis 3 is dead
     code from the agent's view) — but framed as optional, not a routine step."""
-    from a3dasm._src.agents.strategizer import (
+    from adda._src.agents.strategizer import (
         STRATEGIZER_SYSTEM_PROMPT,
     )
 

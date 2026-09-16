@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.runtime.agent_runtime import AgenticRun
-from a3dasm._src.backends.base import Agent, Edge, Graph
+from adda._src.runtime.agent_runtime import AgenticRun
+from adda._src.backends.base import Agent, Edge, Graph
 
 from .fixtures import MockWorkerAdapter, ScriptedStrategistAdapter
 
@@ -150,7 +150,7 @@ def test_delegation_log_created(pipeline_run):
 
     (The raw file also carries dispatch-time RUNNING entries; query_all()
     collapses last-wins to one record per delegation — see provenance fix.)"""
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.infra.delegation_log import DelegationLog
     _, study = pipeline_run
     debug = next((study / "runs").iterdir()) / "debug"
     records = DelegationLog(debug / "delegation_log.jsonl").query_all()
@@ -162,7 +162,7 @@ def test_delegation_records_have_token_fields(pipeline_run):
 
     (Dispatch-time RUNNING entries legitimately carry 0 tokens; query_all()
     collapses to the terminal record per delegation.)"""
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.infra.delegation_log import DelegationLog
     _, study = pipeline_run
     debug = next((study / "runs").iterdir()) / "debug"
     for rec in DelegationLog(debug / "delegation_log.jsonl").query_all():
@@ -439,7 +439,7 @@ def test_every_delegation_record_carries_a_resolvable_workspace_sha(pipeline_run
     """The KPI of spec 11: 'which files did this delegation change' is answered
     by the record, not by the deliverable's own prose."""
     import subprocess
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.infra.delegation_log import DelegationLog
 
     _, study = pipeline_run
     run_dir = next((study / "runs").iterdir())

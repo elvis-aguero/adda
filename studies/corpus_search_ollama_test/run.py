@@ -15,7 +15,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from a3dasm import AgenticRun, Edge, Graph, LiteratureReviewAgent, StrategizerAgent
+from adda import AgenticRun, Edge, Graph, LiteratureReviewAgent, StrategizerAgent
 
 STUDY_DIR = Path(__file__).parent
 OLLAMA_MODEL = "qwen3.8-27b-256k"

@@ -7,8 +7,8 @@ workers alive at once → Confer dead; summed wall-clock → watchdog kill).
 """
 from __future__ import annotations
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.nodes import Node
 
 
 class _Stub:

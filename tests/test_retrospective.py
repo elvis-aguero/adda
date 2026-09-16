@@ -7,7 +7,7 @@ worker flags contradictory instructions — emits a diagnostic + notification.
 """
 from __future__ import annotations
 
-from a3dasm._src.nodes import _extract_report_section
+from adda._src.nodes import _extract_report_section
 
 
 class TestSectionExtractor:
@@ -58,19 +58,19 @@ class TestReportValidationUsesAgentSections:
     )
 
     def test_correct_critic_report_passes_against_its_own_sections(self):
-        from a3dasm._src.agents.critic import AdversarialCritiqueAgent
-        from a3dasm._src.nodes.parsing import _classify_response
+        from adda._src.agents.critic import AdversarialCritiqueAgent
+        from adda._src.nodes.parsing import _classify_response
         sections = list(AdversarialCritiqueAgent.report_sections)
         assert _classify_response(self._CRITIC_REPORT, sections) is None
 
     def test_same_report_wrongly_flagged_by_implementer_default(self):
-        from a3dasm._src.nodes.parsing import _classify_response
+        from adda._src.nodes.parsing import _classify_response
         # The default (implementer-shaped) demands Conclusions/Files touched,
         # which a critic never emits — the misclassification BF-10 prevents.
         assert _classify_response(self._CRITIC_REPORT) is not None
 
     def test_worker_node_stores_report_sections(self):
-        from a3dasm._src.nodes import Node
+        from adda._src.nodes import Node
 
         class _Adapter:
             def __init__(self):
@@ -84,33 +84,33 @@ class TestReportValidationUsesAgentSections:
 
 class TestPromptsCarryRetrospective:
     def test_implementer_claude_prompt(self):
-        from a3dasm._src.agents.implementer import (
+        from adda._src.agents.implementer import (
             IMPLEMENTER_SYSTEM_PROMPT,
         )
         assert "### Retrospective" in IMPLEMENTER_SYSTEM_PROMPT
         assert "CONSISTENCY: ok | flagged" in IMPLEMENTER_SYSTEM_PROMPT
 
     def test_implementer_ollama_prompt(self):
-        from a3dasm._src.prompts.agent_prompts import (
+        from adda._src.prompts.agent_prompts import (
             IMPLEMENTER_SYSTEM_PROMPT_OLLAMA,
         )
         assert "### Retrospective" in IMPLEMENTER_SYSTEM_PROMPT_OLLAMA
         assert "CONSISTENCY: ok | flagged" in IMPLEMENTER_SYSTEM_PROMPT_OLLAMA
 
     def test_datagenerator_prompt(self):
-        from a3dasm._src.agents.datagenerator import (
+        from adda._src.agents.datagenerator import (
             DATA_GENERATOR_SYSTEM_PROMPT,
         )
         assert "### Retrospective" in DATA_GENERATOR_SYSTEM_PROMPT
 
     def test_critic_prompt(self):
-        from a3dasm._src.agents.critic import (
+        from adda._src.agents.critic import (
             ADVERSARIAL_CRITIQUE_SYSTEM_PROMPT,
         )
         assert "### Retrospective" in ADVERSARIAL_CRITIQUE_SYSTEM_PROMPT
 
     def test_literature_prompt(self):
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LITERATURE_REVIEW_SYSTEM_PROMPT,
         )
         assert "### Retrospective" in LITERATURE_REVIEW_SYSTEM_PROMPT
@@ -122,19 +122,19 @@ class TestPromptsCarryRetrospective:
         datagenerator, critic, literature) had no channel to report 'a tool I
         needed and didn't have'. CLAUDE.md specifies four retrospective fields.
         """
-        from a3dasm._src.prompts.agent_prompts import (
+        from adda._src.prompts.agent_prompts import (
             IMPLEMENTER_SYSTEM_PROMPT_OLLAMA,
         )
-        from a3dasm._src.agents.critic import (
+        from adda._src.agents.critic import (
             ADVERSARIAL_CRITIQUE_SYSTEM_PROMPT,
         )
-        from a3dasm._src.agents.datagenerator import (
+        from adda._src.agents.datagenerator import (
             DATA_GENERATOR_SYSTEM_PROMPT,
         )
-        from a3dasm._src.agents.implementer import (
+        from adda._src.agents.implementer import (
             IMPLEMENTER_SYSTEM_PROMPT,
         )
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LITERATURE_REVIEW_SYSTEM_PROMPT,
         )
         for prompt in (
@@ -148,21 +148,21 @@ class TestPromptsCarryRetrospective:
         """The orchestrator's post-Done exit interview already probed BLOCKED —
         this is why Stage-2 forensics found BLOCKED entries from the
         strategizer. Pinned so the worker change stays consistent with it."""
-        from a3dasm._src.nodes import _EXIT_INTERVIEW
+        from adda._src.nodes import _EXIT_INTERVIEW
         assert "BLOCKED:" in _EXIT_INTERVIEW
 
     def test_strategizer_prompt_is_NOT_polluted(self):
         """The strategizer must NOT carry the interview in its working
         context — that would pollute every orchestration turn. The exit
         interview is asked by the runtime AFTER the critic accepts."""
-        from a3dasm._src.agents.strategizer import (
+        from adda._src.agents.strategizer import (
             STRATEGIZER_SYSTEM_PROMPT,
         )
         assert "### Retrospective" not in STRATEGIZER_SYSTEM_PROMPT
         assert "<retrospective>" not in STRATEGIZER_SYSTEM_PROMPT
 
     def test_exit_interview_is_a_runtime_post_done_turn(self):
-        from a3dasm._src.nodes import _EXIT_INTERVIEW
+        from adda._src.nodes import _EXIT_INTERVIEW
         # Asked only after acceptance; carries the same 3 questions.
         assert "accepted by the critic" in _EXIT_INTERVIEW
         assert "CONSISTENCY" in _EXIT_INTERVIEW
@@ -176,7 +176,7 @@ class TestNoCanonicalSourceNudge:
     source is registered, recommend delegating to it (soft, ≤3×)."""
 
     def _spec_with_datagenerator(self):
-        from a3dasm._src.backends.base import Agent, Edge, Graph
+        from adda._src.backends.base import Agent, Edge, Graph
 
         class S(Agent):
             role = "strategizer"
@@ -193,7 +193,7 @@ class TestNoCanonicalSourceNudge:
         )
 
     def _node(self):
-        from a3dasm._src.nodes import Node
+        from adda._src.nodes import Node
 
         class _Stub:
             def __init__(self):
@@ -250,14 +250,14 @@ class TestNoCanonicalSourceNudge:
         assert node._no_source_nudges == 0
 
     def test_report_sections_include_retrospective(self):
-        from a3dasm._src.agents.critic import (
+        from adda._src.agents.critic import (
             AdversarialCritiqueAgent,
         )
-        from a3dasm._src.agents.datagenerator import DataGeneratorAgent
-        from a3dasm._src.agents.implementer import (
+        from adda._src.agents.datagenerator import DataGeneratorAgent
+        from adda._src.agents.implementer import (
             F3dasmImplementerAgent,
         )
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
         for agent in (F3dasmImplementerAgent, DataGeneratorAgent,
@@ -267,14 +267,14 @@ class TestNoCanonicalSourceNudge:
 
 class TestStrategizerGranularity:
     def test_anti_monolith_rule_present(self):
-        from a3dasm._src.agents.strategizer import (
+        from adda._src.agents.strategizer import (
             STRATEGIZER_SYSTEM_PROMPT,
         )
         assert "MONOLITHIC DELEGATION" in STRATEGIZER_SYSTEM_PROMPT
         assert "ONE bounded experiment" in STRATEGIZER_SYSTEM_PROMPT
 
     def test_hypothesis_framing_guidance_present(self):
-        from a3dasm._src.agents.strategizer import (
+        from adda._src.agents.strategizer import (
             STRATEGIZER_SYSTEM_PROMPT,
         )
         # domain-neutral: no leaked example framings, but the principle is
@@ -295,8 +295,8 @@ class TestRetrospectiveTextCap:
         mid-sentence (losing the BLOCKED field). The cap is now uniform at 8000."""
         import json
 
-        from a3dasm._src.backends.base import Agent, Edge, Graph
-        from a3dasm._src.nodes import Node
+        from adda._src.backends.base import Agent, Edge, Graph
+        from adda._src.nodes import Node
 
         class A(Agent):
             role = "strategizer"

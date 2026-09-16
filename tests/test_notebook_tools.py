@@ -10,8 +10,8 @@ from pathlib import Path
 
 import nbformat
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.nodes import Node
 
 
 class _Stub:
@@ -385,7 +385,7 @@ def test_run_scratch_empty_code_errors(tmp_path):
 # ── Dead jupyter-MCP path removed ────────────────────────────────────────────
 
 def test_strategizer_has_no_jupyter_config():
-    from a3dasm._src.agents.strategizer import StrategizerAgent
+    from adda._src.agents.strategizer import StrategizerAgent
     a = StrategizerAgent()
     assert not getattr(a, "needs_jupyter_server", False)
     assert getattr(a, "mcp_servers", {}) == {}
@@ -395,6 +395,6 @@ def test_strategizer_has_no_jupyter_config():
 def test_agent_runtime_imports_without_notebook_server():
     import importlib
     import os
-    importlib.import_module("a3dasm._src.runtime.agent_runtime")
-    import a3dasm._src as ag
+    importlib.import_module("adda._src.runtime.agent_runtime")
+    import adda._src as ag
     assert not os.path.exists(ag.__path__[0] + "/notebook_server.py")

@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import logging
 
-from a3dasm._src.runtime.run_setup import register_evaluator_entrypoint
+from adda._src.runtime.run_setup import register_evaluator_entrypoint
 
 
 def _write_config(tmp_path, entrypoint=None):
@@ -36,7 +36,7 @@ def test_overwriting_a_different_canonical_entrypoint_snapshots_and_warns(
     cfg = _write_config(tmp_path, entrypoint="baseline.py:gen")
     (tmp_path / "elliptical.py").write_text("def gen(x):\n    return x\n")
 
-    with caplog.at_level(logging.WARNING, logger="a3dasm"):
+    with caplog.at_level(logging.WARNING, logger="adda"):
         ep = register_evaluator_entrypoint(
             cfg, tmp_path / "elliptical.py", "gen",
             output_names=["f"], namespace=None)

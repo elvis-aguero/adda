@@ -82,7 +82,7 @@ this design.
 
 ## 4. External validity
 
-**One system, one framework.** Everything is measured on a3dasm over f3dasm. No
+**One system, one framework.** Everything is measured on adda over f3dasm. No
 claim transfers to other agentic research systems without re-measurement.
 
 **Small task set.** The anchor study is a single black-box optimisation

@@ -8,6 +8,6 @@ for choosing one, and [Installation](../installation.md) for what each needs.
 The adapters below are exported for direct use and for subclassing; a normal
 run selects one by name from `config.yaml` and never touches these classes.
 
-::: a3dasm.ClaudeAdapter
+::: adda.ClaudeAdapter
 
-::: a3dasm.OllamaAdapter
+::: adda.OllamaAdapter

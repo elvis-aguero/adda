@@ -18,7 +18,7 @@ as ``_last_critic_usage`` for its caller to put on the row.
 
 from __future__ import annotations
 
-from a3dasm._src.nodes.critic_gate import CriticGateMixin
+from adda._src.nodes.critic_gate import CriticGateMixin
 
 
 class _Worker:
@@ -113,7 +113,7 @@ def test_gate_and_feedback_rows_read_usage_rather_than_hardcoding_zero():
     """
     from pathlib import Path
 
-    src = (Path(__file__).parent.parent / "src" / "a3dasm" / "_src"
+    src = (Path(__file__).parent.parent / "src" / "adda" / "_src"
            / "nodes" / "tools" / "routing" / "feedback.py").read_text(encoding="utf-8")
 
     for marker in ("_critic_usage", "_fb_usage"):

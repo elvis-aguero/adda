@@ -11,7 +11,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
+from adda._src.backends.base import Agent, Edge, Graph
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ class StubAdapter:
 
 
 def _make_state(study_dir=None, **kwargs):
-    from a3dasm._src.runtime.graph_state import AgenticState
+    from adda._src.runtime.graph_state import AgenticState
     if study_dir is None:
         d = Path(tempfile.mkdtemp(prefix="f3dasm_nodes_cov_"))
         (d / "pipeline.py").write_text("# test\n")
@@ -74,7 +74,7 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
 
 def test_worker_node_returns_command(tmp_path):
     """Node.__call__ returns a Command with last_report set."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
     from langgraph.types import Command
 
     (tmp_path / "pipeline.py").write_text("# r\n")
@@ -94,7 +94,7 @@ def test_worker_node_returns_command(tmp_path):
 
 def test_worker_node_retry_on_malformed_response(tmp_path):
     """Node retries once when response is malformed."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     good_report = (
@@ -122,7 +122,7 @@ def test_worker_node_retry_on_malformed_response(tmp_path):
 
 def test_worker_node_reports_evals(tmp_path):
     """Node.ReportEvals closure records evaluation count."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     good_report = (
@@ -151,7 +151,7 @@ def test_worker_node_reports_evals(tmp_path):
 
 def test_worker_node_sandboxed_write_allows_workspace(tmp_path):
     """Node Write closure allows writes inside workspace_dir."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -179,7 +179,7 @@ def test_worker_node_sandboxed_write_allows_workspace(tmp_path):
 
 def test_worker_node_sandboxed_write_rejects_escape(tmp_path):
     """Node Write closure rejects paths outside workspace_dir."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -212,8 +212,8 @@ def test_worker_node_sandboxed_write_rejects_escape(tmp_path):
 
 def test_worker_node_recall_history_with_delegation_log(tmp_path):
     """Node.RecallHistory returns prior delegations from the log."""
-    from a3dasm._src.nodes import Node
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.nodes import Node
+    from adda._src.infra.delegation_log import DelegationLog
 
     log_path = tmp_path / "delegation_log.jsonl"
     log = DelegationLog(log_path)
@@ -251,8 +251,8 @@ def test_worker_node_recall_history_with_delegation_log(tmp_path):
 
 def test_worker_node_recall_history_empty(tmp_path):
     """Node.RecallHistory returns no-records message when log is empty."""
-    from a3dasm._src.nodes import Node
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.nodes import Node
+    from adda._src.infra.delegation_log import DelegationLog
 
     log_path = tmp_path / "delegation_log.jsonl"
     log = DelegationLog(log_path)
@@ -286,8 +286,8 @@ def test_write_deliverable_creates_file(tmp_path):
     """WriteDeliverable writes pipeline.ipynb to study_dir."""
     import nbformat
 
-    from a3dasm._src.nodes import Node
-    from a3dasm._src.evaluation.notebook_exec import build_notebook
+    from adda._src.nodes import Node
+    from adda._src.evaluation.notebook_exec import build_notebook
 
     nb_json = nbformat.writes(build_notebook(
         [{"type": "code", "name": "analysis", "source": "x = 42"}]))
@@ -326,7 +326,7 @@ def test_write_deliverable_repairs_code_cell_missing_outputs(tmp_path):
     writing to disk."""
     import json
 
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     malformed_nb = json.dumps({
         "cells": [
@@ -370,7 +370,7 @@ def test_write_deliverable_repairs_code_cell_missing_outputs(tmp_path):
 
 def test_write_deliverable_rejects_bad_extension(tmp_path):
     """WriteDeliverable rejects any file that doesn't end in .ipynb."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.ipynb").write_text("# r\n")
 
@@ -401,7 +401,7 @@ def test_write_deliverable_rejects_bad_extension(tmp_path):
 
 def test_write_deliverable_rejects_path_separators(tmp_path):
     """WriteDeliverable rejects filenames with path separators."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
 
@@ -443,8 +443,8 @@ def test_strategizer_recall_history_with_log(tmp_path):
     Uses a custom spec with entry="hub" so the "strategizer"-named node under
     test keeps its usual Done/FollowUp tool set while genuinely being able to
     receive delegations."""
-    from a3dasm._src.nodes import Node
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.nodes import Node
+    from adda._src.infra.delegation_log import DelegationLog
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     log_path = tmp_path / "delegation_log.jsonl"
@@ -515,7 +515,7 @@ def test_strategizer_recall_history_with_log(tmp_path):
 
 def test_hypothesis_propose_without_ledger():
     """HypothesisPropose returns ERROR when no ledger is set."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     results = []
 
@@ -543,7 +543,7 @@ def test_hypothesis_propose_without_ledger():
 
 def test_hypothesis_list_without_ledger():
     """HypothesisList returns ERROR when no ledger is set."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     results = []
 
@@ -566,7 +566,7 @@ def test_hypothesis_list_without_ledger():
 
 def test_hypothesis_propose_with_ledger(tmp_path):
     """HypothesisPropose returns H-id when ledger is active."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     notes_dir = tmp_path / "notes"
@@ -603,7 +603,7 @@ def test_hypothesis_propose_with_ledger(tmp_path):
 
 def test_hypothesis_list_with_entries(tmp_path):
     """HypothesisList returns hypothesis entries when ledger has items."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     notes_dir = tmp_path / "notes"
@@ -652,7 +652,7 @@ def test_hypothesis_list_with_entries(tmp_path):
 
 def test_hypothesis_update_coerces_json_string_evidence(tmp_path):
     """Backends may pass evidence as a JSON string; closure coerces."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     notes_dir = tmp_path / "notes"
@@ -694,7 +694,7 @@ def test_hypothesis_update_coerces_json_string_evidence(tmp_path):
 
 def test_hypothesis_get_not_found(tmp_path):
     """HypothesisGet returns ERROR for unknown hypothesis id."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     notes_dir = tmp_path / "notes"
@@ -730,7 +730,7 @@ def test_hypothesis_get_not_found(tmp_path):
 
 def test_budget_95_percent_warning_in_context():
     """At 95% budget, a budget warning is injected into the context."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     received_messages = []
 
@@ -758,7 +758,7 @@ def test_budget_95_percent_warning_in_context():
 
 def test_eval_budget_exceeded_warning():
     """When eval_budget is exceeded, a warning is injected into context."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     received_messages = []
 
@@ -792,7 +792,7 @@ def test_eval_budget_exceeded_warning():
 
 def test_wrap_closure_counts_error_returns(tmp_path):
     """_wrap_closure increments error_counts when closure returns ERROR:."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
 
@@ -823,7 +823,7 @@ def test_wrap_closure_counts_error_returns(tmp_path):
 
 def test_delegate_unknown_target_returns_error():
     """Delegate to a non-existent target returns ERROR."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     results = []
 
@@ -855,7 +855,7 @@ def test_delegate_unknown_target_returns_error():
 
 def test_delegate_no_worker_adapter_returns_error():
     """Delegate to a valid target with no worker_adapters returns ERROR."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     results = []
 
@@ -891,7 +891,7 @@ def test_delegate_no_worker_adapter_returns_error():
 
 def test_worker_node_recall_history_none_log(tmp_path):
     """Node RecallHistory when delegation_log is None is not added."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     adapter = StubAdapter()
     node = Node(adapter, name="implementer", delegation_log=None)
@@ -907,7 +907,7 @@ def test_worker_node_recall_history_none_log(tmp_path):
 
 def test_done_with_pending_delegations_returns_error(tmp_path):
     """Done() is refused when delegations are still Working."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
 
@@ -965,7 +965,7 @@ def test_done_with_pending_delegations_returns_error(tmp_path):
 
 def test_accumulate_usage_sums_token_counts():
     """_accumulate_usage correctly sums token counts across multiple calls."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     adapter = StubAdapter()
     spec = _minimal_spec()
@@ -980,7 +980,7 @@ def test_accumulate_usage_sums_token_counts():
 
 def test_accumulate_usage_handles_none_values():
     """_accumulate_usage treats None values as 0."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     adapter = StubAdapter()
     spec = _minimal_spec()
@@ -994,7 +994,7 @@ def test_accumulate_usage_handles_none_values():
 
 def test_accumulate_usage_adds_cost():
     """_accumulate_usage sums total_cost_usd."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     adapter = StubAdapter()
     spec = _minimal_spec()
@@ -1013,7 +1013,7 @@ def test_accumulate_usage_adds_cost():
 
 def test_classify_response_short_text():
     """_classify_response returns REFLECT for text under 100 chars."""
-    from a3dasm._src.nodes import _classify_response
+    from adda._src.nodes import _classify_response
 
     result = _classify_response("too short")
     assert result is not None
@@ -1021,7 +1021,7 @@ def test_classify_response_short_text():
 
 def test_classify_response_capability_phrase():
     """_classify_response returns REFLECT when capability-limit phrase present."""
-    from a3dasm._src.nodes import _classify_response
+    from adda._src.nodes import _classify_response
 
     long_text = "A" * 200 + " I cannot do this task because it requires internet access."
     result = _classify_response(long_text)
@@ -1030,7 +1030,7 @@ def test_classify_response_capability_phrase():
 
 def test_classify_response_no_report_heading():
     """_classify_response returns REFLECT when ## Report heading is missing."""
-    from a3dasm._src.nodes import _classify_response
+    from adda._src.nodes import _classify_response
 
     text = "A" * 200 + "\nSome content without the required heading."
     result = _classify_response(text)
@@ -1039,7 +1039,7 @@ def test_classify_response_no_report_heading():
 
 def test_classify_response_missing_subsections():
     """_classify_response returns REFLECT when required subsections are missing."""
-    from a3dasm._src.nodes import _classify_response
+    from adda._src.nodes import _classify_response
 
     text = (
         "A" * 200 +
@@ -1053,7 +1053,7 @@ def test_classify_response_missing_subsections():
 def test_classify_response_honors_per_agent_sections():
     """Audit Finding 4: validation uses the passed report_sections (DRY single
     source), so e.g. a missing ### Retrospective is caught when required."""
-    from a3dasm._src.nodes import _classify_response
+    from adda._src.nodes import _classify_response
 
     body = (
         "A" * 200 +
@@ -1068,7 +1068,7 @@ def test_classify_response_honors_per_agent_sections():
 
 def test_classify_response_valid_report():
     """_classify_response returns None for a well-formed report."""
-    from a3dasm._src.nodes import _classify_response
+    from adda._src.nodes import _classify_response
 
     text = (
         "A" * 200 +
@@ -1088,7 +1088,7 @@ def test_classify_response_valid_report():
 
 def test_to_adapter_messages_handles_list_content():
     """_to_adapter_messages concatenates list-typed content items."""
-    from a3dasm._src.nodes import _to_adapter_messages
+    from adda._src.nodes import _to_adapter_messages
     from langchain_core.messages import HumanMessage
 
     msg = HumanMessage(content=[{"text": "Hello"}, {"text": "World"}])

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 
-from a3dasm._src.infra.telemetry import Telemetry
+from adda._src.infra.telemetry import Telemetry
 
 
 def _usage(i, o, cost=None, cr=0, cc=0):
@@ -127,7 +127,7 @@ def test_claude_allowed_tools_never_none_for_toolless():
     """Gap 1 regression: a tool-less agent (e.g. the problem-statement
     reviewer) must yield allowed_tools=[] — never None — or the SDK crashes on
     list(None) when building its command."""
-    from a3dasm._src.backends.claude import ClaudeAdapter
+    from adda._src.backends.claude import ClaudeAdapter
 
     toolless = ClaudeAdapter(
         model="m", system_prompt="s", native_tools=[], extra_allowed_tools=[]
@@ -149,8 +149,8 @@ def test_critic_consult_usage_recorded(tmp_path):
     'critic' / phase 'critic_review' (previously uncounted)."""
     import json
 
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.nodes import Node
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.nodes import Node
 
     class _Strat(Agent):
         role = "strategizer"

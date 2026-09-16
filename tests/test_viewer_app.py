@@ -27,7 +27,7 @@ import pytest
 import uvicorn
 from starlette.testclient import TestClient
 
-from a3dasm._src.viewer.app import create_app
+from adda._src.viewer.app import create_app
 
 
 def _free_port() -> int:
@@ -70,7 +70,7 @@ def _make_study(tmp_path: Path) -> Path:
     study = tmp_path / "study"
     study.mkdir()
     (study / "run.py").write_text(
-        "from a3dasm._src.backends.base import Agent, Edge, Graph\n"
+        "from adda._src.backends.base import Agent, Edge, Graph\n"
         "class _S(Agent):\n"
         "    role = 'strategizer'\n"
         "    description = 'hub'\n"
@@ -616,7 +616,7 @@ def test_operator_endpoint_reports_pending_questions_and_beats_the_heartbeat(tmp
     poll that shows you the question must also be what tells the run you
     are there to answer it.
     """
-    from a3dasm._src.infra import operator_channel as oc
+    from adda._src.infra import operator_channel as oc
 
     study = _make_study(tmp_path)
     run = _make_run(study, "20260904T120000")
@@ -631,7 +631,7 @@ def test_operator_endpoint_reports_pending_questions_and_beats_the_heartbeat(tmp
 
 
 def test_answering_reaches_the_run(tmp_path):
-    from a3dasm._src.infra import operator_channel as oc
+    from adda._src.infra import operator_channel as oc
 
     study = _make_study(tmp_path)
     run = _make_run(study, "20260904T120000")
@@ -646,7 +646,7 @@ def test_answering_reaches_the_run(tmp_path):
 
 def test_answering_a_question_the_run_gave_up_on_is_a_conflict(tmp_path):
     """Must not report success for an answer the agent will never see."""
-    from a3dasm._src.infra import operator_channel as oc
+    from adda._src.infra import operator_channel as oc
 
     study = _make_study(tmp_path)
     run = _make_run(study, "20260904T120000")
@@ -660,7 +660,7 @@ def test_answering_a_question_the_run_gave_up_on_is_a_conflict(tmp_path):
 
 
 def test_queueing_a_note_puts_it_where_the_node_drains_it(tmp_path):
-    from a3dasm._src.infra import operator_channel as oc
+    from adda._src.infra import operator_channel as oc
 
     study = _make_study(tmp_path)
     run = _make_run(study, "20260904T120000")
@@ -712,7 +712,7 @@ def test_a_tool_name_cannot_inject_an_event_handler(tmp_path):
     ``x' onmouseover='alert(1)`` closed title='...' and added a live handler
     to the served page.
     """
-    from a3dasm._src.viewer.app import _bubble_html
+    from adda._src.viewer.app import _bubble_html
 
     html = _bubble_html({
         "type": "assistant", "text": "hi",
@@ -931,7 +931,7 @@ def test_graph_spec_cache_does_not_leak_across_runs(tmp_path):
     is a property of the run, so the cache key has to be too."""
     import json as _json
 
-    from a3dasm._src.backends.base import Agent, Graph
+    from adda._src.backends.base import Agent, Graph
 
     class _Hub(Agent):
         role = "strategizer"
@@ -985,8 +985,8 @@ def test_injected_nudges_render_as_notices_not_as_the_humans_task(tmp_path):
     rendered only assistant turns and tool results — so they were not merely
     unstyled, they were absent. Marked at the injection site, lifted here.
     """
-    from a3dasm._src.nodes.notices import wrap_notice
-    from a3dasm._src.viewer.app import _bubble_html
+    from adda._src.nodes.notices import wrap_notice
+    from adda._src.viewer.app import _bubble_html
 
     html = _bubble_html({
         "type": "HumanMessage",
@@ -1001,7 +1001,7 @@ def test_injected_nudges_render_as_notices_not_as_the_humans_task(tmp_path):
 
 
 def test_plain_human_turn_renders_without_a_notice_band(tmp_path):
-    from a3dasm._src.viewer.app import _bubble_html
+    from adda._src.viewer.app import _bubble_html
 
     html = _bubble_html({"type": "HumanMessage", "text": "Minimise the drag."})
     assert "Minimise the drag." in html
@@ -1009,6 +1009,6 @@ def test_plain_human_turn_renders_without_a_notice_band(tmp_path):
 
 
 def test_empty_human_turn_renders_nothing(tmp_path):
-    from a3dasm._src.viewer.app import _bubble_html
+    from adda._src.viewer.app import _bubble_html
 
     assert _bubble_html({"type": "HumanMessage", "text": "   "}) == ""

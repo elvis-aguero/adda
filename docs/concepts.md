@@ -1,7 +1,7 @@
 # Core concepts
 
 If you've just run the [Quickstart](notebooks/quickstart.ipynb), you've already
-seen a3dasm work end to end: one problem statement in, one reproducible
+seen adda work end to end: one problem statement in, one reproducible
 notebook out. This page names the pieces that made that happen, so you can
 reason about what a run is doing, and write a better problem statement for
 your own, rather than treating it as a black box.
@@ -185,11 +185,11 @@ When the strategizer hands work to a specialist, that is a **delegation**. Each
 delegation has an id (`D001`, `D002`, …), a task description, and a report that
 comes back. Delegations are the unit of work and the unit of accounting: every
 real evaluation is attributed to the delegation that produced it, which is what
-lets a3dasm tell you exactly where each number came from.
+lets adda tell you exactly where each number came from.
 
 ## The hypothesis ledger and the falsification charter
 
-a3dasm does science, so it tracks **hypotheses** explicitly. A hypothesis is a
+adda does science, so it tracks **hypotheses** explicitly. A hypothesis is a
 claim with a testable criterion, a prediction, a prior, and (as evidence comes
 in) a verdict. These live in the **hypothesis ledger**.
 
@@ -225,7 +225,7 @@ including which ones you can switch off.
 
 ## Backends
 
-The agents are driven by a language model through a **backend**. a3dasm ships
+The agents are driven by a language model through a **backend**. adda ships
 several: the Claude CLI (default), any OpenAI-compatible endpoint, Ollama,
 OpenRouter, and vLLM (including a mode that serves a model on a SLURM GPU node the
 framework owns for the run). The backend is a configuration choice; the graph and
@@ -233,7 +233,7 @@ the science do not change with it.
 
 ## Resource governance
 
-Long autonomous runs need guardrails. a3dasm separates two kinds:
+Long autonomous runs need guardrails. adda separates two kinds:
 
 - **Soft budgets** (`eval_budget`, the evaluation count, and `budget`, the
   wall-clock time) nudge the strategizer when it is spending heavily, but

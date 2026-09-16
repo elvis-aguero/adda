@@ -24,13 +24,13 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def test_default_graph_has_five_nodes():
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     graph = _default_graph()
     assert len(graph.nodes) == 5
 
 
 def test_default_graph_node_names():
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     graph = _default_graph()
     assert set(graph.nodes.keys()) == {
         "strategizer",
@@ -42,19 +42,19 @@ def test_default_graph_node_names():
 
 
 def test_default_graph_entry_is_strategizer():
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     graph = _default_graph()
     assert graph.entry == "strategizer"
 
 
 def test_default_graph_has_six_edges():
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     graph = _default_graph()
     assert len(graph.edges) == 6
 
 
 def test_default_graph_expected_edges():
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     graph = _default_graph()
     edge_pairs = {(e.source, e.target) for e in graph.edges}
     assert ("strategizer", "literature_reviewer") in edge_pairs
@@ -67,8 +67,8 @@ def test_default_graph_expected_edges():
 
 def test_default_graph_builds_via_build_graph():
     """build_graph compiles the 5-node default graph without error."""
-    from a3dasm._src.agents._graphs import _default_graph
-    from a3dasm._src.runtime.graph_builder import build_graph
+    from adda._src.agents._graphs import _default_graph
+    from adda._src.runtime.graph_builder import build_graph
 
     graph = _default_graph()
 
@@ -82,8 +82,8 @@ def test_default_graph_builds_via_build_graph():
 
 
 def test_default_graph_implementer_is_f3dasm_implementer_agent():
-    from a3dasm._src.agents._graphs import _default_graph
-    from a3dasm._src.agents.implementer import F3dasmImplementerAgent
+    from adda._src.agents._graphs import _default_graph
+    from adda._src.agents.implementer import F3dasmImplementerAgent
     graph = _default_graph()
     assert isinstance(graph.nodes["implementer"], F3dasmImplementerAgent)
 
@@ -93,21 +93,21 @@ def test_default_graph_implementer_is_f3dasm_implementer_agent():
 # ---------------------------------------------------------------------------
 
 def test_f3dasm_implementer_agent_importable_from_public():
-    from a3dasm import F3dasmImplementerAgent  # noqa: F401
+    from adda import F3dasmImplementerAgent  # noqa: F401
 
 
 def test_implementer_agent_alias_importable_from_public():
-    from a3dasm import ImplementerAgent  # noqa: F401
+    from adda import ImplementerAgent  # noqa: F401
 
 
 def test_implementer_agent_alias_is_same_class():
-    from a3dasm import F3dasmImplementerAgent, ImplementerAgent
+    from adda import F3dasmImplementerAgent, ImplementerAgent
     assert ImplementerAgent is F3dasmImplementerAgent
 
 
 def test_f3dasmimplementer_backward_compat_alias():
     """The old F3dasmImplementer name still resolves to F3dasmImplementerAgent."""
-    from a3dasm._src.agents.implementer import (
+    from adda._src.agents.implementer import (
         F3dasmImplementer,
         F3dasmImplementerAgent,
     )
@@ -115,7 +115,7 @@ def test_f3dasmimplementer_backward_compat_alias():
 
 
 def test_f3dasm_implementer_agent_in_all():
-    import a3dasm as mod
+    import adda as mod
     assert "F3dasmImplementerAgent" in mod.__all__
     assert "ImplementerAgent" in mod.__all__
 
@@ -125,26 +125,26 @@ def test_f3dasm_implementer_agent_in_all():
 # ---------------------------------------------------------------------------
 
 def test_optimization_agent_not_in_public_all():
-    import a3dasm as mod
+    import adda as mod
     assert "OptimizationAgent" not in mod.__all__
 
 
 def test_optimization_agent_import_raises():
-    """OptimizationAgent must NOT be importable from a3dasm."""
+    """OptimizationAgent must NOT be importable from adda."""
     with pytest.raises((ImportError, AttributeError)):
-        from a3dasm import OptimizationAgent  # noqa: F401
+        from adda import OptimizationAgent  # noqa: F401
 
 
 def test_optimization_module_deleted():
     """agents/optimization.py must not exist."""
-    import a3dasm._src.agents as pkg
+    import adda._src.agents as pkg
     agents_dir = Path(pkg.__file__).parent
     assert not (agents_dir / "optimization.py").exists()
 
 
 def test_optimization_agent_not_in_default_graph():
     """No OptimizationAgent in the default graph node types."""
-    from a3dasm._src.agents._graphs import _default_graph
+    from adda._src.agents._graphs import _default_graph
     graph = _default_graph()
     for agent in graph.nodes.values():
         assert type(agent).__name__ != "OptimizationAgent"
@@ -156,7 +156,7 @@ def test_optimization_agent_not_in_default_graph():
 
 def _make_log():
     tmp = Path(tempfile.mkdtemp())
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.infra.delegation_log import DelegationLog
     return DelegationLog(tmp / "dl.jsonl")
 
 
@@ -250,13 +250,13 @@ def test_per_node_fallback_monotonic_without_log():
 # ---------------------------------------------------------------------------
 
 def test_strategizer_no_two_agent_framing():
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     assert "two-agent" not in STRATEGIZER_SYSTEM_PROMPT
     assert "two-agent research system" not in STRATEGIZER_SYSTEM_PROMPT
 
 
 def test_strategizer_describes_data_generation_build():
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     # Build capability described by role, not by a hardcoded class name.
     assert "DataGenerator Block" in STRATEGIZER_SYSTEM_PROMPT
     assert "datagenerator role" in STRATEGIZER_SYSTEM_PROMPT
@@ -267,31 +267,31 @@ def test_strategizer_routes_by_hint_not_class_name():
     hint NAMES, never by hardcoded agent class names. Hardcoding a class name
     broke when the class was renamed — the agent passed
     'F3dasmImplementerAgent' as a target and every delegation was rejected."""
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     assert "F3dasmImplementerAgent" not in STRATEGIZER_SYSTEM_PROMPT
     assert "DataGeneratorAgent" not in STRATEGIZER_SYSTEM_PROMPT
     assert "verbatim" in STRATEGIZER_SYSTEM_PROMPT
 
 
 def test_strategizer_no_optimization_agent_reference():
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     assert "OptimizationAgent" not in STRATEGIZER_SYSTEM_PROMPT
 
 
 def test_strategizer_delegate_tool_hints_line():
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     assert "Delegate tool's hints" in STRATEGIZER_SYSTEM_PROMPT
 
 
 def test_strategizer_build_run_split_described():
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     # Build/run split described by capability (BUILDING vs RUNNING), no names.
     assert "BUILD" in STRATEGIZER_SYSTEM_PROMPT
     assert "RUN" in STRATEGIZER_SYSTEM_PROMPT
 
 
 def test_strategizer_implementer_owns_all_evaluation():
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     assert "ALL evaluation" in STRATEGIZER_SYSTEM_PROMPT or \
         "owns ALL" in STRATEGIZER_SYSTEM_PROMPT
 
@@ -306,7 +306,7 @@ def test_strategizer_prompt_uses_verified_read_api():
     data.sample(...) / to_numpy("output") / get_n_best_output(name, n=) /
     create_sampler("lhs"). Verified against the installed f3dasm.
     """
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
     p = STRATEGIZER_SYSTEM_PROMPT
     assert "data.sample(" not in p
     assert 'to_numpy("output")' not in p
@@ -316,7 +316,7 @@ def test_strategizer_prompt_uses_verified_read_api():
 
 
 def test_implementer_prompt_covers_sampling():
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     # Verified sampling API (create_sampler -> Block.call), injected via
     # F3DASM_CORE_IDIOMS. The old data.sample(...)/Latin()/Sobol() tokens were
     # removed because they do not exist on the installed f3dasm.
@@ -328,46 +328,46 @@ def test_implementer_prompt_covers_sampling():
 
 
 def test_implementer_prompt_covers_get_evaluator():
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     assert "get_evaluator" in IMPLEMENTER_SYSTEM_PROMPT
 
 
 def test_implementer_prompt_covers_surrogate_fit():
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     prompt_lower = IMPLEMENTER_SYSTEM_PROMPT.lower()
     assert "surrogate" in prompt_lower
     assert "no built-in gp" in prompt_lower or "has no built-in gp" in prompt_lower
 
 
 def test_implementer_prompt_covers_exploit_loop():
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     # Must mention exploit loop / optimization
     prompt_lower = IMPLEMENTER_SYSTEM_PROMPT.lower()
     assert "exploit" in prompt_lower or "optimization" in prompt_lower
 
 
 def test_implementer_prompt_owns_initial_design():
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     # Must explicitly state it runs the initial space-filling design
     assert "initial space-filling" in IMPLEMENTER_SYSTEM_PROMPT or \
         "DoE-EXECUTION" in IMPLEMENTER_SYSTEM_PROMPT
 
 
 def test_implementer_prompt_only_agent_evaluates():
-    from a3dasm._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
+    from adda._src.agents.implementer import IMPLEMENTER_SYSTEM_PROMPT
     assert "ONLY agent that" in IMPLEMENTER_SYSTEM_PROMPT or \
         "only agent that" in IMPLEMENTER_SYSTEM_PROMPT.lower()
 
 
 def test_implementer_agent_class_description_matches_spec():
-    from a3dasm._src.agents.implementer import F3dasmImplementerAgent
+    from adda._src.agents.implementer import F3dasmImplementerAgent
     desc = F3dasmImplementerAgent.description
     assert "only agent that evaluates" in desc.lower()
     assert "surrogate" in desc.lower()
 
 
 def test_implementer_agent_class_name():
-    from a3dasm._src.agents.implementer import F3dasmImplementerAgent
+    from adda._src.agents.implementer import F3dasmImplementerAgent
     assert F3dasmImplementerAgent.__name__ == "F3dasmImplementerAgent"
 
 
@@ -388,7 +388,7 @@ def test_non_entry_node_delegate_omits_hypothesis_check():
     import importlib
     import inspect
     import pkgutil
-    from a3dasm._src.nodes.tools import routing as _routing
+    from adda._src.nodes.tools import routing as _routing
     src = "\n".join(
         [inspect.getsource(_routing)]
         + [
@@ -409,12 +409,12 @@ def test_non_entry_node_delegate_omits_hypothesis_check():
 # ---------------------------------------------------------------------------
 
 def test_datagenerator_role_attr():
-    from a3dasm._src.agents.datagenerator import DataGeneratorAgent
+    from adda._src.agents.datagenerator import DataGeneratorAgent
     assert DataGeneratorAgent.role == "datagenerator"
 
 
 def test_datagenerator_prompt_is_universal_standardizer():
-    from a3dasm._src.agents.datagenerator import (
+    from adda._src.agents.datagenerator import (
         DATA_GENERATOR_SYSTEM_PROMPT,
     )
     p = DATA_GENERATOR_SYSTEM_PROMPT.lower()
@@ -431,7 +431,7 @@ def test_datagenerator_prompt_uses_verified_sampling_api():
     create_sampler(...).call(data=...). Mirrors the implementer's sampling
     contract above.
     """
-    from a3dasm._src.agents.datagenerator import (
+    from adda._src.agents.datagenerator import (
         DATA_GENERATOR_SYSTEM_PROMPT,
     )
     for token in ("create_sampler", "sampler.call", "n_samples"):
@@ -446,7 +446,7 @@ def test_datagenerator_prompt_uses_verified_sampling_api():
 
 
 def test_datagenerator_prompt_documents_registration_manifest():
-    from a3dasm._src.agents.datagenerator import (
+    from adda._src.agents.datagenerator import (
         DATA_GENERATOR_SYSTEM_PROMPT,
     )
     p = DATA_GENERATOR_SYSTEM_PROMPT
@@ -459,7 +459,7 @@ def test_datagenerator_prompt_documents_registration_manifest():
 def test_datagenerator_no_lookup_exclusion_absolute_claim():
     """The old 'NOT for lookup-pool studies' absolute is gone — the agent is
     now a general standardizer (it can also conform a dataset source)."""
-    from a3dasm._src.agents.datagenerator import DataGeneratorAgent
+    from adda._src.agents.datagenerator import DataGeneratorAgent
     assert "NOT for lookup-pool studies" not in (
         DataGeneratorAgent.__doc__ or ""
     )

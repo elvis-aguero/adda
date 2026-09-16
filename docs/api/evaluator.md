@@ -2,8 +2,8 @@
 
 The metered evaluator and the canonical evaluation ledger.
 
-::: a3dasm.get_evaluator
+::: adda.get_evaluator
 
-::: a3dasm.LookupDataGenerator
+::: adda.LookupDataGenerator
 
-::: a3dasm.load_experiments
+::: adda.load_experiments

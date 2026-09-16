@@ -2,14 +2,14 @@
 
 test 10 (native tools documented in FEATURES.md) is covered by the existing,
 generic tests/test_features_documented.py — it walks every class in
-a3dasm._src.agents, so MathExpertAgent is already exercised with no new test
+adda._src.agents, so MathExpertAgent is already exercised with no new test
 needed (confirmed green as soon as the class existed).
 """
 
 from __future__ import annotations
 
-from a3dasm import Agent, Edge, Graph, MathExpertAgent
-from a3dasm._src.agents import _default_graph
+from adda import Agent, Edge, Graph, MathExpertAgent
+from adda._src.agents import _default_graph
 
 
 def test_math_expert_not_in_default_graph():

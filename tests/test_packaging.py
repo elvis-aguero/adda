@@ -1,6 +1,6 @@
-"""a3dasm dependency partition: a torch-free core vs the heavy `extra`.
+"""adda dependency partition: a torch-free core vs the heavy `extra`.
 
-a3dasm's core dependencies must run a functional literature reviewer (pymupdf
+adda's core dependencies must run a functional literature reviewer (pymupdf
 PDF->MD + BM25 retrieval + lightweight paper search) without pulling torch. The
 one torch-puller (docling) lives in the `extra` optional-dependency as a quality
 upgrade. These tests pin that partition and the graceful lean-image degradation.
@@ -46,7 +46,7 @@ def _extras() -> dict:
 
 
 def test_core_depends_on_f3dasm():
-    """a3dasm builds on f3dasm; it must declare it as a dependency."""
+    """adda builds on f3dasm; it must declare it as a dependency."""
     assert "f3dasm" in _core_deps()
 
 
@@ -70,10 +70,10 @@ def test_extra_holds_the_torch_puller():
 
 
 def test_all_aliases_extra():
-    """`all` folds in `extra` (self-referential alias normalises to a3dasm)."""
+    """`all` folds in `extra` (self-referential alias normalises to adda)."""
     extras = _extras()
     allx = extras["all"]
-    assert allx == {"a3dasm"} or allx <= extras["extra"]
+    assert allx == {"adda"} or allx <= extras["extra"]
 
 
 def test_literature_corpus_degrades_to_bm25_without_heavy_deps(
@@ -81,7 +81,7 @@ def test_literature_corpus_degrades_to_bm25_without_heavy_deps(
 ):
     """Lean-image path: with docling AND fastembed unimportable, LiteratureCorpus
     still constructs and retrieval falls back to BM25 (dense embedder is None)."""
-    import a3dasm._src.literature.literature_corpus as lc
+    import adda._src.literature.literature_corpus as lc
 
     monkeypatch.setitem(sys.modules, "fastembed", None)
     monkeypatch.setitem(sys.modules, "docling", None)

@@ -10,7 +10,7 @@ A missing role must never impersonate the implementer.
 """
 from __future__ import annotations
 
-from a3dasm._src.agents import (
+from adda._src.agents import (
     AdversarialCritiqueAgent,
     DataGeneratorAgent,
     DebuggerAgent,
@@ -18,7 +18,7 @@ from a3dasm._src.agents import (
     LiteratureReviewAgent,
     StrategizerAgent,
 )
-from a3dasm._src.backends.base import Agent
+from adda._src.backends.base import Agent
 
 
 def test_every_specialist_declares_its_own_role():

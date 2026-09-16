@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import json
 
-from a3dasm._src.backends.base import (
+from adda._src.backends.base import (
     set_delegation_id,
     set_run_config_path,
 )
-from a3dasm._src.backends.claude import _build_session_env
+from adda._src.backends.claude import _build_session_env
 
 
 def _with_run_config(tmp_path, store_dir):

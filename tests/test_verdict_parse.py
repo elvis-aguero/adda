@@ -7,7 +7,7 @@ must tolerate emphasis/punctuation and fall back to a `verdict: X` line.
 """
 from __future__ import annotations
 
-from a3dasm._src.nodes import _parse_verdict
+from adda._src.nodes import _parse_verdict
 
 
 def test_bold_pass_is_parsed():  # the exact bug from the wet run

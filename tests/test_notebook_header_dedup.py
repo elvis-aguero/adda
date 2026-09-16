@@ -7,7 +7,7 @@ tool's canonical) heading remains.
 """
 from __future__ import annotations
 
-from a3dasm._src.nodes.tools.routing import _strip_leading_md_header
+from adda._src.nodes.tools.routing import _strip_leading_md_header
 
 
 def test_strips_a_leading_header():

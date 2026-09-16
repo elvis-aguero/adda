@@ -1,10 +1,10 @@
 # Authoring a study
 
-A **study** is the single input to a run. It's a folder you prepare; a3dasm reads
+A **study** is the single input to a run. It's a folder you prepare; adda reads
 it, does the work, and writes its results back into the same folder:
 
 ```python
-from a3dasm import AgenticRun
+from adda import AgenticRun
 AgenticRun(study_dir="my_study").execute()
 ```
 
@@ -192,6 +192,6 @@ Design space: x1, x2, continuous, in [-5, 5], dimensionless.
 Then run it:
 
 ```python
-from a3dasm import AgenticRun
+from adda import AgenticRun
 AgenticRun(study_dir="studies/example_study").execute()
 ```

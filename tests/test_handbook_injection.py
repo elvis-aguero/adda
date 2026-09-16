@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.runtime.agent_runtime import AgenticRun
-from a3dasm._src.agents.critic import AdversarialCritiqueAgent
-from a3dasm._src.agents.implementer import ImplementerAgent
+from adda._src.runtime.agent_runtime import AgenticRun
+from adda._src.agents.critic import AdversarialCritiqueAgent
+from adda._src.agents.implementer import ImplementerAgent
 
 
 class _NoOutgoing:
@@ -37,15 +37,15 @@ def test_make_adapter_injects_consult_handbook(tmp_path, name, agent):
     # Universal, runtime-injected closure (NOT declared in the agent prompt).
     assert "ConsultHandbook" in adapter.closure_tools
     # It is the shared handbook function (one source), not a per-agent copy.
-    from a3dasm._src.nodes.parsing import _consult_handbook
+    from adda._src.nodes.parsing import _consult_handbook
     assert adapter.closure_tools["ConsultHandbook"] is _consult_handbook
 
 
 def test_notebook_spec_always_injected(tmp_path):
     """The pipeline.ipynb deliverable contract is ALWAYS injected into the
     strategizer prompt — the system is committed to the notebook deliverable."""
-    from a3dasm._src.runtime import settings
-    from a3dasm._src.agents.strategizer import StrategizerAgent
+    from adda._src.runtime import settings
+    from adda._src.agents.strategizer import StrategizerAgent
 
     run = AgenticRun(study_dir=tmp_path)
     run._run_dir = None
@@ -67,8 +67,8 @@ def test_notebook_spec_is_role_aware(tmp_path):
     structured tools' imperative — those tools are granted only to the
     strategizer, so telling the others to call them would be a dead instruction.
     """
-    from a3dasm._src.agents.critic import AdversarialCritiqueAgent
-    from a3dasm._src.agents.implementer import ImplementerAgent
+    from adda._src.agents.critic import AdversarialCritiqueAgent
+    from adda._src.agents.implementer import ImplementerAgent
 
     run = AgenticRun(study_dir=tmp_path)
     run._run_dir = None

@@ -8,7 +8,7 @@ import pytest
 nbformat = pytest.importorskip("nbformat")
 pytest.importorskip("nbclient")
 
-from a3dasm._src.evaluation.notebook_exec import diagnose_notebook
+from adda._src.evaluation.notebook_exec import diagnose_notebook
 
 
 def _nb(tmp_path, cells):
@@ -69,7 +69,7 @@ def test_unknown_cell_name_is_flagged_not_executed(tmp_path):
 
 
 def test_runpipelinecell_is_wired_into_the_strategizer():
-    from a3dasm._src.agents.strategizer import StrategizerAgent
+    from adda._src.agents.strategizer import StrategizerAgent
     assert "RunPipelineCell" in StrategizerAgent.tools
 
 
@@ -82,9 +82,9 @@ def test_runpipelinecell_upto_name_accepts_a_custom_phase_cell(tmp_path):
     error message was simply stale/misleading relative to what the tool
     actually does.
     """
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.evaluation.instrumented import InstrumentedDataGenerator
-    from a3dasm._src.nodes import Node
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.evaluation.instrumented import InstrumentedDataGenerator
+    from adda._src.nodes import Node
     from f3dasm._src.core import DataGenerator
     from f3dasm._src.experimentsample import ExperimentSample, JobStatus
 

@@ -1,10 +1,10 @@
 """Phase tags (Spec C1): the f3dasm process vocabulary on delegations."""
 from __future__ import annotations
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.infra.delegation_log import DelegationLog
-from a3dasm._src.nodes import Node
-from a3dasm._src.runtime.phases import Phase, resolve_phase
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.infra.delegation_log import DelegationLog
+from adda._src.nodes import Node
+from adda._src.runtime.phases import Phase, resolve_phase
 
 
 class _Stub:

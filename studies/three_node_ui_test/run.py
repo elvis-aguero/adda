@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from a3dasm import (
+from adda import (
     AdversarialCritiqueAgent,
     AgenticRun,
     Edge,

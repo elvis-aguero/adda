@@ -13,7 +13,7 @@ import inspect
 import pkgutil
 from pathlib import Path
 
-import a3dasm._src.agents as agents_pkg
+import adda._src.agents as agents_pkg
 
 _FEATURES = (
     Path(__file__).resolve().parents[1]
@@ -24,7 +24,7 @@ _FEATURES = (
 def _declared_tools() -> set[str]:
     tools: set[str] = set()
     for m in pkgutil.iter_modules(agents_pkg.__path__):
-        mod = importlib.import_module(f"a3dasm._src.agents.{m.name}")
+        mod = importlib.import_module(f"adda._src.agents.{m.name}")
         for _, obj in inspect.getmembers(mod, inspect.isclass):
             t = getattr(obj, "tools", None)
             if t and isinstance(t, (set, frozenset)):

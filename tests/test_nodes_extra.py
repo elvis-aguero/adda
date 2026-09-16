@@ -14,7 +14,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
+from adda._src.backends.base import Agent, Edge, Graph
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,7 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
 
 
 def _make_state(study_dir=None, **kwargs):
-    from a3dasm._src.runtime.graph_state import AgenticState
+    from adda._src.runtime.graph_state import AgenticState
     import tempfile
     if study_dir is None:
         d = Path(tempfile.mkdtemp(prefix="f3dasm_nodes_extra_"))
@@ -78,7 +78,7 @@ def _make_state(study_dir=None, **kwargs):
 
 def test_reply_unknown_delegation_returns_error():
     """Reply() for an unknown delegation ID returns an ERROR string."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     replies: list[str] = []
 
@@ -106,7 +106,7 @@ def test_reply_unknown_delegation_returns_error():
 
 def test_followup_reply_roundtrip():
     """Worker FollowUp blocks until Reply is called; returns the answer."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     followup_answers: list[str] = []
     delegation_id_box: list[str] = []
@@ -163,7 +163,7 @@ def test_followup_reply_roundtrip():
 
 def test_ask_for_feedback_calls_critic_synchronously():
     """AskForFeedback() invokes the critic adapter synchronously and returns its output."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     feedback_calls: list[str] = []
 
@@ -219,7 +219,7 @@ def test_ask_for_feedback_calls_critic_synchronously():
 
 def test_ask_for_feedback_absent_without_critic():
     """AskForFeedback is NOT in closure_tools when the graph has no critic node."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     tool_names: list[set] = []
 
@@ -246,7 +246,7 @@ def test_ask_for_feedback_absent_without_critic():
 
 def test_getstatus_includes_budget_warning_when_over_80_pct():
     """GetStatus() on a Working delegation surfaces BUDGET when >80% elapsed."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     getstatus_results: list[str] = []
     delegation_started = threading.Event()
@@ -300,7 +300,7 @@ def test_getstatus_includes_budget_warning_when_over_80_pct():
 
 def test_delegate_wait_true_returns_report_directly():
     """Delegate(wait=True) blocks and returns Done\\n\\n<report> without polling."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     delegate_results: list[str] = []
 
@@ -346,7 +346,7 @@ def test_delegate_wait_true_returns_report_directly():
 
 def test_writenote_and_readnote(tmp_path):
     """WriteNote writes a file to strategizer_notes/; the file should be created."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     (tmp_path / "pipeline.py").write_text("# r\n")
     # run_dir/debug/strategizer_notes is where WriteNote will write
@@ -391,7 +391,7 @@ def test_writenote_and_readnote(tmp_path):
 
 def test_getstatus_unknown_id_returns_error():
     """GetStatus for an unknown ID returns ERROR."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     results: list[str] = []
 
@@ -425,7 +425,7 @@ def test_delegate_task_msg_includes_budget_banner():
     """
     import time as _time
 
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     captured_msgs: list[list[dict]] = []
 
@@ -501,7 +501,7 @@ def test_delegate_no_budget_banner_when_budget_unset():
     way."""
     import time as _time
 
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     captured_msgs: list[list[dict]] = []
 

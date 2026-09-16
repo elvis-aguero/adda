@@ -17,9 +17,9 @@ It is generated from the live `Graph`/`Agent` objects, never hand-typed, and
 
 ## 1. The shape of a run
 
-`AgenticRun` (`src/a3dasm/_src/runtime/agent_runtime.py`) builds a LangGraph
+`AgenticRun` (`src/adda/_src/runtime/agent_runtime.py`) builds a LangGraph
 StateGraph over a five-node topology defined in one place,
-`src/a3dasm/_src/agents/_graphs.py`:
+`src/adda/_src/agents/_graphs.py`:
 
 ```
 strategizer (entry) ──> literature_reviewer
@@ -32,9 +32,9 @@ The strategizer is the only node that plans; the implementer is the only node
 that evaluates designs. The single user input is
 `<study_dir>/PROBLEM_STATEMENT.md`; the single deliverable is `pipeline.ipynb`.
 
-Entry points: `AgenticRun(...).execute()` in-process, `python -m a3dasm
-<study_dir>` on the command line (`src/a3dasm/__main__.py`), or
-`python -m a3dasm._src.runtime.run` as the container entrypoint
+Entry points: `AgenticRun(...).execute()` in-process, `python -m adda
+<study_dir>` on the command line (`src/adda/__main__.py`), or
+`python -m adda._src.runtime.run` as the container entrypoint
 (`runtime/run.py`). All three take the same `--model` and `--budget`.
 
 ## 2. What an agent sees, in assembly order
@@ -67,7 +67,7 @@ them reachable via `inspect.getsource`). Search `agents/`, not `prompts/`.
 
 Nudges, science-monitor drift, budget warnings, operator notes and Confer
 messages do not go in the system prompt — they are prepended to the text of
-whatever tool the agent calls next, wrapped in `<a3dasm-note>` markers so the
+whatever tool the agent calls next, wrapped in `<adda-note>` markers so the
 agent and the viewer can both tell runtime speech from tool output.
 See `nodes/notices.py`.
 

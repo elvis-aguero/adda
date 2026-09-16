@@ -17,10 +17,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.infra.delegation_log import DelegationLog
-from a3dasm._src.epistemics.hypothesis_ledger import HypothesisLedger
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.infra.delegation_log import DelegationLog
+from adda._src.epistemics.hypothesis_ledger import HypothesisLedger
+from adda._src.nodes import Node
 from f3dasm._src.design.domain import Domain
 from f3dasm._src.experimentdata import ExperimentData
 from f3dasm._src.experimentsample import ExperimentSample, JobStatus
@@ -134,7 +134,7 @@ def test_worker_hypothesislist_sees_the_ledger(tmp_path):
 def _leaf_worker(run_dir, agent_tools, study_dir=None):
     """A leaf Node (no outgoing edges) with a stub adapter — the critic /
     lit-reviewer shape."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     class _A:
         def __init__(self):
