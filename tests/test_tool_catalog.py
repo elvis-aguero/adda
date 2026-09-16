@@ -6,7 +6,7 @@ guidance (docstring + optional @tool_examples).
 """
 from __future__ import annotations
 
-from a3dasm._src.prompts.tool_catalog import (
+from adda._src.prompts.tool_catalog import (
     render_tool_catalog,
     system_prompt_with_catalog,
     tool_examples,
@@ -78,8 +78,8 @@ def test_catalog_fixes_observed_drift_on_a_real_strategizer():
     are live closures that were MISSING from the hand-written prompt prose, and
     the prose said 'Read' not 'ReadNote'. The generated catalog uses the live
     closure keys, so they're present and correctly named."""
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.nodes import Node
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.nodes import Node
 
     class _Stub:
         def __init__(self):
@@ -124,7 +124,7 @@ def test_claude_catalog_names_match_sdk_registration():
     allowed_tools carries), so the AUTHORITATIVE <tools> catalog must advertise
     the SAME qualified names — never the bare ones, which the model cannot call.
     One helper feeds both, so they cannot drift."""
-    from a3dasm._src.backends.claude import (
+    from adda._src.backends.claude import (
         ClaudeAdapter,
         _qualify_closure_names,
     )

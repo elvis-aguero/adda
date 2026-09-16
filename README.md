@@ -1,22 +1,25 @@
-# a3dasm
+# adda
 
-Agentic Data-driven Design and Analysis of Structures and Materials.
+**A**gentic **D**ata-**D**riven **D**esign and **A**nalysis — the agentic layer
+over [f3dasm](https://github.com/bessagroup/f3dasm) (*Framework for* Data-Driven
+Design & Analysis of Structures & Materials), itself the framework for the
+[3dasm](https://github.com/bessagroup/3dasm_course) course.
 
 You write one file describing an engineering design or data problem — the
-objective, the design space, what counts as valid. a3dasm runs a team of LLM
+objective, the design space, what counts as valid. adda runs a team of LLM
 agents that decide what to try, build the code to evaluate it, run real
 experiments, review their own conclusions before accepting them, and hand you
 back a notebook that reproduces the result end to end.
 
 It builds on [f3dasm](https://github.com/bessagroup/f3dasm) for the
 data-driven primitives (`ExperimentData`, `Domain`, `DataGenerator`, the
-`Pipeline`); a3dasm is the agentic layer on top and carries no copy of f3dasm
+`Pipeline`); adda is the agentic layer on top and carries no copy of f3dasm
 core.
 
 ## Install
 
 ```bash
-pip install "a3dasm @ git+https://github.com/elvis-aguero/a3dasm.git"
+pip install "adda @ git+https://github.com/elvis-aguero/adda.git"
 ```
 
 You'll also need a model to drive the agents — by default, the
@@ -32,7 +35,7 @@ claude   # first run prompts you to log in
 The only required input is a `PROBLEM_STATEMENT.md` in the study directory.
 
 ```python
-from a3dasm import AgenticRun
+from adda import AgenticRun
 
 report = AgenticRun(
     study_dir="studies/my_study",
@@ -41,12 +44,12 @@ report = AgenticRun(
 print(report)
 ```
 
-See the [Quickstart](https://elvis-aguero.github.io/a3dasm/notebooks/quickstart/)
+See the [Quickstart](https://elvis-aguero.github.io/adda/notebooks/quickstart/)
 for a worked example, start to finish.
 
 ## Documentation
 
-<https://elvis-aguero.github.io/a3dasm/> — or run `mkdocs serve` locally.
+<https://elvis-aguero.github.io/adda/> — or run `mkdocs serve` locally.
 
 ## License
 

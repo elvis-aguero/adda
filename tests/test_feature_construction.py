@@ -30,7 +30,7 @@ from .test_route_aware_termination import (
 
 
 def _node(tmp_path, *, notes_dir=None, delegation_log=None):
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     return Node(
         StubAdapter(response="unused"),
@@ -40,7 +40,7 @@ def _node(tmp_path, *, notes_dir=None, delegation_log=None):
 
 
 def _dlog(tmp_path):
-    from a3dasm._src.infra.delegation_log import DelegationLog
+    from adda._src.infra.delegation_log import DelegationLog
 
     return DelegationLog(tmp_path / "delegation_log.jsonl")
 
@@ -120,7 +120,7 @@ def test_the_science_monitor_does_not_depend_on_the_hypothesis_ledger(tmp_path):
     """Its live rules read the delegation log and the store. It took a ledger
     argument it stored and never read, and the construction site gated on it —
     so turning the hypothesis ledger off turned drift detection off too."""
-    from a3dasm._src.epistemics.science_monitor import ScienceMonitor
+    from adda._src.epistemics.science_monitor import ScienceMonitor
 
     mon = ScienceMonitor(_dlog(tmp_path))
 

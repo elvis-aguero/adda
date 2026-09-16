@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 
-from a3dasm._src.backends.base import (
+from adda._src.backends.base import (
     append_transcript,
     debug_enabled,
     get_transcript_sink,

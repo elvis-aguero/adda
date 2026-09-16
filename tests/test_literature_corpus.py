@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from a3dasm._src.literature.literature_corpus import LiteratureCorpus
+from adda._src.literature.literature_corpus import LiteratureCorpus
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +273,7 @@ def test_extract_pdf_to_md_fallback_when_fitz_missing(tmp_path):
     fake_pdf = tmp_path / "fake.pdf"
     fake_pdf.write_bytes(b"%PDF-1.4 fake")
 
-    import a3dasm._src.literature.literature_corpus as lc_module
+    import adda._src.literature.literature_corpus as lc_module
     original_fitz = lc_module.fitz
     try:
         lc_module.fitz = None
@@ -514,7 +514,7 @@ def test_embed_with_spec_has_an_upper_bound():
     'TextEmbedding' from 'fastembed' (unknown location)". Not confirmed to
     be THIS exact fix (Oscar is read-only, so it can't be reproduced there),
     but the unbounded spec must never come back unpinned."""
-    from a3dasm._src.literature.embedder import _EMBED_WITH
+    from adda._src.literature.embedder import _EMBED_WITH
     assert "<" in _EMBED_WITH, (
         f"_EMBED_WITH={_EMBED_WITH!r} has no upper bound — an unpinned "
         "floating spec for an ephemeral env dependency is the exact "
@@ -545,5 +545,5 @@ def test_embed_with_spec_has_an_upper_bound():
     ("", ""),
 ])
 def test_s2_paper_id_namespacing(given, expected):
-    from a3dasm._src.agents.literature_tools.semantic_scholar import _s2_paper_id
+    from adda._src.agents.literature_tools.semantic_scholar import _s2_paper_id
     assert _s2_paper_id(given) == expected

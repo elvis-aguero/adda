@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import sys
 
-from a3dasm._src.backends.openai_compatible import (
+from adda._src.backends.openai_compatible import (
     _BASH_INLINE_CAP,
     _native_tool_map,
 )

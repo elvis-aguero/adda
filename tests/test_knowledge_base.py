@@ -1,7 +1,7 @@
 """Draft agentic knowledge base: corpus integrity + search API contract."""
 from __future__ import annotations
 
-from a3dasm._src.knowledge import KBEntry, KnowledgeBase
+from adda._src.knowledge import KBEntry, KnowledgeBase
 
 
 class TestCorpusIntegrity:
@@ -78,24 +78,24 @@ class TestParser:
 
 class TestConsultHandbookTool:
     def test_returns_relevant_entry(self):
-        from a3dasm._src.nodes import _consult_handbook
+        from adda._src.nodes import _consult_handbook
         out = _consult_handbook("how do I make my evaluations count in the ledger")
         assert "get_evaluator" in out
 
     def test_no_match_is_graceful(self):
-        from a3dasm._src.nodes import _consult_handbook
+        from adda._src.nodes import _consult_handbook
         out = _consult_handbook("zzzznonsenseqqq")
         assert "No chapter" in out
         assert "list the available chapters" in out
 
     def test_never_raises(self):
-        from a3dasm._src.nodes import _consult_handbook
+        from adda._src.nodes import _consult_handbook
         # odd inputs must not raise into the agent loop
         for q in ("", "   ", 123):
             assert isinstance(_consult_handbook(q), str)
 
     def test_no_arg_returns_table_of_contents(self):
-        from a3dasm._src.nodes import _consult_handbook
+        from adda._src.nodes import _consult_handbook
         toc = _consult_handbook()
         assert "available chapters" in toc
         # every chapter id is listed, including the charter
@@ -103,7 +103,7 @@ class TestConsultHandbookTool:
         assert "evaluate-through-get-evaluator" in toc
 
     def test_chapter_id_returns_full_chapter(self):
-        from a3dasm._src.nodes import _consult_handbook
+        from adda._src.nodes import _consult_handbook
         out = _consult_handbook("falsification-charter")
         assert "if and only if" in out  # the full charter body, not a summary
         assert "Duhem" in out
@@ -111,7 +111,7 @@ class TestConsultHandbookTool:
 
 class TestCharterChapter:
     def test_charter_is_a_loaded_chapter_from_the_constant(self):
-        from a3dasm._src.knowledge.charter import (
+        from adda._src.knowledge.charter import (
             FALSIFICATION_CHARTER,
         )
         kb = KnowledgeBase.load()
@@ -133,7 +133,7 @@ def test_kb_menu_is_audience_filtered_and_points_at_consulthandbook():
     """The injected menu lists only entries for the agent's role and tells it how
     to pull a full chapter — so it SEES its latent knowledge without first having
     to guess that ConsultHandbook exists."""
-    from a3dasm._src.knowledge import KnowledgeBase
+    from adda._src.knowledge import KnowledgeBase
     kb = KnowledgeBase.load()
 
     strat = kb.menu(audience="strategizer")
@@ -150,7 +150,7 @@ def test_kb_menu_is_audience_filtered_and_points_at_consulthandbook():
 
 
 def test_kb_menu_empty_for_unknown_audience_is_safe():
-    from a3dasm._src.knowledge import KnowledgeBase
+    from adda._src.knowledge import KnowledgeBase
     # 'literature_reviewer' has no targeted entries → menu lists only the
     # universal ones (or is empty), never raises.
     out = KnowledgeBase.load().menu(audience="nobody_role")
@@ -161,7 +161,7 @@ def test_every_kb_entry_title_is_at_most_100_chars():
     """The menu descriptor (the title) is the one-line summary injected into every
     prompt — cap it at 100 chars so the menu stays a terse, scannable index, not a
     paragraph. A new entry with a long title fails here on purpose."""
-    from a3dasm._src.knowledge import KnowledgeBase
+    from adda._src.knowledge import KnowledgeBase
     for e in KnowledgeBase.load().entries:
         assert len(e.title) <= 100, (
             f"KB entry {e.id!r} title is {len(e.title)} chars (>100): {e.title!r}"

@@ -10,8 +10,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.nodes import Node
 
 from tests.test_evaluator_resolution import _write_run_config
 

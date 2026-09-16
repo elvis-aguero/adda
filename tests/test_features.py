@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from a3dasm._src.runtime import features, settings
+from adda._src.runtime import features, settings
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +28,7 @@ def _clean_settings():
 
 def _prompt_for(feature):
     """The role prompt that declares the sections this feature claims."""
-    from a3dasm._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
 
     return STRATEGIZER_SYSTEM_PROMPT
 
@@ -133,7 +133,7 @@ def test_an_unknown_feature_raises_rather_than_reading_false():
 # --- the tool catalog actually honours it ----------------------------------
 
 def test_a_disabled_features_tools_never_reach_the_catalog(tmp_path):
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     from .test_route_aware_termination import StubAdapter, _minimal_spec
 

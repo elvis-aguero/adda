@@ -29,7 +29,7 @@ def _fake_arxiv(captured):
 def test_search_papers_coerces_string_max_results(monkeypatch):
     captured = {}
     monkeypatch.setitem(sys.modules, "arxiv", _fake_arxiv(captured))
-    from a3dasm._src.backends.openai_compatible import _build_arxiv_closures
+    from adda._src.backends.openai_compatible import _build_arxiv_closures
     tools = _build_arxiv_closures()
     # The exact repro: model passes max_results as the STRING "5".
     tools["arxiv_search_papers"]("query", max_results="5")
@@ -40,7 +40,7 @@ def test_search_papers_coerces_string_max_results(monkeypatch):
 def test_list_papers_coerces_string_max_results(monkeypatch):
     captured = {}
     monkeypatch.setitem(sys.modules, "arxiv", _fake_arxiv(captured))
-    from a3dasm._src.backends.openai_compatible import _build_arxiv_closures
+    from adda._src.backends.openai_compatible import _build_arxiv_closures
     tools = _build_arxiv_closures()
     tools["arxiv_list_papers"]("cs.LG", max_results="10")
     assert captured["type"] is int and captured["max_results"] == 10
@@ -49,7 +49,7 @@ def test_list_papers_coerces_string_max_results(monkeypatch):
 def test_int_max_results_still_works(monkeypatch):
     captured = {}
     monkeypatch.setitem(sys.modules, "arxiv", _fake_arxiv(captured))
-    from a3dasm._src.backends.openai_compatible import _build_arxiv_closures
+    from adda._src.backends.openai_compatible import _build_arxiv_closures
     tools = _build_arxiv_closures()
     tools["arxiv_search_papers"]("query", max_results=7)
     assert captured["max_results"] == 7

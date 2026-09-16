@@ -9,7 +9,7 @@ import pytest
 
 
 def _make_adapter(**kwargs):
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
     defaults = dict(model="llama3.2", system_prompt="You are helpful.")
     defaults.update(kwargs)
     return OllamaAdapter(**defaults)
@@ -27,7 +27,7 @@ def test_build_arxiv_closures_returns_empty_when_no_arxiv():
     sys.modules["arxiv"] = None  # type: ignore
 
     try:
-        from a3dasm._src.backends.ollama import _build_arxiv_closures
+        from adda._src.backends.ollama import _build_arxiv_closures
         # Force reimport of the closure
         result = _build_arxiv_closures()
         assert result == {}
@@ -45,7 +45,7 @@ def test_build_arxiv_closures_returns_empty_when_no_arxiv():
 
 def test_build_tools_with_extra_allowed_tools_empty():
     """_build_tools does NOT call _make_literature_tools when extra_allowed_tools is empty."""
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
 
     adapter = OllamaAdapter(
         model="llama3.2",
@@ -53,7 +53,7 @@ def test_build_tools_with_extra_allowed_tools_empty():
         extra_allowed_tools=[],
     )
 
-    with patch("a3dasm._src.backends.openai_compatible._make_literature_tools") as mock_lit:
+    with patch("adda._src.backends.openai_compatible._make_literature_tools") as mock_lit:
         tools = adapter._build_tools()
 
     mock_lit.assert_not_called()
@@ -61,7 +61,7 @@ def test_build_tools_with_extra_allowed_tools_empty():
 
 def test_build_tools_with_extra_allowed_tools_calls_literature_tools():
     """_build_tools calls _make_literature_tools when extra_allowed_tools is non-empty."""
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
 
     mock_tool = MagicMock()
     mock_tool.name = "arxiv_search_papers"
@@ -73,7 +73,7 @@ def test_build_tools_with_extra_allowed_tools_calls_literature_tools():
     )
 
     with patch(
-        "a3dasm._src.backends.openai_compatible._make_literature_tools",
+        "adda._src.backends.openai_compatible._make_literature_tools",
         return_value=[mock_tool],
     ) as mock_lit:
         tools = adapter._build_tools()
@@ -85,7 +85,7 @@ def test_build_tools_with_extra_allowed_tools_calls_literature_tools():
 
 def test_build_tools_filters_to_allowed_names():
     """_build_tools only includes extra tools whose names are in extra_allowed_tools."""
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
 
     allowed_tool = MagicMock()
     allowed_tool.name = "arxiv_search_papers"
@@ -99,7 +99,7 @@ def test_build_tools_filters_to_allowed_names():
     )
 
     with patch(
-        "a3dasm._src.backends.openai_compatible._make_literature_tools",
+        "adda._src.backends.openai_compatible._make_literature_tools",
         return_value=[allowed_tool, disallowed_tool],
     ):
         tools = adapter._build_tools()
@@ -115,7 +115,7 @@ def test_build_tools_filters_to_allowed_names():
 
 def test_make_literature_tools_returns_list():
     """_make_literature_tools returns a list (may be empty if deps missing)."""
-    from a3dasm._src.backends.ollama import _make_literature_tools
+    from adda._src.backends.ollama import _make_literature_tools
 
     result = _make_literature_tools()
     assert isinstance(result, list)
@@ -128,12 +128,12 @@ def test_make_literature_tools_returns_list():
 
 def test_build_agent_returns_agent():
     """_build_agent returns a runnable agent when langchain_openai is available."""
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
 
     adapter = OllamaAdapter(model="llama3.2", system_prompt="Test")
 
     mock_agent = MagicMock()
-    with patch("a3dasm._src.backends.ollama.OllamaAdapter._build_agent", return_value=mock_agent):
+    with patch("adda._src.backends.ollama.OllamaAdapter._build_agent", return_value=mock_agent):
         adapter._agent = mock_agent
         # Just verify we can access _agent
         assert adapter._agent is mock_agent
@@ -141,7 +141,7 @@ def test_build_agent_returns_agent():
 
 def test_build_agent_creates_react_agent():
     """_build_agent calls create_react_agent with the llm and tools."""
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
 
     adapter = OllamaAdapter(model="llama3.2", system_prompt="Test")
 
@@ -165,7 +165,7 @@ def test_invoke_acquires_lock_serializes_concurrent_calls():
     """Two concurrent invoke() calls are serialized by _lock."""
     import threading
 
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
 
     call_order = []
 
@@ -192,7 +192,7 @@ def test_invoke_acquires_lock_serializes_concurrent_calls():
 
 def test_native_tool_map_contains_expected_tools(tmp_path):
     """_native_tool_map returns Bash, Read, Write, Edit, Glob, Grep tools."""
-    from a3dasm._src.backends.ollama import _native_tool_map
+    from adda._src.backends.ollama import _native_tool_map
 
     tool_map = _native_tool_map(tmp_path)
     assert "Bash" in tool_map
@@ -210,7 +210,7 @@ def test_native_tool_map_contains_expected_tools(tmp_path):
 
 def test_make_read_tool_reads_existing_file(tmp_path):
     """_make_read_tool returns file contents for existing files."""
-    from a3dasm._src.backends.ollama import _make_read_tool
+    from adda._src.backends.ollama import _make_read_tool
 
     test_file = tmp_path / "test.txt"
     test_file.write_text("hello world")
@@ -222,7 +222,7 @@ def test_make_read_tool_reads_existing_file(tmp_path):
 
 def test_make_read_tool_error_on_missing_file(tmp_path):
     """_make_read_tool returns ERROR for non-existent files."""
-    from a3dasm._src.backends.ollama import _make_read_tool
+    from adda._src.backends.ollama import _make_read_tool
 
     tool = _make_read_tool(tmp_path)
     result = tool.invoke({"path": "nonexistent.txt"})
@@ -236,7 +236,7 @@ def test_make_read_tool_error_on_missing_file(tmp_path):
 
 def test_make_write_tool_creates_file(tmp_path):
     """_make_write_tool creates a file with given content."""
-    from a3dasm._src.backends.ollama import _make_write_tool
+    from adda._src.backends.ollama import _make_write_tool
 
     tool = _make_write_tool(tmp_path)
     result = tool.invoke({"path": "output.txt", "content": "test content"})
@@ -252,7 +252,7 @@ def test_make_write_tool_creates_file(tmp_path):
 
 def test_make_bash_tool_runs_echo(tmp_path):
     """_make_bash_tool runs shell commands."""
-    from a3dasm._src.backends.ollama import _make_bash_tool
+    from adda._src.backends.ollama import _make_bash_tool
 
     tool = _make_bash_tool(tmp_path)
     result = tool.invoke({"command": "echo hello_from_bash"})
@@ -267,7 +267,7 @@ def test_make_bash_tool_runs_echo(tmp_path):
 def test_to_lc_messages_handles_human_role():
     """_to_lc_messages converts 'human' role to HumanMessage."""
     from langchain_core.messages import HumanMessage
-    from a3dasm._src.backends.ollama import _to_lc_messages
+    from adda._src.backends.ollama import _to_lc_messages
 
     result = _to_lc_messages([{"role": "human", "content": "Hi"}])
     assert isinstance(result[0], HumanMessage)
@@ -275,7 +275,7 @@ def test_to_lc_messages_handles_human_role():
 
 def test_to_lc_messages_handles_list_content():
     """_to_lc_messages concatenates list-typed content."""
-    from a3dasm._src.backends.ollama import _to_lc_messages
+    from adda._src.backends.ollama import _to_lc_messages
 
     result = _to_lc_messages([{"role": "user", "content": [{"text": "Hello"}, {"text": "World"}]}])
     assert len(result) == 1
@@ -285,7 +285,7 @@ def test_to_lc_messages_handles_list_content():
 
 def test_to_lc_messages_ignores_unknown_role():
     """_to_lc_messages skips messages with unrecognized roles."""
-    from a3dasm._src.backends.ollama import _to_lc_messages
+    from adda._src.backends.ollama import _to_lc_messages
 
     result = _to_lc_messages([{"role": "system", "content": "ignored"}])
     assert result == []

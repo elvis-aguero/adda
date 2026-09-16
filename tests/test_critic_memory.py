@@ -9,7 +9,7 @@ prepends it.
 
 from __future__ import annotations
 
-from a3dasm._src.nodes.critic_gate import (
+from adda._src.nodes.critic_gate import (
     CriticGateMixin,
     _extract_md_section,
 )

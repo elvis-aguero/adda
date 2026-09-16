@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from a3dasm._src.runtime import settings
-from a3dasm._src.infra import slurm_llm as S
+from adda._src.runtime import settings
+from adda._src.infra import slurm_llm as S
 
 # --- profiles / resolution ------------------------------------------------
 
@@ -68,7 +68,7 @@ def _is_conservative_default(profile):
 
 def test_unknown_model_falls_back_to_default_and_warns(caplog, no_metadata):
     import logging
-    with caplog.at_level(logging.WARNING, logger="a3dasm.slurm_llm"):
+    with caplog.at_level(logging.WARNING, logger="adda.slurm_llm"):
         spec = S.resolve_serve_spec("some-unheard-of-model")
     assert _is_conservative_default(spec.profile)
     assert any("no checkpoint metadata" in r.getMessage() for r in caplog.records)
@@ -240,7 +240,7 @@ def test_gemma_4_31b_fp8_weights_fp16_kv_256k_needs_two_l40s(monkeypatch):
 def test_unknown_gpu_model_derives_mem_but_not_gres(monkeypatch, caplog):
     import logging
     monkeypatch.setattr(S, "fetch_model_metadata", _meta(70.0, 2.0))
-    with caplog.at_level(logging.WARNING, logger="a3dasm.slurm_llm"):
+    with caplog.at_level(logging.WARNING, logger="adda.slurm_llm"):
         # an explicitly unknown card (e.g. the absent a100) can't yield a count
         spec = S.resolve_serve_spec("org/Big-70B", overrides={"gpu_model": "a100"})
     assert spec.profile.params_b == 70.0
@@ -252,7 +252,7 @@ def test_unknown_gpu_model_derives_mem_but_not_gres(monkeypatch, caplog):
 def test_metadata_fetch_failure_falls_back_and_warns(monkeypatch, caplog):
     import logging
     monkeypatch.setattr(S, "fetch_model_metadata", lambda mid: None)
-    with caplog.at_level(logging.WARNING, logger="a3dasm.slurm_llm"):
+    with caplog.at_level(logging.WARNING, logger="adda.slurm_llm"):
         spec = S.resolve_serve_spec("gated/Private-Model")
     assert _is_conservative_default(spec.profile)   # never raises, never mis-sizes
     assert any("no checkpoint metadata" in r.getMessage() for r in caplog.records)
@@ -289,7 +289,7 @@ def test_hub_fetch_used_when_cache_misses(monkeypatch):
 
 
 def test_hub_fetch_disabled_by_setting(monkeypatch):
-    from a3dasm._src.runtime import settings
+    from adda._src.runtime import settings
     monkeypatch.setattr(S, "_read_local_metadata", lambda mid: None)
     monkeypatch.setattr(S, "_fetch_hub_metadata",
                         lambda mid, timeout: (_ for _ in ()).throw(

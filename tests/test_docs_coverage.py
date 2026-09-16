@@ -3,7 +3,7 @@
 Three ways documentation rots silently, all of them caught here rather than
 by a reader who could not find the thing:
 
-* an export is added to ``a3dasm.__all__`` and never written about — the
+* an export is added to ``adda.__all__`` and never written about — the
   reason ``Workspace`` (the symbolic-derivation DSL) and the whole live
   viewer were once absent from ``docs/`` entirely;
 * a page is written and never added to the nav, so nothing links to it;
@@ -33,13 +33,13 @@ def _docs_text() -> str:
 
 
 def _exports() -> list[str]:
-    tree = ast.parse((_ROOT / "src" / "a3dasm" / "__init__.py").read_text())
+    tree = ast.parse((_ROOT / "src" / "adda" / "__init__.py").read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
             isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
         ):
             return list(ast.literal_eval(node.value))
-    raise AssertionError("a3dasm/__init__.py defines no __all__")
+    raise AssertionError("adda/__init__.py defines no __all__")
 
 
 def _nav_pages() -> list[str]:
@@ -58,7 +58,7 @@ def test_every_public_export_is_mentioned_in_the_docs():
     text = _docs_text()
     missing = [name for name in _exports() if name not in text]
     assert not missing, (
-        f"exported from a3dasm but absent from docs/: {missing}. "
+        f"exported from adda but absent from docs/: {missing}. "
         "Add it to the API reference or write about it in a guide."
     )
 

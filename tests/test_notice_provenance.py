@@ -11,7 +11,7 @@ own (``[exited 1]``, ``[output truncated to last …]``).
 """
 from __future__ import annotations
 
-from a3dasm._src.nodes.notices import (
+from adda._src.nodes.notices import (
     NOTICE_CLOSE,
     NOTICE_OPEN,
     split_notices,
@@ -66,7 +66,7 @@ def test_multiline_notice_body_survives_round_trip():
 
 # --------------------------------------------------------------- the viewer
 def _render(result_text: str) -> str:
-    from a3dasm._src.viewer.app import _tool_result_html
+    from adda._src.viewer.app import _tool_result_html
     return _tool_result_html(
         {"results": [{"tool_use_id": "t1", "content": result_text}]},
         ["Bash"],
@@ -112,9 +112,9 @@ def test_viewer_still_flags_an_error_result_carrying_a_notice():
 def _node(run_dir):
     import threading
 
-    from a3dasm._src.backends.base import Agent, Edge, Graph
-    from a3dasm._src.infra.delegation_log import DelegationLog
-    from a3dasm._src.nodes import Node
+    from adda._src.backends.base import Agent, Edge, Graph
+    from adda._src.infra.delegation_log import DelegationLog
+    from adda._src.nodes import Node
 
     class _Stub:
         def __init__(self):
@@ -149,7 +149,7 @@ def _node(run_dir):
 
 
 def test_queued_worker_message_reaches_getstatus_marked(tmp_path):
-    """A budget warning queued for a running delegation is a3dasm speaking,
+    """A budget warning queued for a running delegation is adda speaking,
     so it must arrive marked rather than looking like the worker's report."""
     node = _node(tmp_path / "runs" / "T1")
     with node._registry_lock:

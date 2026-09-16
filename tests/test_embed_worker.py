@@ -27,9 +27,9 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-import a3dasm._src.literature.literature_corpus as lc_mod
-from a3dasm._src.literature.embedder import _SubprocessEmbedder
-from a3dasm._src.literature.literature_corpus import LiteratureCorpus
+import adda._src.literature.literature_corpus as lc_mod
+from adda._src.literature.embedder import _SubprocessEmbedder
+from adda._src.literature.literature_corpus import LiteratureCorpus
 
 # ---------------------------------------------------------------------------
 # Module-level path to worker script
@@ -37,7 +37,7 @@ from a3dasm._src.literature.literature_corpus import LiteratureCorpus
 
 _WORKER_PATH = (
     Path(__file__).parent.parent
-    / "src" / "a3dasm" / "_src" / "literature" / "_embed_worker.py"
+    / "src" / "adda" / "_src" / "literature" / "_embed_worker.py"
 )
 
 
@@ -180,7 +180,7 @@ class TestGetEmbeddingModelFallbackChain:
             return real_import(name, *args, **kwargs)
 
         with caplog.at_level(logging.INFO,
-                             logger="a3dasm._src.literature.literature_corpus"):
+                             logger="adda._src.literature.literature_corpus"):
             with patch("builtins.__import__", side_effect=mock_import):
                 with patch("shutil.which", return_value="/usr/local/bin/uv"):
                     model = corpus._get_embedding_model()
@@ -226,7 +226,7 @@ class TestGetEmbeddingModelFallbackChain:
             return real_import(name, *args, **kwargs)
 
         with caplog.at_level(logging.WARNING,
-                             logger="a3dasm._src.literature.literature_corpus"):
+                             logger="adda._src.literature.literature_corpus"):
             with patch("builtins.__import__", side_effect=mock_import):
                 with patch("shutil.which", return_value="/usr/local/bin/uv"):
                     result = corpus._get_embedding_model()
@@ -308,7 +308,7 @@ class TestGetEmbeddingModelFallbackChain:
             return real_import(name, *args, **kwargs)
 
         with caplog.at_level(logging.WARNING,
-                             logger="a3dasm._src.literature.literature_corpus"):
+                             logger="adda._src.literature.literature_corpus"):
             with patch("builtins.__import__", side_effect=mock_import):
                 with patch("shutil.which", return_value=None):
                     result = corpus._get_embedding_model()

@@ -9,7 +9,7 @@ import pytest
 
 
 def _make_agent():
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     return LiteratureReviewAgent()
 
 
@@ -251,7 +251,7 @@ def test_search_openalex_returns_results_on_success(tmp_path):
     mock_resp.json.return_value = oa_result
 
     with patch("requests.get", return_value=mock_resp):
-        with patch("a3dasm._src.literature.http_client._sleep"):
+        with patch("adda._src.literature.http_client._sleep"):
             result = tools["search_openalex"]("neural networks", n_results=5)
 
     import json
@@ -275,7 +275,7 @@ def test_search_openalex_returns_error_on_failure(tmp_path):
 
     import requests as _requests
     with patch("requests.get", side_effect=_requests.RequestException("Connection failed")):
-        with patch("a3dasm._src.literature.http_client._sleep"):
+        with patch("adda._src.literature.http_client._sleep"):
             result = tools["search_openalex"]("neural networks")
 
     assert "ERROR" in result
@@ -317,7 +317,7 @@ def test_get_ss_recommendations_returns_json(tmp_path):
     }
 
     with patch("requests.post", return_value=mock_resp):
-        with patch("a3dasm._src.literature.http_client._sleep"):
+        with patch("adda._src.literature.http_client._sleep"):
             result = tools["get_semantic_scholar_recommendations"](
                 "1706.03762", n_results=5
             )
@@ -343,7 +343,7 @@ def test_get_ss_recommendations_returns_error_on_failure(tmp_path):
 
     import requests as _requests
     with patch("requests.post", side_effect=_requests.RequestException("Network error")):
-        with patch("a3dasm._src.literature.http_client._sleep"):
+        with patch("adda._src.literature.http_client._sleep"):
             result = tools["get_semantic_scholar_recommendations"]("1706.03762")
 
     assert "ERROR" in result
@@ -376,7 +376,7 @@ def test_cap_result_truncates_oversized_payloads():
     """A search/read payload bigger than the cap is truncated with a marker, so it
     never overflows the tool-result token limit and gets dropped whole (observed
     every run: 'exceeds maximum allowed tokens')."""
-    from a3dasm._src.agents.literature_tools.throttle import _MAX_RESULT_CHARS, _cap_result
+    from adda._src.agents.literature_tools.throttle import _MAX_RESULT_CHARS, _cap_result
     small = "ok" * 10
     assert _cap_result(small) == small               # under cap: untouched
     big = "x" * (_MAX_RESULT_CHARS + 5000)

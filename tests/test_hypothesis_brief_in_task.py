@@ -1,7 +1,7 @@
 """A worker sees the criterion its evidence will be judged against.
 
 A hypothesis's falsification_criterion is immutable once registered and is the
-standard its verdict is judged by, but the only party a3dasm showed it to was
+standard its verdict is judged by, but the only party adda showed it to was
 the delegator, and only at reconciliation time (the falsification checkpoint
 fires on a Done report). The worker that produces the evidence never saw it —
 Delegate put context packaging on the delegator, so the criterion reached the
@@ -18,9 +18,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.infra.delegation_log import DelegationLog
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.infra.delegation_log import DelegationLog
+from adda._src.nodes import Node
 
 CRITERION = (
     "A 50-iteration constrained BO campaign in the high-Ixx region returns a "

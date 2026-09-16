@@ -4,9 +4,9 @@ literature reviewer via the now-removed inject_problem_statement push flag).
 """
 from __future__ import annotations
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.infra.delegation_log import DelegationLog
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.infra.delegation_log import DelegationLog
+from adda._src.nodes import Node
 
 
 class _Stub:
@@ -73,12 +73,12 @@ def test_declared_uniformly_on_every_default_agent():
     """Every one of the 6 default agents declares ReadProblemStatement — the
     tool is uniform, not gated to whichever agent used to set
     inject_problem_statement=True."""
-    from a3dasm._src.agents.critic import AdversarialCritiqueAgent
-    from a3dasm._src.agents.datagenerator import DataGeneratorAgent
-    from a3dasm._src.agents.debugger import DebuggerAgent
-    from a3dasm._src.agents.implementer import F3dasmImplementerAgent
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
-    from a3dasm._src.agents.strategizer import StrategizerAgent
+    from adda._src.agents.critic import AdversarialCritiqueAgent
+    from adda._src.agents.datagenerator import DataGeneratorAgent
+    from adda._src.agents.debugger import DebuggerAgent
+    from adda._src.agents.implementer import F3dasmImplementerAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.strategizer import StrategizerAgent
 
     for cls in (
         StrategizerAgent, LiteratureReviewAgent, DataGeneratorAgent,

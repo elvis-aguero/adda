@@ -11,8 +11,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from a3dasm._src.backends.openrouter import OpenRouterAdapter
-from a3dasm._src.backends.vllm import VLLMAdapter
+from adda._src.backends.openrouter import OpenRouterAdapter
+from adda._src.backends.vllm import VLLMAdapter
 
 # --------------------------------------------------------------------------
 # Endpoint + auth resolution: explicit > env > class default
@@ -126,7 +126,7 @@ def test_select_native_tools_excludes_closures():
 # ---------------------------------------------------------------------------
 
 def test_a_userless_payload_is_refused_with_a_diagnosable_error():
-    from a3dasm._src.backends.openai_compatible import UserlessPayloadError
+    from adda._src.backends.openai_compatible import UserlessPayloadError
 
     a = VLLMAdapter(model="m", system_prompt="s")
 
@@ -149,8 +149,8 @@ def test_a_userless_payload_is_refused_with_a_diagnosable_error():
 def test_the_userless_guard_is_not_retried_as_transient():
     """Retrying an unanswerable payload five times with backoff burns wall
     budget and buries the cause deeper."""
-    from a3dasm._src.backends.base import is_transient_error
-    from a3dasm._src.backends.openai_compatible import UserlessPayloadError
+    from adda._src.backends.base import is_transient_error
+    from adda._src.backends.openai_compatible import UserlessPayloadError
 
     assert is_transient_error(UserlessPayloadError("no user turn")) is False
 
@@ -174,8 +174,8 @@ def test_both_converters_drop_unrecognised_roles():
     which changes what EVERY backend sees and is a separate change."""
     from langchain_core.messages import SystemMessage, ToolMessage
 
-    from a3dasm._src.backends.openai_compatible import _to_lc_messages
-    from a3dasm._src.nodes.parsing import _to_adapter_messages
+    from adda._src.backends.openai_compatible import _to_lc_messages
+    from adda._src.nodes.parsing import _to_adapter_messages
 
     state = [SystemMessage(content="rules"),
              ToolMessage(content="out", tool_call_id="t1")]

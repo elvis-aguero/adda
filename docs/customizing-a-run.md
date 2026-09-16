@@ -1,7 +1,7 @@
 # Customizing a run
 
 The [Quickstart](notebooks/quickstart.ipynb) ran the Branin problem with
-a3dasm's own defaults: the built-in graph, the shipped agents' own prompts,
+adda's own defaults: the built-in graph, the shipped agents' own prompts,
 one backend for everything. This page reuses that same problem to show what
 changes, and how, as you reach for something different.
 
@@ -9,7 +9,7 @@ changes, and how, as you reach for something different.
 
 ```python
 from pathlib import Path
-from a3dasm import AgenticRun
+from adda import AgenticRun
 
 study_dir = Path("studies/branin")
 study_dir.mkdir(parents=True, exist_ok=True)
@@ -56,7 +56,7 @@ graph, a custom prompt, and a different backend for one node usually arrive
 together, in one `Graph`:
 
 ```python
-from a3dasm import Agent, Edge, Graph, AgenticRun
+from adda import Agent, Edge, Graph, AgenticRun
 
 
 class Strategist(Agent):
@@ -166,7 +166,7 @@ export OPENROUTER_API_KEY=...        # or VLLM_BASE_URL=http://host:8000/v1
 
 ### A local model on a SLURM GPU node (vLLM)
 
-a3dasm can own a model served on a separate SLURM GPU allocation for the whole
+adda can own a model served on a separate SLURM GPU allocation for the whole
 run: it submits the `vllm serve` job, waits for the node and a ready server,
 points the backend at it over the cluster network, and cancels the job on every
 exit path. Enable it with an `llm_slurm` block; a config-time throughput estimate

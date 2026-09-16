@@ -22,12 +22,12 @@ theme:
     icon:
         repo: fontawesome/brands/github
 
-site_name: a3dasm
-site_description: The documentation for the a3dasm library.
+site_name: adda
+site_description: The documentation for the adda library.
 site_author: Elvis Aguero
 
-repo_url: https://github.com/elvis-aguero/a3dasm
-repo_name: elvis-aguero/a3dasm
+repo_url: https://github.com/elvis-aguero/adda
+repo_name: elvis-aguero/adda
 edit_uri: ""
 
 strict: true

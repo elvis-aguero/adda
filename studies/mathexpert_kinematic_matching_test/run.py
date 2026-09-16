@@ -36,7 +36,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from a3dasm import (
+from adda import (
     AgenticRun,
     Edge,
     Graph,
@@ -44,7 +44,7 @@ from a3dasm import (
     MathExpertAgent,
     StrategizerAgent,
 )
-from a3dasm._src.agents import AdversarialCritiqueAgent
+from adda._src.agents import AdversarialCritiqueAgent
 
 STUDY_DIR = Path(__file__).parent
 VLLM_MODEL = "Qwen/Qwen3.8-27B-FP8"

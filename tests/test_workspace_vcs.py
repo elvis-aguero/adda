@@ -2,7 +2,7 @@
 
 The load-bearing test in this file is
 ``test_commit_never_touches_an_enclosing_repository``: the workspace normally
-lives inside a checkout of a3dasm, so a git call that performed directory
+lives inside a checkout of adda, so a git call that performed directory
 discovery would find the PARENT repo and stage the whole source tree.
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.infra.workspace_vcs import commit_workspace, init_workspace_repo
+from adda._src.infra.workspace_vcs import commit_workspace, init_workspace_repo
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -25,7 +25,7 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _make_parent_repo(root: Path) -> Path:
-    """A git repo standing in for the a3dasm checkout the run lives inside."""
+    """A git repo standing in for the adda checkout the run lives inside."""
     root.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "-c", "init.defaultBranch=main", "init", "-q", str(root)],
                    check=True, capture_output=True)
@@ -70,9 +70,9 @@ def test_commit_never_touches_an_enclosing_repository(tmp_path):
     """The whole point of pinning --git-dir/--work-tree.
 
     Without it, `git add -A` inside a not-yet-initialised workspace would walk
-    upward, find the a3dasm checkout, and stage the entire source tree.
+    upward, find the adda checkout, and stage the entire source tree.
     """
-    parent = _make_parent_repo(tmp_path / "a3dasm")
+    parent = _make_parent_repo(tmp_path / "adda")
     ws = parent / "studies" / "s" / "runs" / "ts" / "debug" / "delegations"
     ws.mkdir(parents=True)
 
@@ -93,7 +93,7 @@ def test_commit_never_touches_an_enclosing_repository(tmp_path):
 
 
 def test_parent_gitignore_excludes_run_trees():
-    """a3dasm's own .gitignore must exclude studies/*/runs/, or a `git add -A`
+    """adda's own .gitignore must exclude studies/*/runs/, or a `git add -A`
     in the repo absorbs a run's nested workspace repo as a gitlink."""
     root = Path(__file__).resolve().parent.parent
     done = subprocess.run(
@@ -231,8 +231,8 @@ def test_every_record_site_commits_the_workspace():
     """
     import inspect
 
-    from a3dasm._src.nodes import orchestration
-    from a3dasm._src.nodes.tools.routing import delegation, feedback
+    from adda._src.nodes import orchestration
+    from adda._src.nodes.tools.routing import delegation, feedback
 
     sources = {
         "orchestration": inspect.getsource(orchestration),

@@ -8,7 +8,7 @@ in one place, the prompts compose it in, and this test validates it.
 """
 from __future__ import annotations
 
-from a3dasm._src.knowledge.idioms import F3DASM_CORE_IDIOMS
+from adda._src.knowledge.idioms import F3DASM_CORE_IDIOMS
 
 
 def _extract_code(text: str) -> str:

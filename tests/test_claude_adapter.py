@@ -68,7 +68,7 @@ def _install_fake_sdk(**extra):
 
 def _get_adapter():
     """Return the (possibly reloaded) ClaudeAdapter with SDK pre-marked available."""
-    import a3dasm._src.backends.claude as cmod
+    import adda._src.backends.claude as cmod
     cmod._SDK_AVAILABLE = True
     return cmod.ClaudeAdapter
 
@@ -90,7 +90,7 @@ def test_transcript_captured_when_debug_on(tmp_path, monkeypatch):
     """With F3DASM_DEBUG on and a sink set, ainvoke streams assistant text +
     result records to the transcript JSONL."""
     import json
-    from a3dasm._src.backends.base import set_transcript_sink
+    from adda._src.backends.base import set_transcript_sink
     monkeypatch.setenv("F3DASM_DEBUG", "1")
     _install_fake_sdk(query=make_async_gen_with_messages("reasoning here"))
     ClaudeAdapter = _get_adapter()
@@ -113,7 +113,7 @@ def test_partials_flushed_for_incomplete_turn(tmp_path, monkeypatch):
     periodic flushes, not stay empty."""
     import json
 
-    from a3dasm._src.backends.base import set_transcript_sink
+    from adda._src.backends.base import set_transcript_sink
 
     class _StreamEv:
         def __init__(self, text):
@@ -156,7 +156,7 @@ def test_infer_schema_skips_underscore_closure_params():
     """Closure capture-args (_ws=..., _did=...) must NOT appear in the tool
     schema — else a model can pass them (e.g. _ws as a string) and crash a
     write tool with str / path. Real params are still exposed."""
-    from a3dasm._src.backends.claude import _infer_schema_from_callable
+    from adda._src.backends.claude import _infer_schema_from_callable
 
     def _write(path: str, body: str, _ws="x", _did="D001"):
         return ""
@@ -236,7 +236,7 @@ def test_session_is_hermetic_setting_sources_empty():
 def test_delegation_id_injected_into_session_env(monkeypatch):
     """Finding 2: the bound delegation id reaches the session env as
     F3DASM_DELEGATION_ID so get_evaluator() resolves without a cd into D###."""
-    from a3dasm._src.backends.base import set_delegation_id
+    from adda._src.backends.base import set_delegation_id
     cap: dict = {}
     _install_fake_sdk(query=_capture_options_gen(cap))
     ClaudeAdapter = _get_adapter()
@@ -258,7 +258,7 @@ def test_stream_event_types_captured_for_ping_measurement(tmp_path, monkeypatch)
     reveals whether ping/lifecycle events arrive during silent phases (the
     data that settles whether 60s silence is a dead stream or slow prefill)."""
     import json
-    from a3dasm._src.backends.base import set_transcript_sink
+    from adda._src.backends.base import set_transcript_sink
 
     class _SE:
         def __init__(self, etype):
@@ -290,7 +290,7 @@ def test_stream_event_types_captured_for_ping_measurement(tmp_path, monkeypatch)
 
 
 def test_no_transcript_when_debug_off(tmp_path, monkeypatch):
-    from a3dasm._src.backends.base import set_transcript_sink
+    from adda._src.backends.base import set_transcript_sink
     monkeypatch.delenv("F3DASM_DEBUG", raising=False)
     _install_fake_sdk(query=make_async_gen_with_messages("x"))
     ClaudeAdapter = _get_adapter()

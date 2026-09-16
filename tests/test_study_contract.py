@@ -52,7 +52,7 @@ def test_example_config_uses_only_documented_keys():
 def test_documented_config_keys_resolve_through_agenticrun():
     """The documented keys must actually flow through the real loader onto the
     run — if the loader stops reading one, this breaks."""
-    from a3dasm import AgenticRun
+    from adda import AgenticRun
 
     run = AgenticRun(study_dir=EXAMPLE)
     assert run._backend == "claude"
@@ -66,7 +66,7 @@ def test_documented_config_keys_resolve_through_agenticrun():
 def test_example_evaluator_resolves_and_runs(tmp_path, monkeypatch):
     """The documented evaluator entrypoint resolves via get_evaluator() and
     evaluates one sample — the core oracle contract, end to end."""
-    from a3dasm._src.evaluation.oracle_resolution import get_evaluator
+    from adda._src.evaluation.oracle_resolution import get_evaluator
 
     store_dir = tmp_path / "store"
     store_dir.mkdir()
@@ -110,12 +110,12 @@ def test_example_evaluator_resolves_and_runs(tmp_path, monkeypatch):
     ("0", 0.0),
 ])
 def test_budget_flag_accepts_the_same_durations_as_config(given, expected):
-    """Regression: `python -m a3dasm --budget` was type=float while the
+    """Regression: `python -m adda --budget` was type=float while the
     container entrypoint (_src/runtime/run.py) accepted seconds OR HH:MM:SS,
     so the same flag on two entry points took different values and
     `--budget 00:45:00` died with an argparse float error. Both now go through
     run_setup._parse_budget_str, the parser config.yaml's `budget:` uses."""
-    from a3dasm.__main__ import _budget
+    from adda.__main__ import _budget
 
     assert _budget(given) == expected
 
@@ -123,7 +123,7 @@ def test_budget_flag_accepts_the_same_durations_as_config(given, expected):
 def test_budget_flag_rejects_nonsense_with_a_usable_message():
     import argparse
 
-    from a3dasm.__main__ import _budget
+    from adda.__main__ import _budget
 
     with pytest.raises(argparse.ArgumentTypeError) as exc:
         _budget("half an hour")

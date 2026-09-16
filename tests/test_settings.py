@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from a3dasm._src.runtime import settings
+from adda._src.runtime import settings
 
 
 @pytest.fixture(autouse=True)

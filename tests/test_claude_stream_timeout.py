@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 
-from a3dasm._src.backends.claude import (
+from adda._src.backends.claude import (
     _anext_or_done,
     _STREAM_DONE,
     _stream_with_idle_timeout,
@@ -70,7 +70,7 @@ def test_stall_raises_transient_timeout():
 
 def test_timeouterror_is_transient_so_retry_catches_it():
     # The whole point: the raised error must be retryable by retry_on_transient.
-    from a3dasm._src.backends.base import is_transient_error
+    from adda._src.backends.base import is_transient_error
     assert is_transient_error(TimeoutError("Anthropic stream stalled"))
 
 

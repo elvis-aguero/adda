@@ -19,9 +19,9 @@ import threading
 import time
 from pathlib import Path
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.infra.delegation_log import DelegationLog
-from a3dasm._src.nodes import Node
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.infra.delegation_log import DelegationLog
+from adda._src.nodes import Node
 
 
 class _Stub:

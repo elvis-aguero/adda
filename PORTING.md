@@ -1,20 +1,20 @@
-# Porting a3dasm to its own repository
+# Porting adda to its own repository
 
-This directory holds the standalone-repo scaffolding for a3dasm, adapted from
+This directory holds the standalone-repo scaffolding for adda, adapted from
 f3dasm's own files so the new repo matches f3dasm's bar (uv + src-layout, Ruff,
 pytest with markers and an 85% coverage gate, MkDocs Material + mkdocstrings,
 Read the Docs, PR-matrix CI). It is inert inside this fork. When the private
-`bessagroup/a3dasm` repo exists, assemble the new repo as below.
+`bessagroup/adda` repo exists, assemble the new repo as below.
 
 ## 1. Extract the source and history (git filter-repo)
 
 Run on a fresh CLONE (filter-repo rewrites history and is irreversible). Keep the
 original clone as a backup until the result is validated. This keeps the agentic
 package, its public shim, tests, docs, and the agentic studies, and renames them
-into the a3dasm layout while preserving blame:
+into the adda layout while preserving blame:
 
 ```bash
-git clone <this-fork> a3dasm && cd a3dasm
+git clone <this-fork> adda && cd adda
 git filter-repo \
   --path src/f3dasm/_src/agentic/ \
   --path src/f3dasm/agentic/ \
@@ -22,8 +22,8 @@ git filter-repo \
   --path docs/agentic/ \
   --path CLAUDE.md \
   --path README-agentic.md \
-  --path-rename src/f3dasm/_src/agentic/:src/a3dasm/_src/ \
-  --path-rename src/f3dasm/agentic/:src/a3dasm/ \
+  --path-rename src/f3dasm/_src/agentic/:src/adda/_src/ \
+  --path-rename src/f3dasm/agentic/:src/adda/ \
   --path-rename tests/agentic/:tests/ \
   --path-rename docs/agentic/:docs/
 ```
@@ -36,10 +36,10 @@ review the file list.
 
 ## 2. Drop in the scaffolding
 
-Copy everything from `packaging/a3dasm/` to the new repo root:
+Copy everything from `packaging/adda/` to the new repo root:
 
 ```bash
-cp -r packaging/a3dasm/. .
+cp -r packaging/adda/. .
 ```
 
 Then add the meta files not staged here: `LICENSE` (BSD-3-Clause, bessagroup),
@@ -48,8 +48,8 @@ Then add the meta files not staged here: `LICENSE` (BSD-3-Clause, bessagroup),
 
 ## 3. Rename the package references (careful sweep, not a blind sed)
 
-- `f3dasm._src.agentic` -> `a3dasm._src`
-- `f3dasm.agentic`      -> `a3dasm`
+- `f3dasm._src.agentic` -> `adda._src`
+- `f3dasm.agentic`      -> `adda`
 - Fix relative-import depths shifted by the `_src/agentic/` -> `_src/` move.
 
 Do NOT rename f3dasm references inside agent prompt strings that instruct
@@ -59,21 +59,21 @@ f3dasm dependency and must stay `f3dasm`. Review each hit.
 
 ## 4. Remaining work to hit the full bar
 
-- [ ] Re-home the two f3dasm-core behaviours a3dasm still relies on, so a3dasm
+- [ ] Re-home the two f3dasm-core behaviours adda still relies on, so adda
       works against STOCK upstream f3dasm (this fork's vendored copy has them, a
       released f3dasm does not):
       - `to_numpy` dropping underscore-prefixed provenance columns. Handle it in
-        a3dasm where it reads arrays (select non-underscore columns), or wrap.
+        adda where it reads arrays (select non-underscore columns), or wrap.
       - the protected-store guard (refuse a shrinking write to the canonical
-        ledger). Wrap `ExperimentData.store` at a3dasm import time, or guard at
-        a3dasm's write boundary. `PROTECTED_STORE_SENTINEL` is already
-        a3dasm-owned in agent_runtime.
+        ledger). Wrap `ExperimentData.store` at adda import time, or guard at
+        adda's write boundary. `PROTECTED_STORE_SENTINEL` is already
+        adda-owned in agent_runtime.
 - [ ] After `bessagroup/f3dasm#351` merges and is released: bump the `f3dasm`
       pin in `pyproject.toml`, and flip the interim
       `from f3dasm._src.errors import EmptyFileError, ReachMaximumTriesError`
       back to `from f3dasm import ...` (3 sites, all marked with a TODO).
       `JobStatus` stays on `f3dasm._src` unless it is also promoted.
-- [ ] numpydoc pass over public classes and functions in `src/a3dasm/_src/`
+- [ ] numpydoc pass over public classes and functions in `src/adda/_src/`
       (module narratives are already strong; class/function docstrings need the
       typed Parameters/Returns/Raises sections so mkdocstrings renders cleanly).
 - [ ] Author `docs/notebooks/quickstart.ipynb` (a small end-to-end AgenticRun,
@@ -90,5 +90,5 @@ uv sync --extra all --extra tests
 uv run pytest -m "not integration and not ollama"   # green, coverage >= 85
 uv run --with pre-commit pre-commit run --all-files  # clean
 uv run --extra docs mkdocs build                     # strict build passes
-python -m a3dasm --help                              # entry point works
+python -m adda --help                              # entry point works
 ```

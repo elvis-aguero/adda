@@ -8,12 +8,12 @@ supply — see LiteratureReviewAgent.build_closure_tools, which overrides the
 default entirely rather than extending it."""
 from __future__ import annotations
 
-from a3dasm._src.agents.critic import AdversarialCritiqueAgent
-from a3dasm._src.agents.datagenerator import DataGeneratorAgent
-from a3dasm._src.agents.debugger import DebuggerAgent
-from a3dasm._src.agents.implementer import F3dasmImplementerAgent
-from a3dasm._src.agents.literature import LiteratureReviewAgent
-from a3dasm._src.agents.strategizer import StrategizerAgent
+from adda._src.agents.critic import AdversarialCritiqueAgent
+from adda._src.agents.datagenerator import DataGeneratorAgent
+from adda._src.agents.debugger import DebuggerAgent
+from adda._src.agents.implementer import F3dasmImplementerAgent
+from adda._src.agents.literature import LiteratureReviewAgent
+from adda._src.agents.strategizer import StrategizerAgent
 
 _NON_LITERATURE_AGENTS = (
     StrategizerAgent, F3dasmImplementerAgent, DataGeneratorAgent,
@@ -91,7 +91,7 @@ def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
     this test checks that, not just that the tool builds/runs."""
     from langchain_core.tools import StructuredTool
 
-    from a3dasm._src.agents.strategizer import StrategizerAgent
+    from adda._src.agents.strategizer import StrategizerAgent
 
     agent = StrategizerAgent()
     tools = agent.build_closure_tools(study_dir=tmp_path)

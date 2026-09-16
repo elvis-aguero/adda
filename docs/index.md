@@ -1,8 +1,8 @@
-# a3dasm
+# adda
 
 **You write one file. It runs the research.**
 
-a3dasm takes a plain-language description of an engineering design or
+adda takes a plain-language description of an engineering design or
 data-driven problem (the objective, the design space, what counts as a
 valid answer) and runs a team of LLM agents that decide what to try, write
 the code to evaluate it, run real experiments, check their own conclusions
@@ -25,7 +25,7 @@ system's job, not yours.
 
 ## Under the hood
 
-a3dasm is a graph of agents: a hub **strategizer** delegating to
+adda is a graph of agents: a hub **strategizer** delegating to
 specialists (**literature reviewer**, **data generator**, **implementer**,
 **critic**) that keeps every claim honest with a Popperian **hypothesis
 ledger** and closes every run with a **reproducible notebook**, checked end

@@ -6,12 +6,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from a3dasm._src.runtime.agent_runtime import (
+from adda._src.runtime.agent_runtime import (
     DEFAULT_MODEL,
     AgenticRun,
     _default_graph,
 )
-from a3dasm._src.backends.base import Agent, Edge, Graph
+from adda._src.backends.base import Agent, Edge, Graph
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ def test_make_adapter_entry_node_uses_run_paths_preamble(tmp_path):
     agent = _agent_with_tools("Bash")
 
     # Patch ClaudeAdapter so we don't need real credentials
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -86,7 +86,7 @@ def test_make_adapter_worker_node_uses_workspace_preamble(tmp_path):
 
     agent = _agent_with_tools("Bash")
 
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -120,7 +120,7 @@ def test_make_adapter_non_entry_node_with_outgoing_edges_uses_workspace_preamble
 
     agent = _agent_with_tools("Bash")
 
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -152,7 +152,7 @@ def test_make_adapter_ollama_backend_creates_ollama_adapter(tmp_path):
 
     # Registry dispatch resolves OllamaAdapter from its source module, so
     # patching it there is all that's needed.
-    with patch("a3dasm._src.backends.ollama.OllamaAdapter") as MockOllama:
+    with patch("adda._src.backends.ollama.OllamaAdapter") as MockOllama:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockOllama.return_value = mock_instance
@@ -179,7 +179,7 @@ def test_make_adapter_no_run_dir_returns_adapter_without_run_paths(tmp_path):
 
     agent = _agent_with_tools("Bash")
 
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -204,7 +204,7 @@ def test_make_adapter_no_run_dir_returns_adapter_without_run_paths(tmp_path):
 
 
 def _make_lit_reviewer_agent():
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     return LiteratureReviewAgent()
 
 
@@ -215,7 +215,7 @@ def test_lit_reviewer_corpus_is_study_scoped_not_per_run(tmp_path):
     run = _make_run(tmp_path)
     agent = _make_lit_reviewer_agent()
 
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -239,7 +239,7 @@ def test_lit_reviewer_corpus_path_unaffected_by_run_dir(tmp_path):
     run._run_dir = None  # simulate pre-execute state
     agent = _make_lit_reviewer_agent()
 
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -269,12 +269,12 @@ def _make_strategizer_agent() -> Agent:
 def test_notebook_deliverable_spec_injected_by_default(tmp_path):
     """Default (pipeline_deliverable unset -> True): the strategizer's prompt
     still carries the pipeline.ipynb contract, unchanged from before #27."""
-    from a3dasm._src.runtime import settings
+    from adda._src.runtime import settings
     settings.configure(None)  # no pipeline_deliverable key -> default True
     run = _make_run(tmp_path)
     agent = _make_strategizer_agent()
 
-    with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+    with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
         mock_instance = MagicMock()
         mock_instance.closure_tools = {}
         MockClaude.return_value = mock_instance
@@ -295,13 +295,13 @@ def test_notebook_deliverable_spec_suppressed_when_pipeline_deliverable_false(tm
     unconditional imperative ("this SUPERSEDES every ... instruction above")
     that previously overrode a PROBLEM_STATEMENT.md saying there is no
     pipeline deliverable at all."""
-    from a3dasm._src.runtime import settings
+    from adda._src.runtime import settings
     settings.configure({"pipeline_deliverable": False})
     try:
         run = _make_run(tmp_path)
         agent = _make_strategizer_agent()
 
-        with patch("a3dasm._src.backends.claude.ClaudeAdapter") as MockClaude:
+        with patch("adda._src.backends.claude.ClaudeAdapter") as MockClaude:
             mock_instance = MagicMock()
             mock_instance.closure_tools = {}
             MockClaude.return_value = mock_instance

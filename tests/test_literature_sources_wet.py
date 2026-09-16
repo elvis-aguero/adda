@@ -31,8 +31,8 @@ QUERY = "graph neural network surrogate model"
 
 
 def _build_tools():
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
-    td = tempfile.mkdtemp(prefix="a3dasm_lit_sources_wet_")
+    from adda._src.agents.literature import LiteratureReviewAgent
+    td = tempfile.mkdtemp(prefix="adda_lit_sources_wet_")
     study = Path(td)
     (study / "runs").mkdir()
     agent = LiteratureReviewAgent()

@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import pytest
 
-from a3dasm._src.literature.literature_corpus import (
+from adda._src.literature.literature_corpus import (
     _RETRIEVAL_MODES,
     LiteratureCorpus,
 )
-from a3dasm._src.runtime import settings
+from adda._src.runtime import settings
 
 
 @pytest.fixture(autouse=True)

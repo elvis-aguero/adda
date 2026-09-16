@@ -8,7 +8,7 @@ import inspect
 import threading
 import time
 
-from a3dasm._src.agents.literature_tools.async_pool import _make_search_async_pool
+from adda._src.agents.literature_tools.async_pool import _make_search_async_pool
 
 
 def _overlap_probe():
@@ -120,7 +120,7 @@ def test_collect_with_nothing_pending():
 
 def test_literature_agent_registers_collect_and_async_tools(tmp_path):
     # End-to-end wiring: build_closure_tools wraps providers + adds CollectSearches.
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     tools = LiteratureReviewAgent().build_closure_tools(study_dir=str(tmp_path))
     assert "CollectSearches" in tools
     # a wrapped provider tool exposes `wait`

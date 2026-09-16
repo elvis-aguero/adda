@@ -3,11 +3,11 @@
 `AgenticRun` is the entry point. It reads `PROBLEM_STATEMENT.md` from the study
 directory, builds the agent graph, and runs the loop to a gated deliverable.
 
-::: a3dasm.AgenticRun
+::: adda.AgenticRun
 
-::: a3dasm.AgenticRunError
+::: adda.AgenticRunError
 
-::: a3dasm.DEFAULT_MODEL
+::: adda.DEFAULT_MODEL
 
 ## Using a run as an f3dasm optimizer
 
@@ -15,4 +15,4 @@ directory, builds the agent graph, and runs the loop to a gated deliverable.
 f3dasm `Optimizer` interface, so it can be dropped in anywhere a regular
 optimizer is used.
 
-::: a3dasm.AgenticOptimizerAdapter
+::: adda.AgenticOptimizerAdapter

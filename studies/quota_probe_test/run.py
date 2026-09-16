@@ -1,4 +1,4 @@
-"""Quota probe: does a3dasm's own Claude Code CLI invocation still work at
+"""Quota probe: does adda's own Claude Code CLI invocation still work at
 all right now, as cheaply as possible?
 
 Graph: strategizer (entry) -> critic. All-Haiku, run locally (not Oscar,
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from a3dasm import AdversarialCritiqueAgent, AgenticRun, Edge, Graph, StrategizerAgent
+from adda import AdversarialCritiqueAgent, AgenticRun, Edge, Graph, StrategizerAgent
 
 STUDY_DIR = Path(__file__).parent
 

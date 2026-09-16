@@ -15,8 +15,8 @@ import json
 
 import pytest
 
-from a3dasm._src.runtime import settings
-from a3dasm._src.runtime.agent_runtime import AgenticRun
+from adda._src.runtime import settings
+from adda._src.runtime.agent_runtime import AgenticRun
 
 
 @pytest.fixture(autouse=True)
@@ -63,7 +63,7 @@ def test_the_study_config_is_rewritten_atomically(tmp_path, monkeypatch):
     reads that same file. write_text truncates first, leaving a window."""
     import os as _os
 
-    from a3dasm._src.runtime.run_setup import _sync_config_output_names
+    from adda._src.runtime.run_setup import _sync_config_output_names
 
     cfg = tmp_path / "config.yaml"
     cfg.write_text("evaluator:\n  output_names: [old]\n")
@@ -87,7 +87,7 @@ def test_the_study_config_is_rewritten_atomically(tmp_path, monkeypatch):
 def test_the_run_records_the_knobs_it_actually_ran_with(tmp_path):
     """The condition read off the artifact rather than trusted from the
     sweep's label."""
-    from a3dasm._src.runtime.run_setup import _init_canonical_store
+    from adda._src.runtime.run_setup import _init_canonical_store
 
     settings.configure({"recursion_limit": 42}, {"milestones_enabled": False})
     run_dir = tmp_path / "runs" / "T"

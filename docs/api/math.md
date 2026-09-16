@@ -14,4 +14,4 @@ which.
 This is what `MathExpertAgent` writes when a run needs an analytical result
 rather than a measured one.
 
-::: a3dasm.Workspace
+::: adda.Workspace

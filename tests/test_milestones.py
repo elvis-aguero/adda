@@ -1,14 +1,14 @@
 """Milestone backlog: target-keyed gating (blocks only the implementer)."""
 from __future__ import annotations
 
-from a3dasm._src.backends.base import Agent, Edge, Graph
-from a3dasm._src.infra.delegation_log import DelegationLog
-from a3dasm._src.epistemics.milestones import (
+from adda._src.backends.base import Agent, Edge, Graph
+from adda._src.infra.delegation_log import DelegationLog
+from adda._src.epistemics.milestones import (
     MilestoneLedger,
     implementer_block,
     render_backlog,
 )
-from a3dasm._src.nodes import Node
+from adda._src.nodes import Node
 
 
 class _Stub:

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from a3dasm._src.runtime import settings
+from adda._src.runtime import settings
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +84,7 @@ def test_resolved_reports_what_the_run_actually_ran_with(monkeypatch):
 def test_constructing_a_second_run_does_not_reconfigure_the_first(tmp_path):
     """settings is process-global, so configure() belongs in execute(), not in
     __init__ where merely building another run would retarget this one."""
-    from a3dasm._src.runtime.agent_runtime import AgenticRun
+    from adda._src.runtime.agent_runtime import AgenticRun
 
     def _study(name, limit):
         d = tmp_path / name

@@ -28,7 +28,7 @@ import types
 
 import pytest
 
-from a3dasm._src.backends.registry import (
+from adda._src.backends.registry import (
     available_backends,
     get_adapter_class,
 )
@@ -77,7 +77,7 @@ def _instantiate(backend: str, **kwargs):
     """Construct any registered backend adapter (mocked — no network/keys)."""
     if backend == "claude":
         _install_minimal_sdk()
-        import a3dasm._src.backends.claude as cmod
+        import adda._src.backends.claude as cmod
         cmod._SDK_AVAILABLE = True
     cls = get_adapter_class(backend)
     defaults = dict(model="m", system_prompt="sys")
@@ -222,21 +222,21 @@ def test_select_native_tools_is_a_classmethod_returning_subset(backend):
 
 
 def test_ollama_edit_tool_rejects_path_outside_workspace(tmp_path):
-    from a3dasm._src.backends.ollama import _make_edit_tool
+    from adda._src.backends.ollama import _make_edit_tool
     tool_fn = _make_edit_tool(tmp_path).func
     result = tool_fn(path="../escape.txt", old_str="x", new_str="y")
     assert result.startswith("ERROR: edit rejected")
 
 
 def test_ollama_edit_tool_absolute_path_outside_rejected(tmp_path):
-    from a3dasm._src.backends.ollama import _make_edit_tool
+    from adda._src.backends.ollama import _make_edit_tool
     tool_fn = _make_edit_tool(tmp_path).func
     result = tool_fn(path="/etc/hosts", old_str="x", new_str="y")
     assert result.startswith("ERROR: edit rejected")
 
 
 def test_ollama_edit_tool_traversal_blocked(tmp_path):
-    from a3dasm._src.backends.ollama import _make_edit_tool
+    from adda._src.backends.ollama import _make_edit_tool
     sub = tmp_path / "sub"
     sub.mkdir()
     tool_fn = _make_edit_tool(tmp_path).func
@@ -245,7 +245,7 @@ def test_ollama_edit_tool_traversal_blocked(tmp_path):
 
 
 def test_ollama_edit_tool_accepts_path_inside_workspace(tmp_path):
-    from a3dasm._src.backends.ollama import _make_edit_tool
+    from adda._src.backends.ollama import _make_edit_tool
     target = tmp_path / "sub" / "file.txt"
     target.parent.mkdir()
     target.write_text("hello world")
@@ -262,14 +262,14 @@ def test_ollama_edit_tool_accepts_path_inside_workspace(tmp_path):
 
 def test_ollama_base_url_reads_env_var(monkeypatch):
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://custom-host:9999/v1")
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
     adapter = OllamaAdapter(model="llama3.2", system_prompt="sys")
     assert adapter._base_url == "http://custom-host:9999/v1"
 
 
 def test_ollama_base_url_falls_back_to_localhost(monkeypatch):
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
-    from a3dasm._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.ollama import OllamaAdapter
     adapter = OllamaAdapter(model="llama3.2", system_prompt="sys")
     assert adapter._base_url == "http://localhost:11434/v1"
 
@@ -280,13 +280,13 @@ def test_ollama_base_url_falls_back_to_localhost(monkeypatch):
 
 
 def test_literature_agent_has_no_arxiv_mcp_server():
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     assert "arxiv" not in LiteratureReviewAgent.mcp_servers
 
 
 def test_literature_agent_arxiv_tools_in_build_closure_tools(tmp_path):
     pytest.importorskip("arxiv")  # skip if not installed
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     tools = LiteratureReviewAgent().build_closure_tools(tmp_path)
     expected = {
         "arxiv_search_papers",
@@ -302,7 +302,7 @@ def test_build_arxiv_closures_returns_empty_without_package(monkeypatch):
     real = sys.modules.pop("arxiv", None)
     monkeypatch.setitem(sys.modules, "arxiv", None)
     try:
-        from a3dasm._src.backends.ollama import _build_arxiv_closures
+        from adda._src.backends.ollama import _build_arxiv_closures
         result = _build_arxiv_closures()
         assert result == {}
     finally:
@@ -331,8 +331,8 @@ _COMMON_NATIVE_TOOLS = frozenset({
 
 
 def test_common_native_tools_resolve_on_every_backend():
-    from a3dasm._src.backends.claude import ClaudeAdapter
-    from a3dasm._src.backends.openai_compatible import _native_tool_map
+    from adda._src.backends.claude import ClaudeAdapter
+    from adda._src.backends.openai_compatible import _native_tool_map
     # Claude executes these as SDK CLI built-ins.
     missing_claude = _COMMON_NATIVE_TOOLS - set(ClaudeAdapter.NATIVE_TOOLS)
     assert not missing_claude, (
@@ -349,8 +349,8 @@ def test_common_native_tools_resolve_on_every_backend():
 def test_bash_companions_are_at_parity():
     """The Bash background trio must appear together on both surfaces — adding
     Bash without BashOutput/KillShell (or vice versa) is the exact regression."""
-    from a3dasm._src.backends.claude import ClaudeAdapter
-    from a3dasm._src.backends.openai_compatible import _native_tool_map
+    from adda._src.backends.claude import ClaudeAdapter
+    from adda._src.backends.openai_compatible import _native_tool_map
     trio = {"Bash", "BashOutput", "KillShell"}
     assert trio <= set(ClaudeAdapter.NATIVE_TOOLS)
     assert trio <= set(_native_tool_map(None).keys())
@@ -367,12 +367,12 @@ _ENDPOINT_AUTH_ATTRS = {"DEFAULT_BASE_URL", "BASE_URL_ENV", "API_KEY", "API_KEY_
 
 
 def test_openai_compatible_subclasses_are_thin():
-    from a3dasm._src.backends.ollama import OllamaAdapter
-    from a3dasm._src.backends.openai_compatible import (
+    from adda._src.backends.ollama import OllamaAdapter
+    from adda._src.backends.openai_compatible import (
         OpenAICompatibleAdapter,
     )
-    from a3dasm._src.backends.openrouter import OpenRouterAdapter
-    from a3dasm._src.backends.vllm import VLLMAdapter
+    from adda._src.backends.openrouter import OpenRouterAdapter
+    from adda._src.backends.vllm import VLLMAdapter
 
     assert OpenAICompatibleAdapter is not None  # (import anchors the base)
     for cls in (OllamaAdapter, VLLMAdapter, OpenRouterAdapter):
@@ -400,7 +400,7 @@ def test_agent_model_is_overridable_as_a_class_attribute():
     pinned to one backend and left on another backend's default model id.
     The class docstring's own rule is that behavioural differences belong in
     class attributes."""
-    from a3dasm._src.backends.base import Agent
+    from adda._src.backends.base import Agent
 
     class _Local(Agent):
         role = "math_expert"

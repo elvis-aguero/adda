@@ -26,8 +26,8 @@ import pytest
 def _reset_ss_rate_state():
     """Isolate http_client's shared per-domain rate state and
     settings._config across tests — both are module globals."""
-    from a3dasm._src.literature import http_client as lc_mod
-    from a3dasm._src.runtime import settings as settings_mod
+    from adda._src.literature import http_client as lc_mod
+    from adda._src.runtime import settings as settings_mod
     domain = "api.semanticscholar.org"
     lc_mod._domain_consecutive_429.pop(domain, None)
     lc_mod._domain_cooldown_until.pop(domain, None)
@@ -46,10 +46,10 @@ def test_ss_throttle_shares_domain_rate_limiter(monkeypatch):
     than a private, unauthenticated-tier-blind fixed interval — but with an
     interval OVERRIDE (see test_ss_uses_stricter_interval_than_domain_default
     for why the shared domain default alone is too fast for this endpoint)."""
-    import a3dasm._src.agents.literature as lit_agent  # noqa: F401
-    import a3dasm._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
-    import a3dasm._src.agents.literature_tools.throttle as lit
-    from a3dasm._src.literature import http_client as lc_mod
+    import adda._src.agents.literature as lit_agent  # noqa: F401
+    import adda._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
+    import adda._src.agents.literature_tools.throttle as lit
+    from adda._src.literature import http_client as lc_mod
 
     calls = []
     monkeypatch.setattr(
@@ -72,10 +72,10 @@ def test_ss_uses_stricter_interval_than_domain_default(monkeypatch):
     session and produces real, heavy throttling even with a correctly
     configured and correctly resolved SEMANTIC_SCHOLAR_API_KEY — a key
     raises the ceiling, it does not exempt a caller from pacing under it."""
-    import a3dasm._src.agents.literature as lit_agent  # noqa: F401
-    import a3dasm._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
-    import a3dasm._src.agents.literature_tools.throttle as lit
-    from a3dasm._src.literature import http_client as lc_mod
+    import adda._src.agents.literature as lit_agent  # noqa: F401
+    import adda._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
+    import adda._src.agents.literature_tools.throttle as lit
+    from adda._src.literature import http_client as lc_mod
 
     assert lit._SS_MIN_INTERVAL > lc_mod._DOMAIN_MIN_INTERVAL[lit._SS_DOMAIN], (
         "the client-library path's interval must be stricter (larger) than "
@@ -86,10 +86,10 @@ def test_ss_uses_stricter_interval_than_domain_default(monkeypatch):
 def test_ss_429_retries_with_backoff_then_succeeds(monkeypatch):
     """A 429 (ConnectionRefusedError) is transient — retry with backoff
     instead of hard-failing the tool call on the first attempt."""
-    import a3dasm._src.agents.literature as lit_agent  # noqa: F401
-    import a3dasm._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
-    import a3dasm._src.agents.literature_tools.throttle as lit
-    from a3dasm._src.literature import http_client as lc_mod
+    import adda._src.agents.literature as lit_agent  # noqa: F401
+    import adda._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
+    import adda._src.agents.literature_tools.throttle as lit
+    from adda._src.literature import http_client as lc_mod
 
     monkeypatch.setattr(
         lc_mod, "_rate_limit_wait", lambda domain, min_interval=None: None)
@@ -115,10 +115,10 @@ def test_ss_403_is_not_retried(monkeypatch):
     """A 403 (PermissionError) means the shared unauthenticated quota is
     exhausted — retrying immediately cannot help, so it must propagate
     without _throttled_ss silently eating time on doomed retries."""
-    import a3dasm._src.agents.literature as lit_agent  # noqa: F401
-    import a3dasm._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
-    import a3dasm._src.agents.literature_tools.throttle as lit
-    from a3dasm._src.literature import http_client as lc_mod
+    import adda._src.agents.literature as lit_agent  # noqa: F401
+    import adda._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
+    import adda._src.agents.literature_tools.throttle as lit
+    from adda._src.literature import http_client as lc_mod
 
     monkeypatch.setattr(
         lc_mod, "_rate_limit_wait", lambda domain, min_interval=None: None)
@@ -139,10 +139,10 @@ def test_ss_three_consecutive_429s_trip_shared_breaker(monkeypatch):
     """Three consecutive 429s trip http_client's circuit breaker —
     the SAME breaker _robust_get/_robust_post use for this host — raising
     SourceCooldownError instead of a bare ConnectionRefusedError."""
-    import a3dasm._src.agents.literature as lit_agent  # noqa: F401
-    import a3dasm._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
-    import a3dasm._src.agents.literature_tools.throttle as lit
-    from a3dasm._src.literature import http_client as lc_mod
+    import adda._src.agents.literature as lit_agent  # noqa: F401
+    import adda._src.agents.literature_tools.semantic_scholar as lit_ss  # noqa: F401
+    import adda._src.agents.literature_tools.throttle as lit
+    from adda._src.literature import http_client as lc_mod
 
     monkeypatch.setattr(
         lc_mod, "_rate_limit_wait", lambda domain, min_interval=None: None)
@@ -162,8 +162,8 @@ def test_ss_missing_key_warns(monkeypatch, caplog):
     import logging
     import tempfile
 
-    import a3dasm._src.agents.literature as lit_agent
-    import a3dasm._src.agents.literature_tools.semantic_scholar as lit_ss
+    import adda._src.agents.literature as lit_agent
+    import adda._src.agents.literature_tools.semantic_scholar as lit_ss
 
     monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
 
@@ -188,8 +188,8 @@ def test_ss_key_settable_via_config_yaml(monkeypatch):
     import tempfile
     from pathlib import Path
 
-    import a3dasm._src.agents.literature as lit_agent
-    from a3dasm._src.runtime import settings as settings_mod
+    import adda._src.agents.literature as lit_agent
+    from adda._src.runtime import settings as settings_mod
 
     monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
     monkeypatch.delenv("F3DASM_SEMANTIC_SCHOLAR_API_KEY", raising=False)
@@ -220,8 +220,8 @@ def test_openalex_missing_key_warns(monkeypatch, caplog):
     import logging
     import tempfile
 
-    import a3dasm._src.agents.literature as lit_agent
-    import a3dasm._src.agents.literature_tools.openalex as lit_oa
+    import adda._src.agents.literature as lit_agent
+    import adda._src.agents.literature_tools.openalex as lit_oa
 
     monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
 
@@ -242,7 +242,7 @@ def test_arxiv_read_download_use_direct_url(monkeypatch, tmp_path):
     """arxiv read/download must fetch the PDF by direct URL — not via the
     removed Result.download_pdf() (the 'no attribute download_pdf' failure that
     made the agent re-call DownloadPdf). No network: urlopen is stubbed."""
-    from a3dasm._src.backends.openai_compatible import (
+    from adda._src.backends.openai_compatible import (
         _build_arxiv_closures,
     )
     tools = _build_arxiv_closures()
@@ -292,9 +292,9 @@ def test_arxiv_client_self_throttles():
         "review whether _build_arxiv_closures needs its own throttle"
     )
 
-from a3dasm._src.agents import LiteratureReviewAgent, StrategizerAgent
-from a3dasm._src.backends.base import Edge, Graph
-from a3dasm._src.runtime.agent_runtime import AgenticRun
+from adda._src.agents import LiteratureReviewAgent, StrategizerAgent
+from adda._src.backends.base import Edge, Graph
+from adda._src.runtime.agent_runtime import AgenticRun
 
 # ---------------------------------------------------------------------------
 # Research question and study setup
@@ -462,7 +462,7 @@ def test_literature_review_wet(tmp_path, capfd):
         if name == "strategizer":
             return strat_adapter
         # LiteratureReviewAgent: build the real adapter with corpus tools
-        from a3dasm._src.backends.claude import ClaudeAdapter
+        from adda._src.backends.claude import ClaudeAdapter
         native = [t for t in agent.tools
                   if t in {"Bash", "Edit", "Read", "Write", "Glob", "Grep"}]
         # The adapter spawns the claude CLI with cwd=study_dir; a

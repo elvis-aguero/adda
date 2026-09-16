@@ -15,7 +15,7 @@ jobs:
   run-tests:
     strategy:
       matrix:
-        # a3dasm is POSIX/HPC-oriented (process-group reaping, signals, SLURM);
+        # adda is POSIX/HPC-oriented (process-group reaping, signals, SLURM);
         # Windows is not a supported target.
         #
         # Every PR push runs a single fast combo (quick feedback loop); the

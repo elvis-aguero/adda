@@ -95,7 +95,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **Where:** `nodes/tools/routing/` `_hypothesis_brief()`, injected in
   `Delegate`'s task assembly beside the constraint snapshot.
 - **Why:** the criterion is immutable once registered and is the standard the
-  verdict is judged by, but the only party a3dasm showed it to was the
+  verdict is judged by, but the only party adda showed it to was the
   delegator, and only at reconciliation time — `_falsification_checkpoint()`
   fires on a **Done** report, i.e. after the evidence exists. `Delegate`'s
   contract put context packaging on the delegator, so the worker saw the
@@ -241,7 +241,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   `spent of budget — N remaining`, so the agent READS that number rather than hand-
   computing it and flipping spent↔remaining (run 20260628T130525 asserted "200 remain"
   with 200 spent of 300 → UNGATED). Read-only; spends no eval budget.
-- **Multi-experiment load idiom:** `a3dasm.load_experiments()` (`ledger_summary.
+- **Multi-experiment load idiom:** `adda.load_experiments()` (`ledger_summary.
   load_experiments`) loads every experiment store of a run as `{name: ExperimentData}`
   (default + each design experiment, at their nested paths). A namespaced run has N
   stores and no namespace column, so the single-study `from_file` idiom silently loads
@@ -298,7 +298,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   edits is faithful. Agents get no git tool and never see the repo: the
   harness commits on their behalf, since an agent that can rewrite the history
   recording its work defeats the purpose. The workspace normally sits INSIDE a
-  checkout of a3dasm, so every git call pins `--git-dir`/`--work-tree`
+  checkout of adda, so every git call pins `--git-dir`/`--work-tree`
   explicitly (no directory discovery, no walking up into the parent repo, and
   those flags outrank inherited `GIT_DIR`/`GIT_WORK_TREE`), config is passed
   per-invocation so a global `commit.gpgsign` or `core.hooksPath` cannot block
@@ -320,7 +320,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 ### MathExpert — verified symbolic derivation
 - **What:** a specialist agent (NOT part of `_default_graph()` — opt-in via a
   custom `Graph`, same precedent as `DebuggerAgent`) that authors and runs a
-  Python script against `a3dasm.Workspace` per derivation "edition"
+  Python script against `adda.Workspace` per derivation "edition"
   (`runs/math_workspace/<edition>.py`). Forces every algebraic/domain/
   dimensional claim through SymPy and reports a genuine three-valued verdict
   (`CONFIRMED`/`REFUTED`/`INCONCLUSIVE`) rather than a restated confidence; a
@@ -339,7 +339,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   survive being overwritten. Additive and write-only: the summary file
   remains the current state and the only thing a consumer reads.
 - **Where:** `math_dsl.py` (the `Workspace` library, re-exported publicly as
-  `a3dasm.Workspace`), `agents/math_expert.py` (`MathExpertAgent`),
+  `adda.Workspace`), `agents/math_expert.py` (`MathExpertAgent`),
   `knowledge/entries/0011-symbolic-derivation-patterns.md` (worked-example
   guidance, `audience: [math_expert]`). See
   `internal/specs/10-math-expert-agent.md` for the full design rationale,
@@ -564,7 +564,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   `AgenticRun.render_architecture`. **Status:** done.
 
 ### Live run viewer (read-only)
-- **What:** `python -m a3dasm.viewer <study-dir>` (or
+- **What:** `python -m adda.viewer <study-dir>` (or
   `AgenticRun.serve_viewer(host, port)`) serves a local, read-only web UI for
   watching a run WHILE it's in progress — a live network diagram of the
   agent graph (node positions reuse `run_diagram.py`'s own `_bfs_layers`
@@ -588,17 +588,17 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   HTML template. Binds to `127.0.0.1`, no auth. No longer read-only: see
   **Operator channel** below for the write path (answering a `FollowUp`,
   queueing a note, nudging a running delegation).
-- **Where:** `src/a3dasm/_src/viewer/` (`readers.py` pure data functions,
+- **Where:** `src/adda/_src/viewer/` (`readers.py` pure data functions,
   `app.py` the Starlette app, `templates/graph.html` the UI);
   `agent_runtime.py`'s `AgenticRun.serve_viewer`; `pyproject.toml`'s `viewer`
   optional-dependency group. **Status:** done (v1, read-only).
 
 ---
 
-### Notice provenance — telling a3dasm's voice from a tool's output
-- **What:** every piece of text a3dasm injects into an agent's context —
+### Notice provenance — telling adda's voice from a tool's output
+- **What:** every piece of text adda injects into an agent's context —
   nudges, science-monitor drift, budget warnings, operator notes, Confer
-  messages, delegation notifications — is wrapped in an `<a3dasm-note>` marker
+  messages, delegation notifications — is wrapped in an `<adda-note>` marker
   at the point of injection. The viewer lifts marked blocks out of the tool
   result and renders them in their own band (`--surface0`, peach left rule)
   above the tool's own output (`--crust`).
@@ -643,7 +643,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   depends on the orchestrator taking a tool call (it drains on
   `GetStatus`/`Wait`), so a strategizer blocked in a long synchronous
   `Delegate(wait=True)` will not route a nudge until it returns.
-- **Where:** `src/a3dasm/_src/operator_channel.py` (`ask_question`,
+- **Where:** `src/adda/_src/operator_channel.py` (`ask_question`,
   `answer_question`, `queue_note`, `drain_note_rows`, `touch_watch`,
   `is_watched`); routing in `nodes/orchestration.py`'s `_drain_notifications`;
   HTTP surface in `viewer/app.py` (`/answer`, `/note`); composers in

@@ -17,7 +17,7 @@ import json
 
 from langgraph.graph import END
 
-from a3dasm._src.runtime import terminal
+from adda._src.runtime import terminal
 
 from .test_route_aware_termination import (
     StubAdapter,
@@ -68,7 +68,7 @@ def test_an_unknown_value_does_not_leak_through():
 
 def _halted_run_dir(tmp_path, monkeypatch):
     """Drive a node into the repeated-errors halt and return its run dir."""
-    from a3dasm._src.nodes import Node
+    from adda._src.nodes import Node
 
     monkeypatch.setenv("F3DASM_MAX_CONSECUTIVE_ERRORS", "3")
     study_dir = tmp_path / "study"
@@ -137,8 +137,8 @@ def test_a_critic_less_close_is_not_gated(tmp_path):
     It read GATED before, so an ablation that removed the adversarial critic
     would have reported a 100% success rate by construction.
     """
-    from a3dasm._src.nodes import Node
-    from a3dasm._src.nodes.tools.routing.feedback import FeedbackTools
+    from adda._src.nodes import Node
+    from adda._src.nodes.tools.routing.feedback import FeedbackTools
 
     study_dir = tmp_path / "study"
     (study_dir / "runs" / "T" / "debug").mkdir(parents=True)

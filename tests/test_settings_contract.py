@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from a3dasm._src.runtime import settings
+from adda._src.runtime import settings
 
-_SRC = Path(__file__).resolve().parent.parent / "src" / "a3dasm" / "_src"
+_SRC = Path(__file__).resolve().parent.parent / "src" / "adda" / "_src"
 _DOC = (Path(__file__).resolve().parent.parent
         / "docs" / "authoring-a-study.md")
 
@@ -40,7 +40,7 @@ def _keys_read_in_source() -> set[str]:
     # one call site, many keys — so the literal-argument grep above cannot see
     # them. The registry IS the read site: declaring a Feature is what makes
     # the knob live, and features.enabled() raises on a key it does not know.
-    from a3dasm._src.runtime import features
+    from adda._src.runtime import features
     found |= set(features.FEATURE_KEYS)
     return found
 

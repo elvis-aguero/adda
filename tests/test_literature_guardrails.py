@@ -20,14 +20,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import a3dasm._src.literature.http_client as lc_mod
-import a3dasm._src.literature.literature_corpus as corpus_mod
-from a3dasm._src.literature.http_client import (
+import adda._src.literature.http_client as lc_mod
+import adda._src.literature.literature_corpus as corpus_mod
+from adda._src.literature.http_client import (
     SourceCooldownError,
     _cache_put,
     _robust_get,
 )
-from a3dasm._src.literature.literature_corpus import LiteratureCorpus
+from adda._src.literature.literature_corpus import LiteratureCorpus
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -442,7 +442,7 @@ class TestHttpCache:
             cache_dir, url, params, 200, '{"old": true}', "application/json"
         )
         # Backdate the ts by 2 days
-        from a3dasm._src.literature.http_client import _cache_key
+        from adda._src.literature.http_client import _cache_key
         key = _cache_key(url, params)
         cache_file = cache_dir / (key + ".json")
         data = json.loads(cache_file.read_text())
@@ -646,7 +646,7 @@ class TestDownloadPdf:
         corpus = _make_corpus(tmp_path)
         cache_dir = corpus._http_cache_dir
 
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
         agent = LiteratureReviewAgent()
@@ -678,7 +678,7 @@ class TestDownloadPdf:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
         _reset_rate_state("example.com")
 
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
         agent = LiteratureReviewAgent()
@@ -709,7 +709,7 @@ class TestDownloadPdf:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
         _reset_rate_state("example.com")
 
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
         agent = LiteratureReviewAgent()
@@ -739,7 +739,7 @@ class TestDownloadPdf:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
         _reset_rate_state("example.com")
 
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
         agent = LiteratureReviewAgent()
@@ -789,7 +789,7 @@ class TestPreflightWarnings:
                 raise ImportError("No module named 'fastembed'")
             return real_import(name, *args, **kwargs)
 
-        with caplog.at_level(logging.WARNING, logger="a3dasm._src.literature.literature_corpus"):
+        with caplog.at_level(logging.WARNING, logger="adda._src.literature.literature_corpus"):
             with patch("builtins.__import__", side_effect=mock_import):
                 with patch("shutil.which", return_value=None):
                     result = corpus._get_embedding_model()
@@ -813,7 +813,7 @@ class TestPreflightWarnings:
                 raise ImportError("No module named 'fastembed'")
             return real_import(name, *args, **kwargs)
 
-        with caplog.at_level(logging.WARNING, logger="a3dasm._src.literature.literature_corpus"):
+        with caplog.at_level(logging.WARNING, logger="adda._src.literature.literature_corpus"):
             with patch("builtins.__import__", side_effect=mock_import):
                 with patch("shutil.which", return_value=None):
                     corpus._get_embedding_model()
@@ -837,7 +837,7 @@ class TestPreflightWarnings:
         import builtins
         import logging
 
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
 
@@ -854,7 +854,7 @@ class TestPreflightWarnings:
 
         with caplog.at_level(
             logging.WARNING,
-            logger="a3dasm._src.agents.literature_tools.semantic_scholar",
+            logger="adda._src.agents.literature_tools.semantic_scholar",
         ):
             with patch("builtins.__import__", side_effect=mock_import):
                 agent = LiteratureReviewAgent()
@@ -908,7 +908,7 @@ class TestOpenAlexPdfUrl:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
         _reset_rate_state("api.openalex.org")
 
-        from a3dasm._src.agents.literature import (
+        from adda._src.agents.literature import (
             LiteratureReviewAgent,
         )
         agent = LiteratureReviewAgent()
@@ -953,7 +953,7 @@ class TestOpenAlexPdfUrl:
 
 def _make_tools(tmp_path):
     """Helper: build closure tools for an agent, returning the tools dict."""
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     agent = LiteratureReviewAgent()
     return agent.build_closure_tools(
         study_dir=tmp_path,
@@ -1230,7 +1230,7 @@ class TestGetOpenAlexReferences:
 
 def _make_s2_tools(tmp_path, monkeypatch=None):
     """Helper: build closure tools for an agent."""
-    from a3dasm._src.agents.literature import LiteratureReviewAgent
+    from adda._src.agents.literature import LiteratureReviewAgent
     if monkeypatch is not None:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
     agent = LiteratureReviewAgent()
@@ -1341,7 +1341,7 @@ class TestS2EventLoopSafety:
         after however long the hung function actually takes."""
         import time as _time
 
-        import a3dasm._src.agents.literature_tools.throttle as lit_mod
+        import adda._src.agents.literature_tools.throttle as lit_mod
 
         def hangs_forever():
             _time.sleep(5.0)  # much longer than the 0.1s timeout below
@@ -1380,7 +1380,7 @@ class TestS2EventLoopSafety:
             pytest.skip("semanticscholar not installed")
 
         # Monkey-patch _call_in_fresh_thread to use a tiny timeout.
-        import a3dasm._src.agents.literature_tools.throttle as lit_mod
+        import adda._src.agents.literature_tools.throttle as lit_mod
         orig = lit_mod._call_in_fresh_thread
 
         def _fast_timeout(fn, *args, timeout=0.05, **kwargs):

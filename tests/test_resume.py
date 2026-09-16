@@ -1,8 +1,8 @@
 """Tests for durable checkpoint + resume in AgenticRun."""
 from pathlib import Path
 
-from a3dasm._src.runtime import terminal
-from a3dasm._src.runtime.agent_runtime import AgenticRun
+from adda._src.runtime import terminal
+from adda._src.runtime.agent_runtime import AgenticRun
 
 
 def _make_study(tmp_path: Path) -> Path:
