@@ -571,8 +571,18 @@ class AgenticRun:
                     "(no debug/thread_id)"
                 )
             return run_dir.name, run_dir, _resume
-        ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
-        run_dir = self.study_dir / "runs" / ts
+        # Run ids are second-resolution timestamps, so two runs started in the
+        # same second used to SHARE a directory — each overwriting the other's
+        # debug output, ledger and status. Rare by hand, routine under a sweep.
+        # The timestamp stays the prefix (it is the sort key everything orders
+        # by); a suffix is added only on collision, so ordinary sequential runs
+        # keep their historical names exactly.
+        _base = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
+        ts = _base
+        _runs = self.study_dir / "runs"
+        while (_runs / ts).exists():
+            ts = f"{_base}-{uuid.uuid4().hex[:6]}"
+        run_dir = _runs / ts
         _archive_prior_pipeline_notebook(self.study_dir)
         return ts, run_dir, None
 

@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml  # available via hydra-core
 
 from ..evaluation._f3dasm_compat import PROTECTED_STORE_SENTINEL
+from . import settings as _settings
 
 __all__ = [
     "DEFAULT_MEM_CAP_BYTES",
@@ -207,6 +208,12 @@ def _init_canonical_store(
         # SOFT cap (nudge only); mem_cap_bytes is the one HARD cap (host safety).
         "eval_budget": eval_budget,
         "mem_cap_bytes": mem_cap_bytes,
+        # Every run knob this run actually ran with, AFTER precedence
+        # (explicit > env > config.yaml > default). The condition read off the
+        # run itself rather than asserted by whatever launched it — so a row
+        # analysed months later still knows what it was, and a sweep's label
+        # can be checked against the artifact instead of trusted.
+        "runtime": _settings.resolved(),
     }
     if "oracles" in existing:
         config["oracles"] = existing["oracles"]
@@ -365,7 +372,14 @@ def _sync_config_output_names(config_yaml: Path, output_names: list) -> bool:
         r"(?m)^(\s*output_names:\s*).*$", r"\g<1>" + flow, text)
     if n == 0 or new_text == text:
         return False
-    config_yaml.write_text(new_text, encoding="utf-8")
+    # Atomic: this writes a STUDY-scope file from inside a run, so a
+    # concurrently starting run can be reading it. write_text truncates first,
+    # leaving a window where the reader sees a partial or empty config. Same
+    # tmp-then-replace the run config itself uses.
+    import os as _os
+    tmp = config_yaml.with_suffix(config_yaml.suffix + ".tmp")
+    tmp.write_text(new_text, encoding="utf-8")
+    _os.replace(tmp, config_yaml)
     return True
 
 
