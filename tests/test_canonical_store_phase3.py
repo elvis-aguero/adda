@@ -565,7 +565,7 @@ def _make_monitor(tmp_path, store_dir=None):
     from a3dasm._src.epistemics.science_monitor import ScienceMonitor
     ledger = HypothesisLedger(tmp_path)
     dlog = DelegationLog(tmp_path / "log.jsonl")
-    mon = ScienceMonitor(ledger, dlog, store_dir=store_dir)
+    mon = ScienceMonitor(dlog, store_dir=store_dir)
     return ledger, dlog, mon
 
 

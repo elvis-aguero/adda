@@ -22,8 +22,10 @@ def make_world(tmp_path):
     ledger = HypothesisLedger(tmp_path)
     dlog = DelegationLog(tmp_path / "delegation_log.jsonl")
     drift_records = []
-    mon = ScienceMonitor(
-        ledger, dlog, diagnostics_writer=drift_records.append)
+    # No ledger argument: the monitor's live rules read the delegation log
+    # and the store. It used to take one and never read it, which made the
+    # construction site gate the monitor on the ledger's existence.
+    mon = ScienceMonitor(dlog, diagnostics_writer=drift_records.append)
     return ledger, dlog, mon, drift_records
 
 
@@ -236,7 +238,7 @@ def test_unledgered_exempts_datagenerator_role(tmp_path):
         return {"datagenerator": "datagenerator",
                 "implementer": "implementer"}.get(name, name)
 
-    mon = ScienceMonitor(ledger, dlog, role_of=role_of)
+    mon = ScienceMonitor(dlog, role_of=role_of)
     for did, to in (("D001", "datagenerator"), ("D002", "implementer")):
         dlog.record(
             id=did, from_node="strategizer", to_node=to, task="t",

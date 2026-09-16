@@ -52,7 +52,9 @@ class OrchestrationMixin:
         self._interactive = interactive
         self._max_ask = max_ask
         self._ask_count = 0
-        self._current_notes_dir: Path | None = None
+        self._current_notes_dir: Path | None = (
+            Path(notes_dir) if notes_dir is not None else None
+        )
         # Parallel delegation registry: id → {"status", "result", "evals", "hypothesis_ids", "started_at"}
         self._worker_adapters: dict[str, Any] = worker_adapters or {}
         self._registry: dict[str, dict] = {}
@@ -87,33 +89,14 @@ class OrchestrationMixin:
         self._confer_seq: int = 0
         self._confer_inbox: dict[str, list[str]] = {}
         self._confer_inbox_lock = threading.Lock()
-        # Hypothesis ledger — persists hypotheses.json
-        self._ledger: HypothesisLedger | None = (
-            HypothesisLedger(Path(notes_dir)) if notes_dir is not None else None
-        )
-        # Milestone ledger (process policy) — persists milestones.json. Seeded
-        # with the config default gates unless disabled. DISTINCT from the
-        # hypothesis ledger (epistemics): process vs what's-true.
-        from ..epistemics.milestones import MilestoneLedger
-        from ..runtime.settings import get_bool
-        self._milestones: MilestoneLedger | None = None
-        if notes_dir is not None and get_bool("milestones_enabled", True):
-            self._milestones = MilestoneLedger(Path(notes_dir))
-            # C3 switchable: the draft-pipeline gate seeds only when the
-            # pipeline-deliverable knob is on (off = byte-identical to today).
-            self._milestones.seed_defaults(
-                include_pipeline=get_bool("pipeline_deliverable", True))
         # Graph-wide delegation log (demand-driven episodic memory)
         self._delegation_log: DelegationLog | None = delegation_log
-        # Science drift monitor — active when both ledger and log present
-        self._science_monitor: ScienceMonitor | None = None
-        if self._ledger is not None and delegation_log is not None:
-            self._science_monitor = ScienceMonitor(
-                self._ledger,
-                delegation_log,
-                diagnostics_writer=self._record_science_drift,
-                role_of=self._role_of,
-            )
+        # Whether THIS node owns the run's epistemic ledgers. Decided once,
+        # here, from what graph_builder passed: it hands notes_dir to the
+        # entry node alone. Ownership is never acquired later — see
+        # _install_epistemics.
+        self._owns_epistemics: bool = notes_dir is not None
+        self._install_epistemics()
         # Running total of delegations at the START of the current __call__
         # Used as a seed for the delegation sequence counter.
         self._state_total_delegations: int = 0
@@ -162,14 +145,73 @@ class OrchestrationMixin:
         # Per-node raw tool-call error count: any ERROR: return or raised
         # exception from any injected closure counts as one error for that node.
         self._error_counts: dict[str, int] = {}
-        # Separable per-call telemetry — additive, off the decision path. Lives
-        # under debug/telemetry/ (notes_dir is debug/strategizer_notes).
-        from ..infra.telemetry import Telemetry
-        self._telemetry: Telemetry | None = (
-            Telemetry(Path(notes_dir).parent) if notes_dir is not None else None
-        )
         self.adapter.closure_tools.update(self._build_routing_closures())
         self.adapter.route_watcher = lambda: self._route.get("kind") == "done"
+
+    def _install_epistemics(self) -> None:
+        """Build (or rebuild at a new path) everything ``notes_dir`` owns.
+
+        THE one construction site for the hypothesis ledger, the milestone
+        ledger, the science monitor and telemetry. There used to be two: the
+        constructor built the ledger, and ``_absorb_state`` — which runs at the
+        start of every turn — rebuilt it with ``if self._ledger is None``,
+        knowing nothing about why the constructor had left it None. Three
+        consequences, all of them silent:
+
+        * ``graph_builder`` hands ``notes_dir`` to the entry node alone, so it
+          alone owns the ledgers. Any other orchestrating node re-acquired one
+          on its first turn, undoing that decision.
+        * Only the ledger was re-pointed when the run's notes dir differed from
+          the constructor's; the milestone ledger and telemetry kept writing to
+          the stale path.
+        * The science monitor, built once in the constructor, was never
+          rebuilt at all — so a node whose ledger was resurrected ran with the
+          ledger ON and the monitor OFF.
+
+        Ownership is fixed at construction (``_owns_epistemics``); this only
+        ever rebuilds at a corrected path, never grants ownership.
+        """
+        from ..epistemics.milestones import MilestoneLedger
+        from ..infra.telemetry import Telemetry
+        from ..runtime.settings import get_bool
+
+        notes = self._current_notes_dir
+        if not self._owns_epistemics or notes is None:
+            self._ledger = None
+            self._milestones = None
+            self._science_monitor = None
+            self._telemetry = None
+            return
+
+        # Hypothesis ledger — persists hypotheses.json
+        self._ledger: HypothesisLedger | None = HypothesisLedger(notes)
+
+        # Milestone ledger (process policy) — persists milestones.json.
+        # Seeded with the config default gates unless disabled. DISTINCT from
+        # the hypothesis ledger (epistemics): process vs what's-true.
+        self._milestones: MilestoneLedger | None = None
+        if get_bool("milestones_enabled", True):
+            self._milestones = MilestoneLedger(notes)
+            # C3 switchable: the draft-pipeline gate seeds only when the
+            # pipeline-deliverable knob is on (off = byte-identical to today).
+            self._milestones.seed_defaults(
+                include_pipeline=get_bool("pipeline_deliverable", True))
+
+        # Science drift monitor — needs the delegation log and nothing else.
+        # It used to be gated on the hypothesis ledger too, via a constructor
+        # argument it stored and never read, so disabling the ledger disabled
+        # the monitor as well.
+        self._science_monitor: ScienceMonitor | None = None
+        if self._delegation_log is not None:
+            self._science_monitor = ScienceMonitor(
+                self._delegation_log,
+                diagnostics_writer=self._record_science_drift,
+                role_of=self._role_of,
+            )
+
+        # Separable per-call telemetry — additive, off the decision path.
+        # Lives under debug/telemetry/ (notes is debug/strategizer_notes).
+        self._telemetry: Telemetry | None = Telemetry(notes.parent)
 
     # ── Authoritative delegation status (audit BF-0) ─────────────────────────
     # The persistent delegation_log owns existence + terminal status: it
@@ -502,11 +544,16 @@ class OrchestrationMixin:
         # Update notes_dir from current state run_dir
         run_dir = state.get("run_dir")
         if run_dir:
-            self._current_notes_dir = (
-                Path(run_dir) / "debug" / "strategizer_notes"
-            )
-            if self._ledger is None:
-                self._ledger = HypothesisLedger(self._current_notes_dir)
+            _notes = Path(run_dir) / "debug" / "strategizer_notes"
+            if _notes != self._current_notes_dir:
+                # The run's real notes dir differs from the one the
+                # constructor saw. Re-point EVERYTHING that lives there, not
+                # just the hypothesis ledger — the milestone ledger and
+                # telemetry used to keep writing to the stale path. Nodes that
+                # do not own the ledgers still track the path (the critic gate
+                # reads run files through it) but acquire nothing.
+                self._current_notes_dir = _notes
+                self._install_epistemics()
             # Wire canonical store dir into ScienceMonitor lazily.
             # store_dir is the ExperimentData *project_dir* (run_dir/
             # experiment_data), NOT the folder holding the CSVs. ExperimentData

@@ -48,11 +48,19 @@ class Violation:
 
 
 class ScienceMonitor:
-    """Evaluates UNLEDGERED_EVALS; formats bounded corrective injections."""
+    """Evaluates UNLEDGERED_EVALS; formats bounded corrective injections.
+
+    Takes no hypothesis ledger. It used to accept one and store it without
+    ever reading it — a leftover from when the hypothesis rules lived here,
+    before they moved to the ``HypothesisUpdate`` data boundary (see the
+    module docstring). The dead parameter was load-bearing in the wrong way:
+    the construction site gated the monitor on ``ledger is not None``, so
+    turning the hypothesis ledger off silently turned the drift monitor off
+    too. Its live rules read only the delegation log and the store.
+    """
 
     def __init__(
         self,
-        ledger,
         delegation_log,
         diagnostics_writer: Callable[[dict], None] | None = None,
         stale_k: int = 3,       # kept for API compat, unused
@@ -61,7 +69,6 @@ class ScienceMonitor:
         store_dir: str | None = None,
         role_of: Callable[[str], str] | None = None,
     ) -> None:
-        self._ledger = ledger
         self._dlog = delegation_log
         self._diag = diagnostics_writer
         # Maps a node name -> its role, so UNLEDGERED_EVALS can exempt roles
