@@ -1,0 +1,103 @@
+"""Explicit argument > env > config.yaml > default.
+
+Two defects fixed here, both of which a sweep would have run straight into.
+
+`settings._raw` checked `F3DASM_<KEY>` FIRST, ahead of everything. The docs
+already say that channel "is for secrets and one-off overrides — it is not
+where a study's settings belong", so the implementation contradicted the
+documented intent: a stale export left in a shell beat the study's own config
+and would have beaten a caller passing knobs programmatically, which for an
+ablation means an arm running under a label it does not have.
+
+And `settings` holds ONE process-global mapping installed at construction, so
+building a second AgenticRun before running the first silently reconfigured it.
+"""
+from __future__ import annotations
+
+import pytest
+
+from a3dasm._src.runtime import settings
+
+
+@pytest.fixture(autouse=True)
+def _clean():
+    settings.configure(None)
+    yield
+    settings.configure(None)
+
+
+def test_explicit_beats_the_study_config():
+    settings.configure({"debug": False}, {"debug": True})
+    assert settings.get_bool("debug", False) is True
+
+
+def test_explicit_beats_a_stale_environment_variable(monkeypatch):
+    """The one that matters for a sweep: a forgotten shell export must not
+    silently override an arm."""
+    monkeypatch.setenv("F3DASM_MILESTONES_ENABLED", "1")
+    settings.configure({}, {"milestones_enabled": False})
+    assert settings.get_bool("milestones_enabled", True) is False
+
+
+def test_env_still_beats_the_study_config(monkeypatch):
+    """Unchanged: env remains an override channel for anything not passed
+    explicitly."""
+    monkeypatch.setenv("F3DASM_RECURSION_LIMIT", "7")
+    settings.configure({"recursion_limit": 99})
+    assert settings.get_int("recursion_limit", 1) == 7
+
+
+def test_config_beats_the_default():
+    settings.configure({"recursion_limit": 42})
+    assert settings.get_int("recursion_limit", 1) == 42
+
+
+def test_an_unknown_explicit_knob_raises():
+    """A misspelled override must not quietly resolve to the default: that is
+    the baseline running under an arm's label, reported as a null result."""
+    with pytest.raises(ValueError, match="milstones_enabled"):
+        settings.configure({}, {"milstones_enabled": False})
+
+
+def test_an_unknown_config_knob_still_only_warns(caplog):
+    """Deliberately lenient — a stale config block should not make a study
+    unstartable."""
+    with caplog.at_level("WARNING"):
+        settings.configure({"dbeug": True})
+    assert "dbeug" in caplog.text
+
+
+def test_resolved_reports_what_the_run_actually_ran_with(monkeypatch):
+    """The condition recorded from the run itself, rather than asserted by
+    whatever launched it."""
+    monkeypatch.setenv("F3DASM_DEBUG", "1")
+    settings.configure({"recursion_limit": 42}, {"milestones_enabled": False})
+
+    out = settings.resolved()
+
+    assert out["milestones_enabled"] is False   # explicit
+    assert out["debug"] == "1"                  # env
+    assert out["recursion_limit"] == 42         # config
+    assert "llm_retry_max" not in out           # untouched → absent, not faked
+
+
+def test_constructing_a_second_run_does_not_reconfigure_the_first(tmp_path):
+    """settings is process-global, so configure() belongs in execute(), not in
+    __init__ where merely building another run would retarget this one."""
+    from a3dasm._src.runtime.agent_runtime import AgenticRun
+
+    def _study(name, limit):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "PROBLEM_STATEMENT.md").write_text("# test\n")
+        (d / "config.yaml").write_text(
+            f"model: claude-haiku-4-5-20251001\nruntime:\n  recursion_limit: {limit}\n")
+        return d
+
+    first = AgenticRun(study_dir=_study("a", 11), interactive=False)
+    AgenticRun(study_dir=_study("b", 22), interactive=False)
+
+    # Before execute() the process-global mapping is whatever was installed
+    # last; what matters is that running the FIRST one installs its own.
+    settings.configure(first._study_runtime, first._runtime_override)
+    assert settings.get_int("recursion_limit", 0) == 11

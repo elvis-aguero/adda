@@ -2,10 +2,17 @@
 
 Run KNOBS (debug, recursion_limit, idle timeouts, retry, backstop, …) live in
 the ``runtime:`` block of a study's ``config.yaml``. Environment variables are
-override/secrets only: an ``F3DASM_<KEY>`` variable, when set, overrides the
-config value. Resolution precedence, per knob:
+override/secrets only. Resolution precedence, per knob:
 
-    env var (F3DASM_<UPPER_KEY>)  >  configured config.yaml value  >  default
+    explicit argument  >  env var (F3DASM_<UPPER_KEY>)  >  config.yaml  >  default
+
+The explicit tier is what a caller passes as ``AgenticRun(runtime={...})``. It
+outranks the environment because the docs already say that channel "is for
+secrets and one-off overrides — it is not where a study's settings belong": a
+stale ``F3DASM_MILESTONES_ENABLED`` left exported in a shell used to beat every
+caller silently, which for a sweep means an arm that ran under a label it did
+not have. An explicit argument is the most deliberate statement of intent
+there is, so it wins.
 
 ``AgenticRun`` calls :func:`configure` once at run start with the parsed
 ``runtime`` mapping. Read sites call :func:`get_bool` / :func:`get_int` /
@@ -23,6 +30,7 @@ __all__ = [
     "KNOWN_KEYS",
     "configure",
     "get_bool",
+    "resolved",
     "get_int",
     "get_float",
     "get_str",
@@ -60,17 +68,37 @@ KNOWN_KEYS: frozenset[str] = frozenset({
 
 _lock = threading.Lock()
 _config: dict = {}
+_explicit: dict = {}
 
 _TRUE = {"1", "true", "yes", "on"}
 
 
-def configure(config: dict | None) -> None:
-    """Install the run's ``runtime`` config mapping as the knob source of truth.
+def configure(config: dict | None, explicit: dict | None = None) -> None:
+    """Install this run's knobs.
+
+    ``config`` is the study's ``runtime:`` block; ``explicit`` is what a caller
+    passed programmatically and outranks both it and the environment.
 
     Replaces any prior mapping (each run installs its own). Pass ``None`` or an
-    empty dict to clear (e.g. between tests)."""
-    global _config
+    empty dict to clear (e.g. between tests).
+
+    An unknown key is treated differently depending on where it came from. From
+    ``config.yaml`` it warns: a stale block should not make a study
+    unstartable, and that leniency is deliberate. From ``explicit`` it RAISES —
+    a caller that misspells a knob is not asking for the default, and for a
+    sweep a typo'd override means the baseline runs under an arm's label and
+    reports as a null result."""
+    global _config, _explicit
     cfg = dict(config or {})
+    exp = dict(explicit or {})
+
+    bad = sorted(set(exp) - KNOWN_KEYS)
+    if bad:
+        raise ValueError(
+            f"unknown runtime knob(s) {', '.join(repr(k) for k in bad)}. "
+            f"Known knobs: {', '.join(sorted(KNOWN_KEYS))}"
+        )
+
     unknown = sorted(set(cfg) - KNOWN_KEYS)
     if unknown:
         # A warning, not an error: an unknown knob is far more often a typo
@@ -85,10 +113,27 @@ def configure(config: dict | None) -> None:
         )
     with _lock:
         _config = cfg
+        _explicit = exp
+
+
+def resolved() -> dict:
+    """Every knob this run actually runs with, after precedence is applied.
+
+    The condition a run was executed under, recorded from the run itself
+    rather than asserted by whatever launched it."""
+    out = {}
+    for key in sorted(KNOWN_KEYS):
+        v = _raw(key)
+        if v is not None:
+            out[key] = v
+    return out
 
 
 def _raw(key: str):
-    """Resolved raw value for ``key``: env override > config.yaml > None."""
+    """Resolved raw value: explicit > env > config.yaml > None."""
+    with _lock:
+        if key in _explicit:
+            return _explicit[key]
     env = os.environ.get("F3DASM_" + key.upper())
     if env is not None:
         return env

@@ -1228,9 +1228,30 @@ class DelegationTools:
             # yet. Once the backlog is cleared, every delegation must cite a
             # hypothesis. (Tied to the existing milestone backlog, not a
             # phase taxonomy the agent controls.)
+            # DISABLED is not EMPTY. `_ms is None` means the milestone feature
+            # is switched off, not that its backlog is cleared — but this read
+            # it as "no pending milestones" and so demanded a hypothesis link
+            # from the very first delegation, including the setup ones the
+            # comment above exempts. Turning milestones off silently tightened
+            # an unrelated gate: a change that would have shown up as a
+            # milestone effect while belonging to neither feature.
+            #
+            # So the exemption takes its signal from the hypothesis ledger too
+            # — before anything has been proposed there is nothing to cite,
+            # whatever the milestone feature is doing. With milestones on this
+            # is exactly today's behaviour (the backlog clause still decides);
+            # with them off the rule keeps working instead of inverting.
             _ms = getattr(node, "_milestones", None)
-            _backlog_open = _ms is not None and bool(_ms.pending())
-            if not _backlog_open:
+            if _ms is not None:
+                _setup_phase = bool(_ms.pending())
+            else:
+                # No milestone feature, so no backlog to read. Fall back to a
+                # signal this rule owns: before any hypothesis exists there is
+                # nothing to cite. It still CLOSES — the first proposal ends
+                # the exemption for good — which is what makes it a phase and
+                # not a permanent escape.
+                _setup_phase = not node._ledger.list_all()
+            if not _setup_phase:
                 return (
                     "ERROR: hypothesis_ids must not be empty. "
                     "Every delegation must be linked to at "

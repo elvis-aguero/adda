@@ -835,11 +835,25 @@ def test_delegate_id_is_sequential(tmp_path):
 
 
 def test_delegate_requires_hypothesis_ids_when_ledger_present(tmp_path):
-    """Delegate() with empty hypothesis_ids returns ERROR when ledger is active."""
+    """Delegate() with empty hypothesis_ids returns ERROR once there is
+    something to cite.
+
+    The setup-phase exemption defers the requirement while nothing has been
+    proposed yet; this test proposes first so the exemption has closed. It used
+    to pass without proposing, but only because this module disables
+    milestones: `_ms is None` was read as "backlog empty", which demanded a
+    link from the very first delegation. That coupling is gone.
+    """
     error_result = []
 
     class EmptyHypoAdapter(StubAdapter):
         def invoke(self, messages):
+            self.closure_tools["HypothesisPropose"](
+                statement="Claim below 1.0",
+                falsification_criterion="best_y >= 1.0",
+                prediction="best_y < 1.0",
+                prior=0.5,
+            )
             r = self.closure_tools["Delegate"](
                 target="implementer", intent="task", expected_report="",
                 hypothesis_ids=[],
@@ -859,6 +873,33 @@ def test_delegate_requires_hypothesis_ids_when_ledger_present(tmp_path):
     )
     node(make_state())
     assert error_result and error_result[0].startswith("ERROR:")
+
+
+def test_delegate_is_exempt_before_anything_can_be_cited(tmp_path):
+    """Setup delegations (oracle wrapping, literature review) happen before any
+    hypothesis exists and have nothing to link to."""
+    from a3dasm._src.nodes import Node
+
+    result = []
+
+    class SetupAdapter(StubAdapter):
+        def invoke(self, messages):
+            result.append(self.closure_tools["Delegate"](
+                target="implementer", intent="wrap the oracle",
+                expected_report="", hypothesis_ids=[],
+            ))
+            self.closure_tools["Done"](summary="done")
+            return "Done."
+
+    adapter = SetupAdapter()
+    node = Node(
+        adapter, name="strategizer", outgoing=["implementer"],
+        spec=_ledger_spec(), worker_adapters={"implementer": StubAdapter()},
+        notes_dir=tmp_path,
+    )
+    node(make_state())
+
+    assert result and not result[0].startswith("ERROR:")
 
 
 def test_delegate_wraps_bare_string_hypothesis_id(tmp_path):

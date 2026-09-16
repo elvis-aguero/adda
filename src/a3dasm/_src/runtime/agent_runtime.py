@@ -159,12 +159,25 @@ class AgenticRun:
     review_statement : bool, default True
         Run the advisory pre-run problem-statement review. Never blocks an
         autonomous run.
+    runtime : dict, optional
+        Explicit run knobs, overriding the study's ``runtime:`` block AND the
+        environment — the precedence a caller's deliberate argument deserves.
+        An unrecognised key raises (unlike ``config.yaml``, where a stale key
+        only warns): a sweep that misspells a knob would otherwise run the
+        baseline under an arm's label.
 
     Examples
     --------
     >>> from a3dasm import AgenticRun
     >>> report = AgenticRun(study_dir="studies/my_study").execute()
     """
+
+    # Knob sources, declared at class level so an instance built without
+    # __init__ (several tests construct partial runs via __new__) still has
+    # them, meaning "nothing configured, no overrides". Rebound per instance
+    # by __init__; never mutated in place.
+    _study_runtime: dict = {}
+    _runtime_override: dict = {}
 
     def __init__(
         self,
@@ -181,13 +194,21 @@ class AgenticRun:
         container_image: str = "f3dasm-agentic:latest",
         resume_from: Path | None = None,
         review_statement: bool = True,
+        runtime: dict | None = None,
     ) -> None:
         self.study_dir = Path(study_dir).resolve()
         cfg = _load_study_config(self.study_dir)
         # config.yaml is the source of truth for run knobs (debug, timeouts,
-        # retry, backstop, recursion_limit, …). Install the `runtime:` block so
-        # scattered read sites resolve via settings (env still overrides).
-        settings.configure(cfg.get("runtime") or {})
+        # retry, backstop, recursion_limit, …); `runtime=` is a caller's
+        # explicit override of it and outranks both it and the environment.
+        #
+        # Installed in execute(), NOT here: settings holds one process-global
+        # mapping, so constructing a second AgenticRun used to silently
+        # reconfigure the first. Only an unknown key in `runtime=` is rejected
+        # now, at construction, where the traceback points at the caller.
+        self._runtime_override: dict = dict(runtime or {})
+        self._study_runtime: dict = dict(cfg.get("runtime") or {})
+        settings.configure(self._study_runtime, self._runtime_override)
 
         _backend_cfg = cfg.get("backend", "claude")
         self._backend = _backend_cfg
@@ -384,6 +405,10 @@ class AgenticRun:
         """
         if getattr(self, "_container", False):
             return self._execute_in_container()
+        # Install this run's knobs HERE, not at construction: the mapping is
+        # process-global, so building two AgenticRun objects before running
+        # either would leave both executing under the second one's config.
+        settings.configure(self._study_runtime, self._runtime_override)
         ctx = self._prepare_run()
         result = self._invoke_graph(ctx)
         return self._finalize_run(ctx, result)
