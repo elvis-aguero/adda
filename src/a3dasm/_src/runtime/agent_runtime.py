@@ -23,7 +23,7 @@ from ..prompts.agent_prompts import (
     RUN_PATHS_PREAMBLE_TEMPLATE,
     WORKSPACE_PREAMBLE_TEMPLATE,
 )
-from . import settings, terminal
+from . import features, settings, terminal
 from .graph_builder import build_graph
 from .graph_state import AgenticState, Delegation, Report, StudyConfig, Task
 from .run_setup import (
@@ -1268,7 +1268,8 @@ class AgenticRun:
                 resources=self._resource_stanza(run_dir, for_worker=False),
                 knowledge=self._kb_menu(_role),
             )
-            system_prompt = preamble + agent.system_prompt
+            system_prompt = preamble + features.strip_disabled_sections(
+                agent.system_prompt)
             cwd = self.study_dir
         else:
             if run_dir is not None:
@@ -1286,7 +1287,8 @@ class AgenticRun:
                 resources=self._resource_stanza(run_dir, for_worker=_is_campaign),
                 knowledge=self._kb_menu(_role),
             )
-            system_prompt = preamble + agent.system_prompt
+            system_prompt = preamble + features.strip_disabled_sections(
+                agent.system_prompt)
             # Critics read from the study tree, not from a delegation subfolder.
             if getattr(agent, "role", None) == "critic":
                 cwd = self.study_dir

@@ -173,6 +173,7 @@ class OrchestrationMixin:
         """
         from ..epistemics.milestones import MilestoneLedger
         from ..infra.telemetry import Telemetry
+        from ..runtime import features
         from ..runtime.settings import get_bool
 
         notes = self._current_notes_dir
@@ -183,14 +184,20 @@ class OrchestrationMixin:
             self._telemetry = None
             return
 
-        # Hypothesis ledger — persists hypotheses.json
-        self._ledger: HypothesisLedger | None = HypothesisLedger(notes)
+        # Hypothesis ledger — persists hypotheses.json. Switchable: its tools
+        # and its prompt section are withheld by the same knob (runtime.
+        # features), so turning it off does not leave the agent commanded to
+        # use tools that error.
+        self._ledger: HypothesisLedger | None = (
+            HypothesisLedger(notes) if features.enabled("hypothesis_ledger")
+            else None
+        )
 
         # Milestone ledger (process policy) — persists milestones.json.
         # Seeded with the config default gates unless disabled. DISTINCT from
         # the hypothesis ledger (epistemics): process vs what's-true.
         self._milestones: MilestoneLedger | None = None
-        if get_bool("milestones_enabled", True):
+        if features.enabled("milestones_enabled"):
             self._milestones = MilestoneLedger(notes)
             # C3 switchable: the draft-pipeline gate seeds only when the
             # pipeline-deliverable knob is on (off = byte-identical to today).
@@ -202,7 +209,8 @@ class OrchestrationMixin:
         # argument it stored and never read, so disabling the ledger disabled
         # the monitor as well.
         self._science_monitor: ScienceMonitor | None = None
-        if self._delegation_log is not None:
+        if self._delegation_log is not None and features.enabled(
+                "science_monitor"):
             self._science_monitor = ScienceMonitor(
                 self._delegation_log,
                 diagnostics_writer=self._record_science_drift,

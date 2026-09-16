@@ -19,7 +19,6 @@ from .feedback import (
 )
 from .ledger import build_ledger_closures
 from .notebook import (
-    _NOTEBOOK_TOOL_NAMES,
     _strip_leading_md_header,
     build_notebook_closures,
 )
@@ -66,16 +65,17 @@ def build_routing_tools(node) -> dict:
         _ag = node._spec.nodes.get(node._name)
         if _ag is not None:
             _agent_tools = _ag.tools
-    # pipeline_deliverable: false strips the notebook-authoring tools
-    # themselves, not just the injected prompt preamble (BACKLOG #30) --
-    # otherwise the strategizer sees a toolset saturated with pipeline.ipynb
-    # capability regardless of what the study's own PROBLEM_STATEMENT.md says,
-    # and using it despite a contrary instruction is exactly what was
-    # observed in a real run. Done stays available (still needed to close a
-    # run); this only removes the notebook-authoring surface.
-    from ....runtime.settings import get_bool as _get_bool
-    if not _get_bool("pipeline_deliverable", True):
-        _agent_tools = _agent_tools - _NOTEBOOK_TOOL_NAMES
+    # A disabled feature takes its tools with it. Leaving them registered does
+    # not produce an agent without the feature -- it produces an agent that
+    # keeps calling a tool which returns "ERROR: ... not available in this
+    # run.", and every such return is counted as an ERROR_RETURN diagnostic.
+    # This generalises the hand-rolled pipeline_deliverable strip (BACKLOG
+    # #30), which was the only feature that did it: the strategizer otherwise
+    # saw a toolset saturated with pipeline.ipynb capability regardless of what
+    # the study's own PROBLEM_STATEMENT.md said, and used it. Done is never
+    # owned by a feature -- a run must always be able to close.
+    from ....runtime import features as _features
+    _agent_tools = _agent_tools - _features.disabled_tool_names()
 
     _fb = build_feedback_closures(node)
     _nb = build_notebook_closures(node)

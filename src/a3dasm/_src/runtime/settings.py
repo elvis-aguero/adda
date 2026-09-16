@@ -40,6 +40,7 @@ __all__ = [
 KNOWN_KEYS: frozenset[str] = frozenset({
     "debug",
     "followup_wait_s",
+    "hypothesis_ledger",
     "llm_max_buffer_mb",
     "llm_metadata_fetch",
     "llm_metadata_timeout_s",
@@ -53,6 +54,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "pipeline_deliverable",
     "recursion_limit",
     "run_backstop_multiple",
+    "science_monitor",
     "semantic_scholar_api_key",
 })
 

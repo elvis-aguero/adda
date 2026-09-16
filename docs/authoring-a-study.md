@@ -81,7 +81,9 @@ rather than silently reverting to the default.
 | key | meaning | default |
 |---|---|---|
 | `debug` | capture full transcripts, diagnostics and per-delegation logs under `runs/<ts>/debug/`. Required for the run-analysis workflow | `false` |
+| `hypothesis_ledger` | the run's falsifiable-hypothesis record. Off withholds its five tools and its prompt section too, so the agent is never told to use a tool that is gone. PARTIAL: the Popperian workflow is argued throughout the strategizer's method, which stays | `true` |
 | `milestones_enabled` | run the process-milestone gate | `true` |
+| `science_monitor` | the runtime drift monitor that flags unledgered evals and unstamped rows, and escalates repeats to the critic | `true` |
 | `pipeline_deliverable` | require `pipeline.ipynb` as the deliverable; turn off for a study with no notebook | `true` |
 | `recursion_limit` | LangGraph step ceiling for one run | `2000` |
 | `max_consecutive_errors` | consecutive failures to one target before the run halts | `12` |

@@ -21,15 +21,11 @@ from pathlib import Path
 from typing import Any
 
 # Tool names whose entire purpose is authoring/checking pipeline.ipynb.
-# Stripped from a strategizer's effective toolset when pipeline_deliverable
-# is false (BACKLOG #30) — Done is deliberately NOT in this set, it is still
-# needed to close a run regardless of whether a notebook exists.
-_NOTEBOOK_TOOL_NAMES = frozenset({
-    "WriteDeliverable", "CheckDeliverable",
-    "AddPipelineCell", "AddPipelineMarkdownCell",
-    "EditPipelineCell", "DeletePipelineCell",
-    "ShowNotebook", "RunPipelineCell",
-})
+# The notebook-authoring surface is owned by the `pipeline_deliverable`
+# feature and declared once, with it, in runtime.features (BACKLOG #30) —
+# alongside the knob that switches it, so the two cannot drift apart. Done is
+# deliberately NOT in that set: a run must be able to close regardless of
+# whether a notebook exists.
 
 # ── The deliverable's canonical structure ────────────────────────────────────
 # The four f3dasm pillars + the Popperian spine are PLUMBING: the cell name

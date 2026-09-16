@@ -3191,10 +3191,16 @@ def test_done_critic_gate_embeds_ledger_and_falsification_flags(tmp_path):
             )
             # 4b. Resolve process milestones (orthogonal to this test) so the
             # Done() close-gate lets us reach the critic gate under test.
+            # (No-op while this module disables milestones_enabled: the
+            # feature's tools are withheld with it, so there is no backlog to
+            # clear and no gate to satisfy. Kept conditional so the block still
+            # works if the fixture is ever changed.)
             import re as _re
-            for _mid in _re.findall(
-                    r"M\d{3}", self.closure_tools["MilestoneList"]()):
-                self.closure_tools["MilestoneSkip"](_mid, "n/a for this test")
+            if "MilestoneList" in self.closure_tools:
+                for _mid in _re.findall(
+                        r"M\d{3}", self.closure_tools["MilestoneList"]()):
+                    self.closure_tools["MilestoneSkip"](
+                        _mid, "n/a for this test")
             # 5. Two-shot Done()
             self.closure_tools["Done"](summary="H1 is supported; below 1.0.")
             self.closure_tools["Done"](summary="H1 is supported; below 1.0.")
@@ -3315,10 +3321,16 @@ def test_done_gate_mode_critic_call_is_logged_as_a_delegation(tmp_path):
             self.closure_tools["WriteDeliverable"](
                 "pipeline.py", "# pipeline\nprint('REPRODUCED: 0.0')"
             )
+            # (No-op while this module disables milestones_enabled: the
+            # feature's tools are withheld with it, so there is no backlog to
+            # clear and no gate to satisfy. Kept conditional so the block still
+            # works if the fixture is ever changed.)
             import re as _re
-            for _mid in _re.findall(
-                    r"M\d{3}", self.closure_tools["MilestoneList"]()):
-                self.closure_tools["MilestoneSkip"](_mid, "n/a for this test")
+            if "MilestoneList" in self.closure_tools:
+                for _mid in _re.findall(
+                        r"M\d{3}", self.closure_tools["MilestoneList"]()):
+                    self.closure_tools["MilestoneSkip"](
+                        _mid, "n/a for this test")
             self.closure_tools["Done"](summary="H1 is supported.")
             self.closure_tools["Done"](summary="H1 is supported.")
             return "Done."
@@ -3444,10 +3456,16 @@ def test_gate_and_feedback_critic_messages_carry_problem_statement(tmp_path):
             self.closure_tools["WriteDeliverable"](
                 "pipeline.py", "# pipeline\nprint('REPRODUCED: 0.0')"
             )
+            # (No-op while this module disables milestones_enabled: the
+            # feature's tools are withheld with it, so there is no backlog to
+            # clear and no gate to satisfy. Kept conditional so the block still
+            # works if the fixture is ever changed.)
             import re as _re
-            for _mid in _re.findall(
-                    r"M\d{3}", self.closure_tools["MilestoneList"]()):
-                self.closure_tools["MilestoneSkip"](_mid, "n/a for this test")
+            if "MilestoneList" in self.closure_tools:
+                for _mid in _re.findall(
+                        r"M\d{3}", self.closure_tools["MilestoneList"]()):
+                    self.closure_tools["MilestoneSkip"](
+                        _mid, "n/a for this test")
             self.closure_tools["Done"](summary="H1 is supported.")
             self.closure_tools["Done"](summary="H1 is supported.")
             return "Done."

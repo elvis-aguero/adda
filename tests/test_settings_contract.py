@@ -36,6 +36,12 @@ def _keys_read_in_source() -> set[str]:
         if path.name == "settings.py":
             continue  # its own signatures, not call sites
         found |= {m[0] for m in _CALL.findall(path.read_text(encoding="utf-8"))}
+    # runtime.features reads its knobs through get_bool(f.key, f.default) —
+    # one call site, many keys — so the literal-argument grep above cannot see
+    # them. The registry IS the read site: declaring a Feature is what makes
+    # the knob live, and features.enabled() raises on a key it does not know.
+    from a3dasm._src.runtime import features
+    found |= set(features.FEATURE_KEYS)
     return found
 
 
