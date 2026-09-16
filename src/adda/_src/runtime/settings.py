@@ -48,6 +48,7 @@ __all__ = [
 KNOWN_KEYS: frozenset[str] = frozenset({
     "citation_weighting",
     "debug",
+    "f3dasm_api",
     "followup_wait_s",
     "hypothesis_ledger",
     "llm_max_buffer_mb",

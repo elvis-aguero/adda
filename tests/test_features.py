@@ -26,11 +26,30 @@ def _clean_settings():
     settings.configure(None)
 
 
-def _prompt_for(feature):
-    """The role prompt that declares the sections this feature claims."""
-    from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
+def _all_role_prompts() -> dict[str, str]:
+    """Every agent's system prompt, by class name.
 
-    return STRATEGIZER_SYSTEM_PROMPT
+    A feature's section can live in ANY role's prompt — the hypothesis ledger
+    is the strategizer's, the f3dasm API lookup belongs to the two agents that
+    write f3dasm. Checking only the strategizer would let a section in another
+    role silently stop being stripped.
+    """
+    import inspect
+
+    from adda._src import agents
+
+    out = {}
+    for name in dir(agents):
+        obj = getattr(agents, name)
+        if inspect.isclass(obj) and isinstance(
+                getattr(obj, "system_prompt", None), str):
+            out[name] = obj.system_prompt
+    return out
+
+
+def _prompt_for(_feature=None) -> str:
+    """All role prompts concatenated — for existence checks."""
+    return "\n".join(_all_role_prompts().values())
 
 
 # --- drift: a declaration that does not match reality ----------------------
@@ -40,9 +59,11 @@ def _prompt_for(feature):
 def test_every_declared_section_exists_in_the_prompt(tag):
     """A renamed tag would otherwise silently stop being stripped, and the
     feature would quietly go back to being half-disabled."""
-    prompt = _prompt_for(tag)
-    assert f"<{tag}>" in prompt, f"no <{tag}> section to strip"
-    assert f"</{tag}>" in prompt, f"<{tag}> is never closed"
+    owners = [r for r, p in _all_role_prompts().items() if f"<{tag}>" in p]
+    assert owners, f"no role prompt contains a <{tag}> section to strip"
+    for r in owners:
+        assert f"</{tag}>" in _all_role_prompts()[r], (
+            f"<{tag}> is never closed in {r}")
 
 
 @pytest.mark.parametrize("feature", features.FEATURES, ids=lambda f: f.key)

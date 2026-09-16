@@ -109,6 +109,24 @@ FEATURES: tuple[Feature, ...] = (
         sections=("science_monitor",),
     ),
     Feature(
+        key="f3dasm_api",
+        default=True,
+        tools=frozenset({"ConsultF3dasmDocs"}),
+        sections=("f3dasm_api_lookup",),
+        # The tag is f3dasm_api_LOOKUP, not f3dasm_api: the implementer
+        # prompt already owns a <f3dasm_api> section — 217 hand-written lines
+        # (~2,800 tokens) of API excerpt that this tool makes largely
+        # redundant. Reusing the name would have made the ablation strip that
+        # excerpt too, so the arm would measure "no cheat sheet AND no lookup"
+        # while claiming to measure the lookup.
+        #
+        # Not pervasive: f3dasm is named throughout both prompts, but nothing
+        # outside this section tells the agent to CONSULT it. Off removes the
+        # instruction and the tool together, leaving an agent that writes
+        # f3dasm from memory plus the excerpt — the state before this tool
+        # existed, and so an honest control arm.
+    ),
+    Feature(
         key="pipeline_deliverable",
         default=True,
         tools=NOTEBOOK_TOOLS,

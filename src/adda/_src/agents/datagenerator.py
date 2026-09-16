@@ -67,6 +67,41 @@ Only delegate if a literature_reviewer is listed in your available targets:
 
 <f3dasm_datagenerator_api>
 """ + F3DASM_CORE_IDIOMS + """
+<f3dasm_api_lookup>
+The f3dasm reference above is a fixed excerpt. You can also look up ANY f3dasm
+symbol on demand -- signature, docstring and source -- read off the f3dasm this
+run actually executes against, so it is never out of date. The tool is in your
+<tools> catalog; call it by the exact name given there.
+
+CONSULT IT BEFORE GUESSING an f3dasm name, signature, or argument, and whenever
+the excerpt above does not list what you need. A wrong guess costs a delegation
+to discover; a lookup costs one tool call.
+
+Two steps, like a reference. Pass a DESCRIPTION of what you want to do and you
+get a short list of matching symbols, one line each. Pass one of those names
+back and you get its entry: the import line to write, the full signature, and
+the docstring. Ask for its source as well when the docstring does not settle
+the question.
+
+SEARCH IS LEXICAL, not semantic: it matches your words against symbol names
+(weighted heavily) and docstrings. Prefer the real name when you know it;
+otherwise describe the operation in f3dasm's own vocabulary -- "sample",
+"store", "optimize", "domain". Singular/plural and sampler/sampling are
+handled.
+
+TWO THINGS IT TELLS YOU THAT NOTHING ELSE WILL:
+  - The PUBLIC import path. f3dasm defines its classes under f3dasm._src.*,
+    which is NOT what you import. An entry always gives the line to write and
+    never the private path. A symbol marked PRIVATE is internal: read it to
+    understand a traceback, but do not import it.
+  - Where the RUNTIME DIFFERS from f3dasm's own documentation. Two
+    ExperimentData methods are replaced at import time; for those the entry
+    says so at the top and shows what actually executes.
+
+It covers f3dasm ONLY -- not your study code and not other libraries. Cite the
+symbol you used so the choice stays auditable.
+</f3dasm_api_lookup>
+
 ─── PATTERN A — decorator (preferred for stateless, pure-function wrappers) ──
   from f3dasm import datagenerator
 
@@ -243,6 +278,31 @@ class DataGeneratorAgent(Agent):
     choose samplers, or optimize. Consults the literature reviewer for
     methodology on novel physics before implementing.
     """
+
+    def build_closure_tools(
+        self,
+        study_dir,
+        delegation_id=None,
+        lit_reviewer_notes_dir=None,
+    ) -> dict:
+        """Base corpus tools, plus the on-demand f3dasm API lookup.
+
+        Only the two agents that WRITE f3dasm carry this tool. Every tool costs
+        catalog tokens in every model call for the agent holding it, so a
+        lookup the critic and strategizer never need does not go to them.
+
+        super() is called, so the literature-corpus tools survive: this agent
+        wants papers for methodology AND the API for mechanics.
+        """
+        tools = super().build_closure_tools(
+            study_dir,
+            delegation_id=delegation_id,
+            lit_reviewer_notes_dir=lit_reviewer_notes_dir,
+        ) or {}
+        from ..knowledge.f3dasm_api import build_f3dasm_api_closures
+        tools.update(build_f3dasm_api_closures())
+        return tools
+
 
     system_prompt = DATA_GENERATOR_SYSTEM_PROMPT
     tools = frozenset({
