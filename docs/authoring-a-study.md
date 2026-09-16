@@ -97,6 +97,8 @@ rather than silently reverting to the default.
 | `llm_metadata_fetch` | look up model metadata (context window, pricing) at startup | `true` |
 | `llm_metadata_timeout_s` | seconds to wait for that lookup | `8.0` |
 | `llm_quantization` | quantization hint for a locally-served model | none |
+| `retrieval_mode` | corpus ranking strategy: `auto` (RRF when BM25+dense are available, else BM25, else substring), `hybrid`, `bm25`, `substring`. Only `auto` degrades — an explicitly requested mode that cannot be satisfied errors rather than silently falling back to a different one | `auto` |
+| `citation_weighting` | multiply BM25 scores by `1 + log10(citations+1)` before rank fusion. A popularity prior on the lexical side only; untested | `true` |
 | `semantic_scholar_api_key` | Semantic Scholar key; raises the literature rate limit | none |
 
 ## How designs get evaluated (the evaluator)

@@ -63,6 +63,9 @@ log = logging.getLogger(__name__)
 _subprocess_embedder_state: _SubprocessEmbedder | None | bool = None
 _subprocess_embedder_warned = False
 
+#: Declared ranking strategies. Only "auto" is allowed to degrade.
+_RETRIEVAL_MODES = frozenset({"auto", "hybrid", "bm25", "substring"})
+
 
 _CSV_FIELDS = [
     "paper_id",
@@ -121,6 +124,10 @@ class LiteratureCorpus:
     corpus_dir:
         Root directory.  Created on construction if absent.
     """
+
+    #: Ranking strategy the last search actually used — recorded, not
+    #: assumed, so an arm labelled 'hybrid' can be verified as one.
+    resolved_mode: str | None = None
 
     def __init__(self, corpus_dir: Path) -> None:
         self._corpus_dir = Path(corpus_dir)
@@ -392,9 +399,21 @@ class LiteratureCorpus:
         searched.  If the corpus contains no full-text papers, returns
         an actionable error guiding the agent to acquire full text.
 
-        Uses Reciprocal Rank Fusion (BM25 + dense embeddings) when
-        both ``rank_bm25`` and ``fastembed`` are installed.  Falls back
-        to BM25-only, then substring search.
+        The ranking strategy is DECLARED, not inferred. ``retrieval_mode``
+        (runtime knob) is one of:
+
+        ``auto``       RRF over BM25 + dense when both ``rank_bm25`` and
+                       ``fastembed`` are importable, else BM25-only, else
+                       substring. The historical behaviour, and the default.
+        ``hybrid``     RRF over BM25 + dense. Errors if either is missing.
+        ``bm25``       lexical only.  Errors if ``rank_bm25`` is missing.
+        ``substring``  no ranking at all.
+
+        Only ``auto`` degrades. An explicitly requested mode that cannot be
+        satisfied is an ERROR, because silently falling back means a run
+        labelled "hybrid" was actually BM25-only and nobody could tell — which
+        for an ablation arm is a mislabelled condition, not a graceful
+        recovery. ``self.resolved_mode`` records what actually ran.
 
         Returns up to *top_k* formatted passages with page citations,
         or ``"No results found."``.
@@ -402,6 +421,15 @@ class LiteratureCorpus:
         import math as _math
 
         import numpy as _np
+
+        from ..runtime.settings import get_bool, get_str
+
+        _mode = get_str("retrieval_mode", "auto").strip().lower()
+        if _mode not in _RETRIEVAL_MODES:
+            return (
+                f"ERROR: unknown retrieval_mode {_mode!r}."
+                f" Valid: {', '.join(sorted(_RETRIEVAL_MODES))}."
+            )
 
         csv_rows = self._load_csv()
         full_text_ids = {
@@ -449,6 +477,12 @@ class LiteratureCorpus:
 
         K_RRF = 60  # standard RRF constant
 
+        if _mode == "substring":
+            self.resolved_mode = "substring"
+            return self._search_substring(
+                query, top_k, full_text_ids=full_text_ids
+            )
+
         # --- BM25 ranking ---
         bm25_ranks: dict = {}
         try:
@@ -456,14 +490,20 @@ class LiteratureCorpus:
             tokenized = [_tokenize(c["text"]) for c in chunks]
             bm25 = BM25Okapi(tokenized)
             bm25_scores = bm25.get_scores(_tokenize(query))
-            # Apply citation weight
-            weighted = [
-                bm25_scores[i]
-                * (1 + _math.log10(
-                    citation_counts.get(chunks[i]["paper_id"], 0) + 1
-                ))
-                for i in range(len(chunks))
-            ]
+            # Citation weight: a POPULARITY prior multiplied into the lexical
+            # scores only, before rank fusion, so it also breaks the symmetry
+            # of the RRF weighting. It may well help; nobody has measured it.
+            # Switchable so that question can be asked.
+            if get_bool("citation_weighting", True):
+                weighted = [
+                    bm25_scores[i]
+                    * (1 + _math.log10(
+                        citation_counts.get(chunks[i]["paper_id"], 0) + 1
+                    ))
+                    for i in range(len(chunks))
+                ]
+            else:
+                weighted = list(bm25_scores)
             bm25_order = sorted(
                 range(len(chunks)),
                 key=lambda i: weighted[i],
@@ -472,14 +512,28 @@ class LiteratureCorpus:
             for rank, idx in enumerate(bm25_order):
                 bm25_ranks[idx] = rank
         except ImportError:
+            if _mode != "auto":
+                return (
+                    f"ERROR: retrieval_mode={_mode!r} needs rank_bm25, which is"
+                    " not installed. Install it, or set retrieval_mode to"
+                    " 'substring' (or 'auto' to allow a fallback)."
+                )
+            self.resolved_mode = "substring"
             return self._search_substring(
                 query, top_k, full_text_ids=full_text_ids
             )
 
         # --- Dense ranking (if embeddings available) ---
         dense_ranks: dict = {}
-        if emb_matrix is not None:
+        if _mode != "bm25" and emb_matrix is not None:
             model = self._get_embedding_model()
+            if model is None and _mode == "hybrid":
+                return (
+                    "ERROR: retrieval_mode='hybrid' needs a working embedder"
+                    " (fastembed), which is unavailable. Install it, or set"
+                    " retrieval_mode to 'bm25' (or 'auto' to allow a"
+                    " fallback)."
+                )
             if model is not None:
                 q_emb = _np.array(
                     # model.embed() may return a LIST (not a generator); next()
@@ -497,6 +551,14 @@ class LiteratureCorpus:
                 dense_order = _np.argsort(cos_scores)[::-1].tolist()
                 for rank, idx in enumerate(dense_order):
                     dense_ranks[idx] = rank
+
+        if _mode == "hybrid" and not dense_ranks:
+            return (
+                "ERROR: retrieval_mode='hybrid' needs dense embeddings, and"
+                " this corpus has none. Embed it, or set retrieval_mode to"
+                " 'bm25' (or 'auto' to allow a fallback)."
+            )
+        self.resolved_mode = "hybrid" if dense_ranks else "bm25"
 
         # --- RRF fusion ---
         if dense_ranks:

@@ -46,6 +46,7 @@ __all__ = [
 # and fails if one is missing from this set, so the list cannot drift behind
 # the code that reads it.
 KNOWN_KEYS: frozenset[str] = frozenset({
+    "citation_weighting",
     "debug",
     "followup_wait_s",
     "hypothesis_ledger",
@@ -61,6 +62,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "milestones_enabled",
     "pipeline_deliverable",
     "recursion_limit",
+    "retrieval_mode",
     "run_backstop_multiple",
     "science_monitor",
     "semantic_scholar_api_key",

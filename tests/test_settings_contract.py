@@ -112,8 +112,13 @@ def test_documented_default_matches_the_source(key):
     assert row, f"{key} has no row in the runtime table"
     documented = row.rsplit("|", 2)[1].strip().strip("`")
 
-    norm = {"False": "false", "True": "true", '""': "none"}
+    norm = {"False": "false", "True": "true", '""': "none", "''": "none"}
     expected = norm.get(src_default, src_default)
+    # A non-empty string default reads naturally in the table without its
+    # quote characters (`auto`, not `"auto"`); the empty string keeps its
+    # "none" spelling above.
+    if len(expected) >= 2 and expected[0] == expected[-1] and expected[0] in "\"'":
+        expected = expected[1:-1]
     assert documented == expected, (
         f"{key}: docs say {documented!r}, source default is {src_default!r}"
     )
