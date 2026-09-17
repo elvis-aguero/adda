@@ -674,8 +674,12 @@ const SECTIONS = new Map();   /* row key -> the section object it renders */
 function piecesBlock(sec, key){
   const pieces = sec.pieces || [];
   if(!pieces.length) return "";
-  return `<div class="pieces">
+  return `<div class="pieces" id="pcs-${key}">
     <div class="pieceshead">Editable pieces \u2014 ${pieces.length}</div>
+    <p class="secnote">The block above is assembled, so it has no single home — but
+      each stretch below is WRITTEN, in one file, and can be changed from here. What
+      is missing from this list is the values formatted in: they are supplied per run
+      and have no source text to edit.</p>
     ${pieces.map((pc,i) => {
       const pk = key + "-p" + i;
       SECTIONS.set(pk, pc);
@@ -720,6 +724,8 @@ function sectionRow(sec, key){
         <button class="copy" type="button" data-copy="${key}">copy text</button>
         ${sec.edit && sec.edit.ok
           ? `<button class="editbtn" type="button" data-edit="${key}">propose an edit</button>` : ""}
+        ${(sec.pieces||[]).length
+          ? `<a class="chip k-accent" href="#pcs-${key}">${sec.pieces.length} editable pieces \u2193</a>` : ""}
         <span data-editchip="${sec.edit && sec.edit.key ? sec.edit.key : ""}" data-row="${key}">${
           sec.edit && sec.edit.key ? editChip(sec.edit.key, key) : ""}</span>
       </div>
@@ -727,9 +733,9 @@ function sectionRow(sec, key){
       ${sec.edit && !sec.edit.ok
         ? `<p class="noedit"><b>Not editable from this page.</b> ${esc(sec.edit.why)}</p>` : ""}
       <div class="editslot" id="ed-${key}"></div>
+      ${piecesBlock(sec, key)}
       ${partLegend(sec)}
       <pre class="prompt" id="txt-${key}">${promptBody(sec)}</pre>
-      ${piecesBlock(sec, key)}
     </div>
   </div>`;
 }
