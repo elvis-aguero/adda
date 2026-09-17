@@ -172,6 +172,10 @@ PREFER f3dasm primitives over raw numpy/scipy equivalents.
 
   evaluator = get_evaluator()
   for _ in range(n_bo_steps):            # n_bo_steps from the budget guard
+      # propose_ei is YOURS to write (EI, minimization) — the working
+      # implementation, the botorch alternative and the three sign/guard
+      # mistakes that silently waste budget are one call away:
+      # ConsultHandbook("surrogate-guided-optimization")
       x_next = propose_ei(gp, X_train, y_train.min(), bounds)  # shape (d,)
       new_data = ExperimentData.from_data(        # wrapping idiom shown above
           data={0: ExperimentSample(_input_data={

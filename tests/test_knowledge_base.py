@@ -166,3 +166,39 @@ def test_every_kb_entry_title_is_at_most_100_chars():
         assert len(e.title) <= 100, (
             f"KB entry {e.id!r} title is {len(e.title)} chars (>100): {e.title!r}"
         )
+
+
+class TestPromptCrossReferences:
+    """Every chapter a prompt names by id must exist.
+
+    The prompts cite chapters by literal id — `ConsultHandbook("evaluate-
+    through-get-evaluator")`. A renamed or deleted entry turns that into an
+    agent following a pointer to nothing, and nothing else would catch it:
+    the citation is a string in a prompt, so no import breaks and no test
+    that only loads the corpus notices.
+    """
+
+    def _cited_ids(self):
+        import re
+        from pathlib import Path
+        src = Path(__file__).resolve().parent.parent / "src" / "adda" / "_src"
+        pat = re.compile(r'ConsultHandbook\(\s*["\']([a-z0-9-]+)["\']\s*\)')
+        return {
+            (m, f.relative_to(src).as_posix())
+            for f in src.rglob("*.py")
+            for m in pat.findall(f.read_text(encoding="utf-8"))
+        }
+
+    def test_at_least_one_prompt_cites_a_chapter(self):
+        """Guards the test itself: a regex that stops matching would
+        otherwise pass silently forever."""
+        assert self._cited_ids(), "no ConsultHandbook(<id>) citations found"
+
+    def test_every_cited_chapter_exists(self):
+        kb = KnowledgeBase.load()
+        missing = [
+            f"{where} cites ConsultHandbook({cid!r}), which is not a chapter"
+            for cid, where in sorted(self._cited_ids())
+            if kb.get(cid) is None
+        ]
+        assert not missing, "\n".join(missing)
