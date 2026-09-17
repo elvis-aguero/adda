@@ -95,6 +95,7 @@ __all__ = [
     "ADVERSARIAL_CRITIQUE_SYSTEM_PROMPT",
     "CHECKPOINT_STRATEGIZER_PROMPT",
     "IMPLEMENTER_RESET_PROMPT_TEMPLATE",
+    "DELEGATION_ROSTER_TEMPLATE",
     "RUN_PATHS_PREAMBLE_TEMPLATE",
     "WORKSPACE_PREAMBLE_TEMPLATE",
     "IMPLEMENTER_REPORT_RETRY_PROMPT",
@@ -179,6 +180,40 @@ the prior session — check before recomputing anything.
 
 # =============================================================================
 
+DELEGATION_ROSTER_TEMPLATE = """\
+<delegation_roster>
+THIS RUN'S GRAPH — generated from the live wiring, AUTHORITATIVE. These are
+the only agents that exist; any other name is not merely wrong, it is a target
+that cannot be created. Pass these names to Delegate(target=...) verbatim.
+{targets}
+A role described anywhere in this prompt but absent from this list IS NOT
+WIRED in this run. Do that work yourself or reshape it to fit the agents above
+— there is no general-purpose fallback agent beyond what is listed.
+</delegation_roster>
+"""
+"""The entry node's real delegation targets, injected per run.
+
+The static prompt describes a full cast — an implementer, a literature
+reviewer, a datagenerator — because that is the shape of the graph it was
+written against. A study runs whatever graph it declares, and an ablation arm
+deliberately runs a smaller one. The prose then names colleagues that do not
+exist, and the agent believes it: a campaign logged 15 delegations to an
+absent 'implementer' and 2 to an absent 'literature_reviewer'.
+
+The prompt was already careful in places — the literature-reviewer and
+datagenerator routes are both qualified "WHEN PRESENT", and the agent is told
+to take exact names from the Delegate tool's hints. What it also said,
+unconditionally, was that "the general implementer handles it" whenever no
+specialist matches. That is a designated fallback, and in a graph with no
+implementer it is a guaranteed miss on the bulk of the work — which is why
+'implementer' accounts for 15 of the 17 misses and the qualified roles for 2.
+
+So this is not extra emphasis on an instruction that already exists. It
+replaces a static claim about which agents exist with the generated truth,
+the same way ``render_tool_catalog`` replaced hand-listed tool names.
+"""
+
+
 RUN_PATHS_PREAMBLE_TEMPLATE = """\
 <run_paths>
 study_dir             = {study_dir}
@@ -196,7 +231,7 @@ canonical_store       = {experiment_data_dir}
   parametrizations), each its own store at a nested path — to load them all,
   use `from adda import load_experiments; experiments = load_experiments()`
   (returns {{name: ExperimentData}}; {{'default': ...}} for a single-experiment run).
-workspace_dir         = {debug_dir}/delegations
+{roster}workspace_dir         = {debug_dir}/delegations
 Use these absolute paths when calling Read() and WriteNote().
 Read() reads FILES, not directories — calling it on a folder fails with EISDIR.
 To see what is INSIDE a directory (e.g. the store layout), use Glob('<dir>/*')

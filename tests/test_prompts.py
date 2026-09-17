@@ -109,6 +109,7 @@ def test_run_paths_preamble_has_experiment_data_dir():
         experiment_data_dir="/s/runs/T/experiment_data",
         resources="",
         knowledge="",
+        roster="",
     )
     # exposed as the canonical-store project_dir with an explicit from_file call
     assert "canonical_store" in out
@@ -258,6 +259,7 @@ def test_run_paths_renders_delegations_not_workspace():
         experiment_data_dir="/s/runs/T/experiment_data",
         resources="",
         knowledge="",
+        roster="",
     )
     assert "delegations" in out, (
         "RUN_PATHS_PREAMBLE_TEMPLATE did not render 'delegations'"

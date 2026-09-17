@@ -278,9 +278,14 @@ def test_strategizer_no_optimization_agent_reference():
     assert "OptimizationAgent" not in STRATEGIZER_SYSTEM_PROMPT
 
 
-def test_strategizer_delegate_tool_hints_line():
+def test_strategizer_takes_target_names_from_generated_truth():
+    """The names must come from something built out of the live graph, never
+    from prose. This used to point at the Delegate tool's hints; it now points
+    at <delegation_roster>, which additionally says which of the roles the
+    prompt describes are WIRED — the gap that produced 17 delegations to
+    agents that did not exist."""
     from adda._src.agents.strategizer import STRATEGIZER_SYSTEM_PROMPT
-    assert "Delegate tool's hints" in STRATEGIZER_SYSTEM_PROMPT
+    assert "<delegation_roster>" in STRATEGIZER_SYSTEM_PROMPT
 
 
 def test_strategizer_build_run_split_described():

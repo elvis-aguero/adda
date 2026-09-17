@@ -20,6 +20,7 @@ from ..infra.container_runner import ContainerRunner
 from ..infra.delegation_log import DelegationLog
 from ..infra.workspace_vcs import init_workspace_repo
 from ..prompts.agent_prompts import (
+    DELEGATION_ROSTER_TEMPLATE,
     RUN_PATHS_PREAMBLE_TEMPLATE,
     WORKSPACE_PREAMBLE_TEMPLATE,
 )
@@ -1215,6 +1216,38 @@ class AgenticRun:
             pass
         return problem + addendum
 
+    def _delegation_roster(self, name: str) -> str:
+        """The entry node's real delegation targets, read off the live graph.
+
+        Generated, not typed — the same reason ``render_tool_catalog`` is
+        generated. The static strategizer prompt describes a full cast and
+        designates "the general implementer" as the fallback for any block no
+        specialist matches; run a two-node graph, or an ablation arm that drops
+        a node, and that fallback names an agent which does not exist. A
+        campaign logged 15 delegations to an absent 'implementer'.
+
+        Returns "" when the node has no outgoing edges, so a graph with nothing
+        to delegate to does not get an empty roster telling it so twice — it
+        has no Delegate tool either.
+        """
+        spec = self._graph_spec
+        targets = [e.target for e in getattr(spec, "edges", ())
+                   if e.source == name]
+        seen: list[str] = []
+        for t in targets:          # declaration order, de-duplicated
+            if t not in seen:
+                seen.append(t)
+        if not seen:
+            return ""
+        lines = []
+        for t in seen:
+            agent = spec.nodes.get(t)
+            role = getattr(agent, "role", "") or "worker"
+            desc = (getattr(agent, "description", "") or "").strip()
+            lines.append(f"  {t}  (role: {role})"
+                         + (f"\n      {desc}" if desc else ""))
+        return DELEGATION_ROSTER_TEMPLATE.format(targets="\n".join(lines))
+
     def _resource_stanza(self, run_dir, *, for_worker: bool) -> str:
         """The static resource-envelope stanza — "what you HAVE" — injected into a
         worker/strategizer preamble at delegation start, so the agent stops
@@ -1302,6 +1335,7 @@ class AgenticRun:
                 experiment_data_dir=Path(run_dir) / "experiment_data",
                 resources=self._resource_stanza(run_dir, for_worker=False),
                 knowledge=self._kb_menu(_role),
+                roster=self._delegation_roster(name),
             )
             system_prompt = preamble + features.strip_disabled_sections(
                 agent.system_prompt)

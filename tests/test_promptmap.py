@@ -160,18 +160,25 @@ def test_an_exact_citation_spans_exactly_the_text_it_cites(data):
 
 
 def test_text_built_elsewhere_is_cited_to_the_code_that_builds_it(data):
-    """The two ``.format()`` fields in the preambles are whole stanzas written
-    in ``agent_runtime.py``. Folding them into the template's own citation is
-    how a resource stanza ends up attributed to ``agent_prompts.py``, where
-    nobody searching for it will ever find it. The preamble stays ONE readable
-    block, so the attribution lives in its parts."""
+    """The ``.format()`` fields in the preambles are whole stanzas written in
+    ``agent_runtime.py``. Folding them into the template's own citation is how
+    a resource stanza ends up attributed to ``agent_prompts.py``, where nobody
+    searching for it will ever find it. The preamble stays ONE readable block,
+    so the attribution lives in its parts.
+
+    ``{roster}`` is entry-only: it lists the delegation targets read off the
+    live graph, and a worker has none.
+    """
     for role in data["roles"]:
         preamble = role["layers"][0]
         assert len(preamble["sections"]) == 1, (
             f"{role['id']}: the preamble is one prompt and must read as one block")
         parts = preamble["sections"][0]["parts"]
         fields = {part["field"]: part for part in parts if part.get("field")}
-        assert set(fields) == {"{resources}", "{knowledge}"}, role["id"]
+        expected = {"{resources}", "{knowledge}"}
+        if preamble["label"] == "RUN_PATHS_PREAMBLE_TEMPLATE":
+            expected.add("{roster}")
+        assert set(fields) == expected, role["id"]
         for field, part in fields.items():
             assert part["source"]["file"].endswith("runtime/agent_runtime.py"), field
 

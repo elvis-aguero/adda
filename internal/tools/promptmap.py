@@ -400,7 +400,7 @@ _PATH_STUB = {
 #: builds them — never folded into the template's own citation, which is what
 #: made an earlier version of this map attribute a resource stanza written in
 #: ``runtime/agent_runtime.py`` to ``prompts/agent_prompts.py``.
-_BLOCK_FIELDS = ("resources", "knowledge")
+_BLOCK_FIELDS = ("resources", "knowledge", "roster")
 
 #: Volatile facts in the resource stanza: real per run, and per HOST at build
 #: time. Normalised so the committed map is deterministic and so no reviewer
@@ -426,6 +426,25 @@ def _resources_text(for_worker: bool) -> str:
     return text
 
 
+def _roster_text(role: str) -> str:
+    """The delegation roster, built by the live method on a demo graph.
+
+    Shown against the default graph so the map has something concrete to
+    print; the real one is whatever the study's own graph declares, which is
+    the entire point of the field existing.
+    """
+    from adda._src.runtime.agent_runtime import AgenticRun
+
+    try:
+        from adda import default_graph
+        graph = default_graph()
+    except Exception:
+        return ""
+    run = AgenticRun.__new__(AgenticRun)
+    run._graph_spec = graph
+    return run._delegation_roster(getattr(graph, "entry", role))
+
+
 def _knowledge_text(role: str) -> str:
     """The handbook menu for *role*, obtained by CALLING the live KnowledgeBase."""
     from adda._src.runtime.agent_runtime import AgenticRun
@@ -445,6 +464,14 @@ _BLOCK_SOURCE = {
         "is the live method's own output; its cores/RAM/disk figures are "
         "normalised to placeholders because they differ per run and per host. "
         "The second paragraph appears for the implementer only.",
+    ),
+    "roster": (
+        "runtime/agent_runtime.py", "AgenticRun._delegation_roster",
+        "THIS RUN's delegation targets, read off the live graph's edges. The "
+        "static prompt below describes a full cast of specialists; a study "
+        "runs whatever graph it declares and an ablation arm deliberately runs "
+        "a smaller one, so which of those agents actually exist cannot be "
+        "written down in the prompt. Shown here against the default graph.",
     ),
     "knowledge": (
         "runtime/agent_runtime.py", "AgenticRun._kb_menu",
@@ -481,8 +508,12 @@ def preamble_sections(tpl: str, role: str, is_entry: bool,
         field = chunk[1:-1] if chunk[:1] == "{" and chunk[-1:] == "}" else None
         if field in _BLOCK_FIELDS:
             module, qualname, note = _BLOCK_SOURCE[field]
-            text = (_resources_text(role == "implementer") if field == "resources"
-                    else _knowledge_text(role))
+            if field == "resources":
+                text = _resources_text(role == "implementer")
+            elif field == "roster":
+                text = _roster_text(role)
+            else:
+                text = _knowledge_text(role)
             sym = resolve_symbol(module, qualname)
             parts.append({
                 "field": "{" + field + "}",
