@@ -264,6 +264,15 @@ def _import_line(pub: str) -> str:
     return f"from {mod} import {leaf}"
 
 
+#: Dunders worth indexing: construction plus the operators f3dasm gives
+#: meaning to. Everything else (``__repr__``, ``__eq__``, ``__reduce__``, the
+#: container protocol) is Python plumbing an agent never needs to look up.
+_KEPT_DUNDERS = frozenset({
+    "__init__", "__add__", "__radd__", "__iadd__", "__rshift__", "__or__",
+    "__call__", "__getitem__", "__len__", "__iter__", "__contains__",
+})
+
+
 def _add_methods(
     index: dict[str, Entry], cls, cls_key: str, private: bool
 ) -> None:
@@ -273,9 +282,16 @@ def _add_methods(
     duplicating them would make every subclass re-list the same text. ``__init__``
     is kept — its signature is how the class is constructed, which is the single
     most-looked-up fact about any class.
+
+    OPERATOR dunders are kept too. They are the one kind of API a lexical index
+    is otherwise blind to: an agent cannot search for ``>>``, and nothing in a
+    symbol list hints that ``a >> b`` builds a ``ChainedBlock`` or that
+    ``data + other`` merges two ``ExperimentData``. Drop them and the operator
+    is unreachable — findable only by reading the owning class's own docstring
+    and hoping it says so. Every other dunder is protocol noise.
     """
     for mn, mv in vars(cls).items():
-        if mn.startswith("_") and mn != "__init__":
+        if mn.startswith("_") and mn not in _KEPT_DUNDERS:
             continue
         fn = mv.__func__ if isinstance(mv, (classmethod, staticmethod)) else mv
         if not (inspect.isfunction(fn) or inspect.ismethod(fn)):

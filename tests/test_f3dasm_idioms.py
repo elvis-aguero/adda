@@ -28,6 +28,14 @@ def test_core_idioms_execute_against_installed_f3dasm():
     assert ns["X"].shape[0] == 8, "latin sampler should yield 8 rows"
     assert ns["X"].shape[1] == 2
     assert len(ns["cand_data"]) == 2, "candidate construction must work"
+    # Composition: the >> operator, .loop() and the declarative Pipeline form.
+    # These are ARCHITECTURAL facts an agent cannot retrieve by lexical search
+    # — `>>` is a dunder and so is not in the API index at all — which is why
+    # they are taught here rather than deferred to ConsultF3dasmDocs.
+    assert type(ns["chained"]).__name__ == "ChainedBlock"
+    assert len(ns["chain_data"]) == 8, "4 samples from each chained sampler"
+    assert type(ns["repeated"]).__name__ == "LoopBlock"
+    assert len(ns["pipeline"].steps) == 2
 
 
 def test_idioms_contain_the_verified_correct_forms():
@@ -41,6 +49,13 @@ def test_idioms_contain_the_verified_correct_forms():
         "ExperimentData.from_data(",
         "_input_data=",
         "get_n_best_output(5",
+        # composition — not discoverable through the lexical API lookup
+        "explore >> refine",
+        ".loop(3)",
+        "Pipeline(name=",
+        "Step(block=",
+        "Loop(n_iterations=",
+        "RETURNS A JOB ID",
     ]
     for token in required:
         assert token in F3DASM_CORE_IDIOMS, f"verified idiom missing: {token}"

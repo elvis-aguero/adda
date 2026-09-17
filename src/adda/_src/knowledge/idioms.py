@@ -56,6 +56,31 @@ trust these over any remembered signature):
     }
     cand_data = ExperimentData.from_data(data=samples, domain=domain)
 
+    # COMPOSITION — how f3dasm runs a MULTI-STAGE experiment. Blocks chain with
+    # the >> operator (producing a ChainedBlock) and repeat with .loop(n) (a
+    # LoopBlock). A chain is itself a Block, so it composes further, and kwargs
+    # given to .call() reach every block in the chain.
+    explore = create_sampler("latin_sampler", seed=0)
+    refine = create_sampler("random_sampler", seed=1)
+    chained = explore >> refine                  # ChainedBlock
+    chain_data = chained.call(ExperimentData(domain=domain), n_samples=4)
+    repeated = refine.loop(3)                    # LoopBlock — runs it 3 times
+
+    # Pipeline/Step/Loop is the DECLARATIVE form of the same composition. Step
+    # wraps one Block with its kwargs; Loop repeats a list of Steps.
+    from f3dasm import Loop, Pipeline, Step
+    pipeline = Pipeline(name="optimise", steps=[
+        Step(block=explore, name="explore", kwargs={"n_samples": 8}),
+        Loop(n_iterations=3, steps=[Step(block=repeated, name="refine")]),
+    ])
+    # pipeline.run() RETURNS A JOB ID (str), NOT data. Read the result back from
+    # rootdir/job_id. Defaults: mode="local", rootdir=cwd, project_job=<epoch>.
+    #   from pathlib import Path
+    #   job_id = pipeline.run(mode="local", project_job="run_001",
+    #                         rootdir="{delegation_id}")
+    #   result = ExperimentData.from_file(
+    #       project_dir=Path("{delegation_id}") / job_id)
+
     # Evaluate ground truth ONLY through get_evaluator (ledgered w/ provenance):
     #   from adda import get_evaluator
     #   gen = get_evaluator()

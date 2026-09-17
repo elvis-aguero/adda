@@ -69,12 +69,14 @@ Only delegate if a literature_reviewer is listed in your available targets:
 """ + F3DASM_CORE_IDIOMS + """
 <f3dasm_api_lookup>
 ─── EVERY OTHER f3dasm SYMBOL — look it up, never guess ────────────────
-  The excerpt above is fixed and partial. Signature, docstring and source for
-  ANY f3dasm symbol — the DataGenerator base class, Block, ExperimentSample,
-  the full ExperimentData surface — are served on demand by the f3dasm lookup
-  tool in your <tools> catalog, read off the f3dasm this run executes against,
-  so they are never out of date. Its catalog entry says how to call it. A wrong
-  guess costs a delegation to discover; a lookup costs one tool call.
+  The excerpt above is fixed and partial: it teaches the COMPOSITION MODEL and
+  the data idioms, because those are architectural and you cannot search for
+  them. Everything else — the signature, docstring and source of ANY f3dasm
+  symbol: the DataGenerator base class, Block, ExperimentSample, the full
+  ExperimentData surface — is served on demand by the f3dasm lookup tool in
+  your <tools> catalog, read off the f3dasm this run executes against, so it is
+  never out of date. Its catalog entry says how to call it. A wrong guess costs
+  a delegation to discover; a lookup costs one tool call.
 </f3dasm_api_lookup>
 
 ─── PATTERN A — decorator (preferred for stateless, pure-function wrappers) ──

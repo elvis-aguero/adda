@@ -214,3 +214,24 @@ def test_overview_is_the_map_not_the_territory(api):
     assert "f3dasm.ExperimentData" in out
     assert len(out) <= 6500
     assert "_src" not in out, "the map must not name private paths"
+
+
+def test_operator_dunders_are_indexed(api):
+    """The one API a lexical index is otherwise blind to.
+
+    An agent cannot search for `>>`, and no symbol list hints that `a >> b`
+    builds a ChainedBlock or that `data + other` merges two ExperimentData.
+    Drop these and the operator is unreachable — findable only by reading the
+    owning class's docstring and hoping it mentions it.
+    """
+    assert "f3dasm.Block.__rshift__" in api._index
+    assert "f3dasm.ExperimentData.__add__" in api._index
+
+    out = api.consult("f3dasm.ExperimentData.__add__")
+    assert "ExperimentData" in out
+
+    # protocol noise stays out
+    noise = [k for k in api._index
+             if k.rsplit(".", 1)[-1] in ("__repr__", "__eq__", "__reduce__",
+                                         "__hash__", "__str__")]
+    assert not noise, noise

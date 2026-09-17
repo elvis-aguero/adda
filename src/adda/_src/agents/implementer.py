@@ -83,12 +83,14 @@ PREFER f3dasm primitives over raw numpy/scipy equivalents.
 """ + F3DASM_CORE_IDIOMS + """
 <f3dasm_api_lookup>
 ─── EVERY OTHER f3dasm SYMBOL — look it up, never guess ────────────────
-  The excerpt above is fixed and partial. Signature, docstring and source for
-  ANY f3dasm symbol — Pipeline/Step/Loop, `>>` chaining and .loop(),
-  create_optimizer, the full ExperimentData surface — are served on demand by
-  the f3dasm lookup tool in your <tools> catalog, read off the f3dasm this run
-  executes against, so they are never out of date. Its catalog entry says how
-  to call it. A wrong guess costs a delegation to discover; a lookup costs one
+  The excerpt above is fixed and partial: it teaches the COMPOSITION MODEL and
+  the data idioms, because those are architectural and you cannot search for
+  them. Everything else — the signature, docstring and source of ANY f3dasm
+  symbol: create_optimizer, SlurmResources, the full ExperimentData and Domain
+  surface, Step's resources/parallel arguments — is served on demand by the
+  f3dasm lookup tool in your <tools> catalog, read off the f3dasm this run
+  executes against, so it is never out of date. Its catalog entry says how to
+  call it. A wrong guess costs a delegation to discover; a lookup costs one
   tool call.
 </f3dasm_api_lookup>
 </f3dasm_api>
