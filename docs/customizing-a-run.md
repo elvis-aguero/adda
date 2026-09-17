@@ -122,6 +122,131 @@ qwen2.5:7b`, on its own card — not a single run-wide banner claiming one
 backend for everything. Works before or after `execute()`; call it any time
 you want to check a graph rather than trust it.
 
+## Turning a piece of the scaffolding off: `Feature`
+
+Everything above changes *who runs* the work. This changes *what the agents
+are given*. adda has accumulated machinery — a hypothesis ledger, milestone
+gates, a science-drift monitor, an f3dasm documentation lookup, a method
+playbook — and the only way to find out whether a piece of it earns its cost
+is to run the same problem with it removed. `Feature` is what makes "removed"
+mean removed.
+
+### The problem it solves
+
+A capability is never just one object. The hypothesis ledger is a JSON file
+*and* five tools the agent can call *and* a block of the strategizer's system
+prompt telling it that `hypotheses.json` is its canonical scientific record.
+Wire those three independently and a flag that switches off the object leaves
+the other two running: the agent is still commanded to use the ledger, still
+sees all five tools published as AUTHORITATIVE, calls one, and gets back
+
+```
+ERROR: hypothesis ledger not available in this run.
+```
+
+That run does not measure an agent without a ledger. It measures an agent
+confused by broken tools — and it inflates `ERROR_RETURN`, the one diagnostic
+whose target is zero. Three separate backlog entries in this repo are
+successive rounds of *"the flag didn't actually turn it off."*
+
+### The declaration
+
+A feature declares, in one place, its knob and everything that exists only
+because of it. Here is the whole of the science monitor, verbatim from
+`runtime/features.py`:
+
+```python
+Feature(
+    key="science_monitor",
+    default=True,
+    # No tools: the monitor speaks by injecting notices. Its prompt block
+    # is self-contained, which makes this the cleanest arm of the set.
+    sections=("science_monitor",),
+)
+```
+
+Four fields carry everything a feature can own:
+
+| field | what it owns |
+|---|---|
+| `key` | the runtime knob, e.g. `science_monitor: false` |
+| `tools` | tool names that exist only because this feature does |
+| `sections` | prompt sections `<tag>…</tag>` this feature owns outright |
+| `behaviours` | runtime capabilities with no tool and no prompt surface |
+
+A richer one — the ledger owns tools *and* a prompt section, and carries a
+caveat explained below:
+
+```python
+Feature(
+    key="hypothesis_ledger",
+    default=True,
+    tools=frozenset({
+        "HypothesisPropose", "HypothesisUpdate", "HypothesisList",
+        "HypothesisGet", "LinkFalsificationAttempt",
+    }),
+    sections=("hypothesis_ledger",),
+    pervasive=True,
+)
+```
+
+### Turning one off
+
+Nothing in Python. It is a `runtime:` key in the study's `config.yaml`:
+
+```yaml
+runtime:
+  science_monitor: false
+```
+
+or, for a one-off, the environment channel `F3DASM_SCIENCE_MONITOR=false`.
+Precedence is explicit argument, then environment, then `config.yaml`, then
+the feature's own `default`. The switches are listed together under
+*Ablation switches* in [Authoring a study](authoring-a-study.md).
+
+What that one line does, with no other change anywhere:
+
+1. every tool name in `tools` is withheld from the agent — not left
+   registered and erroring, *withheld*, so the tool catalog the agent is
+   handed does not mention it;
+2. every `<tag>…</tag>` in `sections` is cut out of the assembled system
+   prompt, so the agent is never told about a capability it does not have;
+3. the backing object is not constructed, and any `behaviours` the runtime
+   would consult are off.
+
+The agent that runs is an agent that never had the feature, rather than an
+agent that had it taken away mid-sentence.
+
+### The honest caveat: `pervasive`
+
+`hypothesis_ledger` above is marked `pervasive=True`. The Popperian workflow
+is not confined to the section the ledger owns — it is the strategizer's
+entire operating model, argued in `<scientific_process>`, enforced in
+`<operating_principles>` and resolved in `<exploration_verdicts>`. Switching
+the feature off removes its tools and its own section, but it cannot remove
+the *idea*, so that arm is a **partial** ablation and has to be reported as
+one.
+
+Stripping those three sections too would not be a cleaner ablation. It would
+be a different agent, and the comparison would be meaningless.
+
+### What this costs the codebase
+
+One registry file, and three places that read it: the tool catalog calls
+`disabled_tool_names()`, prompt assembly calls
+`strip_disabled_sections()`, and a feature with a runtime object or behaviour
+calls `features.enabled("key")` at the single point where that object is
+constructed. Adding a feature does not add a branch anywhere else, and a
+reader who does not care about ablations never meets one — the declarations
+sit in `runtime/features.py` and the rest of the code reads as if the feature
+is simply present.
+
+The registry is checked rather than trusted: `tests/test_features.py` fails
+if a declared section tag does not exist in the prompt that claims to own it,
+so renaming a tag cannot silently stop it from being stripped, and
+`tests/test_settings_contract.py` fails if a feature's key is missing from
+the documented knob table.
+
 ## Reference: the available backends
 
 Whichever backend a run defaults to, whether set globally in `config.yaml`

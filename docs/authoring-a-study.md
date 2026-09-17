@@ -115,7 +115,9 @@ and a study author leaves them alone.
 
 Each one withholds everything it owns at once: its runtime object, the tools
 that exist only because of it, and the prompt section that tells the agent to
-use them. An agent in an arm is never left calling a tool that is gone.
+use them. An agent in an arm is never left calling a tool that is gone. How
+that is wired — and how to declare a new one — is in
+[Customizing a run](customizing-a-run.md#turning-a-piece-of-the-scaffolding-off-feature).
 
 (`pipeline_deliverable` is the exception that is also an ordinary study
 choice: a study with no notebook deliverable legitimately turns it off.)
