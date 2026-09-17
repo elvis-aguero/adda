@@ -98,3 +98,85 @@ def test_compute_constraint_snapshot_falls_back_gracefully_on_bad_path(tmp_path)
         experiment_data_dir=tmp_path / "does_not_exist",
     )
     assert s.evals_used == 0
+
+
+# ---------------------------------------------------------------------------
+# The orchestrator's clock must advance
+#
+# agent_runtime rendered one snapshot at run start and concatenated it onto
+# the problem statement -- the standing first user turn, re-sent verbatim
+# every turn. Four consecutive strategizer turns across 23.5 minutes of run
+# 20260917T141603 all read "2.7min/60.0min used (5%)" while the true figure
+# had reached 44%. Every worker path re-snapshots at use; this was the one
+# call site that cached, on the node that decides how much more to attempt.
+# ---------------------------------------------------------------------------
+
+class _FakeNode:
+    """Just enough of a node for snapshot_for_node and _constraint_refresh."""
+
+    _eval_budget = None
+    _budget_seconds = 3600.0
+    _current_notes_dir = None
+    _delegation_log = None
+
+    def __init__(self, run_start):
+        self._run_start = run_start
+
+
+def test_the_orchestrators_snapshot_advances_between_turns():
+    import time
+
+    from adda._src.nodes.node import Node
+    from adda._src.runtime.constraint_snapshot import snapshot_for_node
+
+    node = _FakeNode(run_start=time.time() - 120.0)
+    first = snapshot_for_node(node).wall_elapsed_s
+
+    node._run_start -= 1500.0          # 25 more minutes of wall clock
+    second = snapshot_for_node(node).wall_elapsed_s
+
+    assert second > first + 1400, (
+        "the snapshot is not recomputed; this is the frozen-clock bug"
+    )
+    assert callable(Node._constraint_refresh)
+
+
+def test_the_turn_composer_injects_a_fresh_block():
+    """The block must arrive per TURN, not once into the standing message."""
+    import time
+
+    from adda._src.nodes.node import Node
+
+    node = _FakeNode(run_start=time.time() - 60.0)
+    early = Node._constraint_refresh(node)
+    assert early and "Wall-clock" in early[0]["content"]
+
+    node._run_start -= 1800.0
+    later = Node._constraint_refresh(node)
+
+    assert later[0]["content"] != early[0]["content"], (
+        "two turns half an hour apart rendered byte-identical constraints"
+    )
+
+
+def test_a_broken_snapshot_never_fails_the_turn():
+    from adda._src.nodes.node import Node
+
+    class _Exploding:
+        @property
+        def _run_start(self):
+            raise RuntimeError("boom")
+
+    assert Node._constraint_refresh(_Exploding()) == []
+
+
+def test_the_problem_statement_no_longer_carries_a_baked_snapshot():
+    """Regression pin: rendering it into the standing message is what froze
+    it. A future edit that re-concatenates it must fail here."""
+    import inspect
+
+    from adda._src.runtime import agent_runtime
+
+    src = inspect.getsource(agent_runtime)
+    assert "_initial_snapshot.as_text()" not in src
+    assert "compute_constraint_snapshot(" not in src

@@ -289,8 +289,16 @@ def test_run_log_mentions_tokens(pipeline_run):
 # ---------------------------------------------------------------------------
 # constraint snapshot on the very first strategizer turn (human -> strategizer
 # is a delegation like any other; the budget/time state must be automatically
-# in the literal first message text, not something the agent has to go query
-# for — see constraint_snapshot.py)
+# in the first message set the agent receives, not something it has to go
+# query for — see constraint_snapshot.py)
+#
+# This asserted messages[0] — the block CONCATENATED onto the problem
+# statement. That position was the bug: the problem statement is the standing
+# first user turn, re-sent verbatim, so the numbers inside it froze at run
+# start (run 20260917T141603 read "5% used" 23 minutes in). The block is now
+# injected per turn, so it is in the first invoke's messages but not glued to
+# messages[0]. What this test protects is that the strategizer never takes a
+# turn without being told its budgets — not where the block sits.
 # ---------------------------------------------------------------------------
 
 
@@ -348,13 +356,24 @@ def test_first_strategizer_message_carries_constraint_snapshot(tmp_path):
     assert captured_first_messages, "Strategizer adapter was never invoked"
     first_call_messages = captured_first_messages[0]
     assert first_call_messages, "First invoke() call had no messages"
-    first_content = first_call_messages[0]["content"]
-    assert "<constraints>" in first_content, (
-        "Expected the constraint snapshot in the very first message the "
-        f"strategizer receives; got:\n{first_content[:300]!r}"
+    blocks = [
+        str(m.get("content", "")) for m in first_call_messages
+        if "<constraints>" in str(m.get("content", ""))
+    ]
+    assert blocks, (
+        "Expected a constraint snapshot somewhere in the very first message "
+        "set the strategizer receives; got roles/prefixes:\n"
+        + repr([(m.get("role"), str(m.get("content", ""))[:80])
+                for m in first_call_messages])
     )
-    assert "Evaluation budget" in first_content
-    assert "Wall-clock budget" in first_content
+    assert "Evaluation budget" in blocks[-1]
+    assert "Wall-clock budget" in blocks[-1]
+
+    # ...and exactly one, or the agent is reading two clocks at once.
+    assert len(blocks) == 1, (
+        f"{len(blocks)} constraint blocks in one turn; a stale one alongside "
+        "a fresh one is what the agent cannot tell apart"
+    )
 
 
 def test_run_log_does_not_falsely_claim_the_notebook_was_stamped(tmp_path):

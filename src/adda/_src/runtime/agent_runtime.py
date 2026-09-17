@@ -492,22 +492,16 @@ class AgenticRun:
         ):
             problem = self._review_problem_statement(problem, debug_dir)
 
-        # Human -> strategizer is a delegation like any other (strategizer ->
-        # worker, strategizer -> critic) — same constraint snapshot, single
-        # source of truth (constraint_snapshot.py), so the very first message
-        # the strategizer reads already states the budgets as facts instead
-        # of leaving them latent in AgenticState (present to the node's
-        # Python code, never rendered into words the model actually sees).
-        from ..runtime.constraint_snapshot import (
-            compute_constraint_snapshot,
-        )
-        _initial_snapshot = compute_constraint_snapshot(
-            eval_budget=getattr(self, "_eval_budget", None),
-            budget_seconds=getattr(self, "_budget", None),
-            run_start=start_time,
-            experiment_data_dir=run_dir / "experiment_data",
-        )
-        problem = _initial_snapshot.as_text() + "\n\n" + problem
+        # The constraint snapshot is NOT rendered into this message. It used
+        # to be: a snapshot computed here was concatenated onto the problem
+        # statement, and this string is the standing first user turn, re-sent
+        # verbatim every turn — so those numbers froze at run start and the
+        # orchestrator read "5% used" 23 minutes in. Node._constraint_refresh
+        # now injects a fresh block on every orchestration turn instead,
+        # including the first, so the budgets are still stated as facts in
+        # the very first thing the strategizer reads AND they advance.
+        # Workers already worked this way (snapshot_for_node at dispatch and
+        # at completion); this was the one call site that cached.
 
         initial_state = AgenticState(
             messages=[HumanMessage(content=problem)],

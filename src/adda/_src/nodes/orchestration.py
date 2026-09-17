@@ -720,7 +720,8 @@ class OrchestrationMixin:
         style it as anything else.
         """
         injected = (
-            budget_warnings
+            self._constraint_refresh()
+            + budget_warnings
             + self._no_source_nudge()
             + self._backlog_announcement()
             + [{"role": "user", "content": n} for n in pending_notifs]
@@ -731,6 +732,38 @@ class OrchestrationMixin:
             for m in injected
             if str(m.get("content", "")).strip()
         ]
+
+    def _constraint_refresh(self) -> list[dict]:
+        """This turn's constraint snapshot, recomputed NOW.
+
+        The entry node used to be the one call site that did not re-snapshot.
+        ``agent_runtime`` rendered a snapshot once at run start and
+        concatenated it onto the problem statement, and that string is the
+        standing first user turn — re-sent verbatim on every later turn, so
+        the numbers inside it could never advance. Observed on run
+        20260917T141603: four consecutive strategizer turns spanning 23.5
+        minutes all read "2.7min/60.0min used (5%)", while the true figure at
+        turn 4 was 26.2min (44%).
+
+        The orchestrator was not blind -- every delegation report carries a
+        fresh snapshot (``_append_budget_report``) -- which made this a
+        CONTRADICTION rather than an absence: a frozen block and live blocks
+        in one context. Worse, the frozen copy lived in the first user turn,
+        which the context trim pins and never evicts, so it was the one
+        guaranteed to survive while the fresh ones aged out.
+
+        Recomputing per turn is what ``constraint_snapshot.py`` already asks
+        of every caller: "call this at every delegation boundary rather than
+        caching a value from earlier ... its entire purpose depends on being
+        current". The orchestrator is the node that decides how much more to
+        attempt, so it is the node that most needs the live clock.
+        """
+        from ..runtime.constraint_snapshot import snapshot_for_node
+        try:
+            text = snapshot_for_node(self).as_text()
+        except Exception:  # noqa: BLE001 — a missing snapshot never fails a turn
+            return []
+        return [{"role": "user", "content": text}] if text.strip() else []
 
     def _no_source_nudge(self) -> list[dict]:
         """Recommend registering a canonical source (soft, ≤3×).
