@@ -63,17 +63,6 @@ class Feature:
     tools: frozenset[str] = field(default_factory=frozenset)
     #: prompt section tags (``<tag>…</tag>``) this feature owns outright
     sections: tuple[str, ...] = ()
-    #: named RUNTIME behaviours this feature owns — capabilities with no tool
-    #: and no prompt surface, which the runtime consults by key.
-    #:
-    #: The registry was built when every feature had a tool or a prompt
-    #: section, and the invariant "a feature owns one of those two" followed
-    #: from the sample rather than from the idea. Context trimming owns
-    #: neither: it changes what the model SEES, silently, and an agent run
-    #: with a trimmed transcript is as different from one run without it as an
-    #: agent missing a tool. Calling that a mere setting would put it outside
-    #: the ablation registry, which is precisely where it must not be.
-    behaviours: tuple[str, ...] = ()
     #: True when the feature's CONCEPT also appears outside its own sections,
     #: so disabling it is a partial ablation. See the module docstring.
     pervasive: bool = False
@@ -153,24 +142,6 @@ FEATURES: tuple[Feature, ...] = (
         # whether an explicit method prior substitutes for capability. Expect
         # a large model to lose little and a 27B-class model to lose a lot.
         sections=("doe_playbook",),
-    ),
-    Feature(
-        key="context_trim",
-        default=True,
-        # No tools and no prompt section: it owns a runtime behaviour. The
-        # agent is never told this exists, which is the point — a scaffold
-        # that changes what the model sees without telling it is exactly the
-        # kind of thing whose contribution has to be measured rather than
-        # assumed.
-        #
-        # It applies to the OpenAI-compatible backends only, and that is a
-        # declared asymmetry, not an oversight: the Claude SDK compacts on its
-        # own and does it better than truncation can, so trimming there would
-        # replace a good mechanism with a worse one. The consequence is that
-        # the two backends behave differently under context pressure, so the
-        # resolved window, its source and every trim event are recorded and an
-        # analysis can condition on them.
-        behaviours=("context_trim",),
     ),
     Feature(
         key="pipeline_deliverable",

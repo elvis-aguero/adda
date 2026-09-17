@@ -130,7 +130,7 @@ def test_documented_default_matches_the_source(key):
 # `test_runtime_block_is_documented_for_study_authors` only asks that a key
 # appear SOMEWHERE in the doc, so every knob landed in one flat table: study
 # settings, infrastructure tuning and ablation arms interleaved, 24 rows deep.
-# `context_trim` sat directly above `context_window` — "never touch this"
+# `context_policy` sat directly above `context_window` — "never touch this"
 # adjacent to "raise this if your server is small", indistinguishable.
 #
 # That is a real cost to a study author, who reads the table to find out what

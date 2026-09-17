@@ -47,7 +47,7 @@ __all__ = [
 # the code that reads it.
 KNOWN_KEYS: frozenset[str] = frozenset({
     "citation_weighting",
-    "context_trim",
+    "context_policy",
     "context_window",
     "debug",
     "doe_playbook",

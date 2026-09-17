@@ -210,25 +210,40 @@ def test_ollama_prefers_the_served_num_ctx_over_the_trained_length():
 
 # --- the feature boundary ---------------------------------------------------
 
-def test_the_hook_is_absent_when_the_feature_is_off():
-    """An ablation arm with context_trim off must be byte-identical to the
-    behaviour before this existed — not 'trimming with a huge budget'."""
+def test_there_is_no_off_switch():
+    """Both policies manage the context; neither is "off". An unmanaged
+    context is not an experimental arm — it is the crash this subsystem was
+    written to stop, where Ollama evicts the original user turn and its
+    renderer then rejects the request with 500 no user query found."""
     from adda._src.backends.vllm import VLLMAdapter
 
-    settings.configure({"context_trim": False})
     a = VLLMAdapter(model="m", system_prompt="s")
+    for policy in ("compact", "trim"):
+        settings.configure({"context_policy": policy})
+        assert a._context_hook("SYSTEM") is not None
 
-    assert a._context_trim_hook("SYSTEM") is None
+
+def test_an_unknown_policy_raises_rather_than_defaulting():
+    """A typo'd arm that silently runs as the baseline reports as a null
+    result, which is the one failure an ablation cannot afford."""
+    import pytest
+
+    from adda._src.backends.vllm import VLLMAdapter
+
+    settings.configure({"context_policy": "summarise"})
+    with pytest.raises(ValueError, match="compact.*trim"):
+        VLLMAdapter(model="m", system_prompt="s")._context_policy()
 
 
 def test_the_hook_returns_llm_input_messages_not_state():
-    """Trimming what is SENT must not edit the graph's own history, or a
-    trimmed run stops being auditable."""
+    """Changing what is SENT must not edit the graph's own history, or the
+    transcript on disk stops being the record of what happened."""
     from adda._src.backends.vllm import VLLMAdapter
 
+    settings.configure({"context_policy": "trim"})
     a = VLLMAdapter(model="m", system_prompt="s")
     a._ctx_window = (2048, "setting")
-    hook = a._context_trim_hook("SYSTEM")
+    hook = a._context_hook("SYSTEM")
 
     out = hook({"messages": _convo(200)})
 
@@ -289,18 +304,17 @@ def test_a_negative_setting_is_the_uncapped_escape_hatch():
     assert cb.resolve_max_output_tokens(8192, -1) is None
 
 
-def test_the_adapter_caps_even_with_trimming_off():
-    """The cap bounds what the SERVER does; the trim decides what the model
-    SEES. Gating the safety limit on the scaffolding knob would mean the arm
-    answering 'is trimming worth it' also removes the runaway bound."""
+def test_the_adapter_caps_under_either_policy():
+    """The cap bounds what the SERVER does; the context policy decides what
+    the model SEES. They are separate limits and the cap applies to both
+    arms, so it cannot confound the comparison between them."""
     from adda._src.backends import context_budget as cb
     from adda._src.backends.vllm import VLLMAdapter
 
-    settings.configure({"context_trim": False})
+    settings.configure({"context_policy": "trim"})
     a = VLLMAdapter(model="m", system_prompt="s")
     a._ctx_window = (262144, "server")
 
-    assert a._context_trim_hook("SYSTEM") is None
     assert a._resolve_max_output_tokens() == cb.MAX_OUTPUT_TOKENS_CEILING
 
 

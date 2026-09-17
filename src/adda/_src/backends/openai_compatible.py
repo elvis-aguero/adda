@@ -21,7 +21,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from . import context_budget
+from . import context_budget, context_compaction
 
 log = logging.getLogger(__name__)
 
@@ -707,6 +707,11 @@ class OpenAICompatibleAdapter:
         self.max_history_pairs: int = max_history_pairs
         # Lock serializes concurrent delegations to the same shared adapter.
         self._lock: threading.Lock = threading.Lock()
+        # Summaries, keyed by the span they were built from. The pre_model_hook
+        # runs on every model call inside a turn and usually wants to compact
+        # the SAME span it just compacted; without this, "one generation per
+        # compaction" would be an aspiration rather than a fact.
+        self._summary_cache: dict[str, str] = {}
         # Built lazily so that closure_tools are fully populated before first
         # invoke().  Reset to None whenever native_tools or closure_tools change
         # so the next invoke() picks up the updated tool set.
@@ -783,7 +788,7 @@ class OpenAICompatibleAdapter:
             llm,
             self._build_tools(),
             prompt=SystemMessage(content=system),
-            pre_model_hook=self._context_trim_hook(system),
+            pre_model_hook=self._context_hook(system),
         )
 
     # -- context budget -----------------------------------------------------
@@ -863,46 +868,95 @@ class OpenAICompatibleAdapter:
         )
         return cap
 
-    def _context_trim_hook(self, system_prompt: str):
+    def _summarize(self, prompt: str) -> str:
+        """One summary, from the model this run is already using.
+
+        Deliberately not a second, smaller model. A fixed summariser would
+        remove one confound (summary quality no longer varies with the arm)
+        and introduce two: a dependency the study does not otherwise have, and
+        a capability the run itself never had. The interesting hypothesis on
+        cheap models is that scaffolding compensates for capability, and a
+        27B run whose context is curated by a frontier model is not testing
+        that.
+
+        Goes straight to the chat model, NOT through the agent: a summary
+        produced by a tool-loop could call tools, and a pre_model_hook that
+        re-enters the agent is a recursion, not a hook.
+        """
+        from langchain_core.messages import HumanMessage
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            model=self.model, base_url=self._base_url, api_key=self._api_key,
+            max_tokens=self._resolve_max_output_tokens(),
+        )
+        return str(llm.invoke([HumanMessage(content=prompt)]).content or "")
+
+    def _context_hook(self, system_prompt: str):
         """A ``pre_model_hook`` that keeps one turn inside the served window.
 
-        Returns None when the feature is off, so ``create_react_agent`` is
-        built exactly as it was before this existed — an ablation arm with
-        ``context_trim: false`` is byte-identical to the old behaviour rather
-        than "trimming with a huge budget".
+        ``context_policy`` picks HOW. Both values manage the context; neither
+        is "off", because an unmanaged context is not an experimental arm —
+        it is the crash this subsystem was written to stop (Ollama evicts the
+        original user turn and its renderer then rejects the request with
+        ``500 no user query found in messages``).
+
+        ``compact`` (the default) replaces the middle of the conversation with
+        a summary, so a delegation's RESULT survives even when its prose does
+        not. ``trim`` drops those messages instead: free, deterministic, and
+        blind to what it is throwing away. The trade is fidelity against
+        determinism — a summary can quietly restate a number, a dropped
+        message obviously cannot — and it is recorded per run so an analysis
+        can condition on it rather than assume it.
 
         The hook returns ``llm_input_messages``, which changes only what is
         SENT. Graph state keeps every message, so the transcript on disk stays
-        complete and a trimmed run is still fully auditable.
+        complete and a compacted run is still fully auditable.
         """
-        from ..runtime import features
-        if not features.enabled("context_trim"):
-            return None
-
         window, source = self._resolve_context_window()
         reserve = context_budget.estimate_tokens(system_prompt)
+        policy = self._context_policy()
 
         def _hook(state):
             msgs = (state or {}).get("messages") or []
-            kept, report = context_budget.trim_to_budget(
-                msgs, context_window=window, reserve_tokens=reserve)
+            if policy == "compact":
+                kept, report = context_compaction.compact_to_budget(
+                    msgs, context_window=window, reserve_tokens=reserve,
+                    summarize=self._summarize, cache=self._summary_cache)
+            else:
+                kept, report = context_budget.trim_to_budget(
+                    msgs, context_window=window, reserve_tokens=reserve)
             if report.fired:
                 from .base import append_transcript, debug_enabled
                 log.warning(
-                    "context trim fired: %d message(s) dropped, %d truncated "
+                    "context %s fired: %d message(s) removed, %d truncated "
                     "(%d -> %d est. tokens, budget %d, window %d from %s)",
-                    report.dropped, report.truncated, report.before,
+                    policy, report.dropped, report.truncated, report.before,
                     report.after, report.budget, window, source,
                 )
                 if debug_enabled():
                     append_transcript({
-                        "type": "ContextTrim",
-                        "text": f"window={window} source={source}",
+                        "type": "ContextCompaction",
+                        "text": f"policy={policy} window={window} source={source}",
                         "trim": report.as_dict(),
                     })
             return {"llm_input_messages": kept}
 
         return _hook
+
+    @staticmethod
+    def _context_policy() -> str:
+        """``"compact"`` or ``"trim"``. An unknown value RAISES.
+
+        Silently falling back to a default would make a typo'd arm run as the
+        baseline and report as a null result, which is the one failure an
+        ablation cannot afford.
+        """
+        from ..runtime import settings
+        value = settings.get_str("context_policy", "compact").strip().lower()
+        if value not in ("compact", "trim"):
+            raise ValueError(
+                f"context_policy must be 'compact' or 'trim', got {value!r}")
+        return value
 
     def invoke(
         self, messages: list[dict], *,
