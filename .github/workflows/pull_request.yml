@@ -43,6 +43,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install '.[tests,all]'
+      # The viewer's browser tests skip without a real Chromium, and a skipped
+      # test protects nothing — this is what makes them a gate rather than a
+      # note. --with-deps is Linux-only; macOS ships what Chromium needs.
+      - name: Install Chromium for the viewer's browser tests
+        run: |
+          python -m playwright install chromium ${{
+            runner.os == 'Linux' && '--with-deps' || '' }}
       - name: Test with pytest
         run: |
           pytest -m "not integration and not ollama"

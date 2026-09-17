@@ -75,6 +75,10 @@ extra = [
 tests = [
   "hypothesis>=6.138.0",
   "httpx>=0.27",
+  # The viewer's behaviour lives in 118 KB of browser JavaScript that no HTTP
+  # assertion reaches. tests/test_viewer_browser.py drives it for real; without
+  # this it SKIPS, and a skipped test protects nothing.
+  "playwright>=1.47",
   "pytest>=8.4.1",
   "pytest-cov>=6.2.1",
   "tomli>=2.0; python_version < '3.11'"
