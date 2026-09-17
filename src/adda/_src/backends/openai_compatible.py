@@ -772,8 +772,10 @@ class OpenAICompatibleAdapter:
         from langgraph.prebuilt import create_react_agent
 
         from ..prompts.tool_catalog import system_prompt_with_catalog
+        max_output = self._resolve_max_output_tokens()
         llm = ChatOpenAI(
-            model=self.model, base_url=self._base_url, api_key=self._api_key
+            model=self.model, base_url=self._base_url, api_key=self._api_key,
+            max_tokens=max_output,
         )
         system = system_prompt_with_catalog(
             self.system_prompt, self.closure_tools)
@@ -836,6 +838,30 @@ class OpenAICompatibleAdapter:
                    else (context_budget.DEFAULT_CONTEXT_WINDOW, "default"))
         self._ctx_window = out
         return out
+
+    def _resolve_max_output_tokens(self) -> int | None:
+        """Cap on ONE reply, or None for deliberately uncapped.
+
+        This is NOT part of the ``context_trim`` feature, and that is on
+        purpose. Trimming decides what the model SEES and is scaffolding whose
+        value is an open question; this bounds what the server will DO and is
+        a safety limit. Gating it on the same knob would mean the arm that
+        answers "is trimming worth it" also removes the only thing stopping a
+        turn generating for an hour, which is not the question being asked. A
+        constant applied to both arms is not a confound.
+
+        The resolved number is logged, so a run whose reply was cut short is
+        distinguishable from a run whose model simply stopped.
+        """
+        from ..runtime import settings
+        window, source = self._resolve_context_window()
+        explicit = settings.get_int("max_output_tokens", 0)
+        cap = context_budget.resolve_max_output_tokens(window, explicit)
+        log.info(
+            "max output tokens: %s (window %d from %s, setting %d)",
+            cap if cap is not None else "uncapped", window, source, explicit,
+        )
+        return cap
 
     def _context_trim_hook(self, system_prompt: str):
         """A ``pre_model_hook`` that keeps one turn inside the served window.

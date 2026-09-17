@@ -246,3 +246,69 @@ def test_the_claude_backend_is_deliberately_untouched():
     src = inspect.getsource(claude)
     assert "context_budget" not in src
     assert "pre_model_hook" not in src
+
+
+# --- the output cap ---------------------------------------------------------
+
+def test_the_derived_cap_matches_the_share_the_trim_reserves():
+    """The trim reserves a share of the window for the reply. If the server is
+    free to generate the whole window anyway, that reservation is a fiction."""
+    from adda._src.backends import context_budget as cb
+
+    assert cb.resolve_max_output_tokens(8192) == int(8192 * cb._RESPONSE_HEADROOM)
+
+
+def test_a_huge_window_is_still_bounded():
+    """262144 * 0.25 is ~65k tokens -- over an hour of generation at the rate a
+    27B model sustains on one L40S. 'A quarter of the window' alone is not a
+    bound on a server configured that large."""
+    from adda._src.backends import context_budget as cb
+
+    assert cb.resolve_max_output_tokens(262144) == cb.MAX_OUTPUT_TOKENS_CEILING
+
+
+def test_a_tiny_window_does_not_produce_a_cap_that_cuts_a_tool_call():
+    """A cap below one long tool-call argument turns a runaway into a
+    truncated, unparseable call -- a worse failure than the one being fixed."""
+    from adda._src.backends import context_budget as cb
+
+    assert cb.resolve_max_output_tokens(512) == cb._MIN_OUTPUT_TOKENS
+
+
+def test_an_explicit_setting_wins_outright():
+    from adda._src.backends import context_budget as cb
+
+    assert cb.resolve_max_output_tokens(262144, 1234) == 1234
+
+
+def test_a_negative_setting_is_the_uncapped_escape_hatch():
+    """Restoring the unbounded behaviour is something an experiment may want
+    and a default may not be."""
+    from adda._src.backends import context_budget as cb
+
+    assert cb.resolve_max_output_tokens(8192, -1) is None
+
+
+def test_the_adapter_caps_even_with_trimming_off():
+    """The cap bounds what the SERVER does; the trim decides what the model
+    SEES. Gating the safety limit on the scaffolding knob would mean the arm
+    answering 'is trimming worth it' also removes the runaway bound."""
+    from adda._src.backends import context_budget as cb
+    from adda._src.backends.vllm import VLLMAdapter
+
+    settings.configure({"context_trim": False})
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._ctx_window = (262144, "server")
+
+    assert a._context_trim_hook("SYSTEM") is None
+    assert a._resolve_max_output_tokens() == cb.MAX_OUTPUT_TOKENS_CEILING
+
+
+def test_the_adapter_honours_the_setting():
+    from adda._src.backends.vllm import VLLMAdapter
+
+    settings.configure({"max_output_tokens": 777})
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._ctx_window = (8192, "setting")
+
+    assert a._resolve_max_output_tokens() == 777

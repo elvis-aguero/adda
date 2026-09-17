@@ -63,6 +63,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "llm_stream_idle_timeout",
     "llm_tool_idle_timeout",
     "max_consecutive_errors",
+    "max_output_tokens",
     "milestones_enabled",
     "pipeline_deliverable",
     "recursion_limit",

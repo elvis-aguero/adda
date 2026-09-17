@@ -36,8 +36,10 @@ from __future__ import annotations
 
 __all__ = [
     "DEFAULT_CONTEXT_WINDOW",
+    "MAX_OUTPUT_TOKENS_CEILING",
     "TrimReport",
     "estimate_tokens",
+    "resolve_max_output_tokens",
     "trim_to_budget",
 ]
 
@@ -56,6 +58,18 @@ _RESPONSE_HEADROOM = 0.25
 #: ReadNote of a transcript can otherwise exceed the whole window by itself,
 #: which no message-granularity trim can fix.
 _MAX_SINGLE_MESSAGE_SHARE = 0.4
+
+#: Absolute ceiling on ONE reply, whatever the window allows. A 262144-token
+#: window permits a ~65k-token reply, which at the ~18 tok/s an L40S sustains
+#: for a 27B model is over an hour of generation inside a single agent turn
+#: (observed: one strategizer request past 26k tokens and still climbing after
+#: 25 minutes, zero delegations, the run's whole budget gone). No legitimate
+#: reply from these agents is this long; a reply approaching it is a loop.
+MAX_OUTPUT_TOKENS_CEILING = 8192
+
+#: Never cap below this, however small the window: a cap under one long
+#: tool-call argument turns a runaway into a truncated, unparseable call.
+_MIN_OUTPUT_TOKENS = 512
 
 _TRUNCATION_NOTE = "\n\n[... {n} characters dropped by adda context trimming]"
 
@@ -84,6 +98,28 @@ class TrimReport:
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"TrimReport({self.as_dict()})"
+
+
+def resolve_max_output_tokens(window: int, explicit: int = 0) -> int | None:
+    """Tokens one reply may generate. ``None`` means deliberately uncapped.
+
+    ``explicit > 0`` wins outright. ``explicit < 0`` is the escape hatch: it
+    restores the unbounded behaviour on purpose, which is a thing an
+    experiment may want and a thing a default may not be.
+
+    Otherwise the cap is derived from the window, because the trim already
+    reserves ``_RESPONSE_HEADROOM`` of it for the reply. Leaving the server
+    free to generate the whole window makes that reservation a fiction: the
+    input is trimmed to make room for a reply that is then allowed to overrun
+    it anyway. Deriving both from one constant is what keeps them consistent,
+    and the ceiling keeps a very large window from meaning "no bound at all".
+    """
+    if explicit > 0:
+        return explicit
+    if explicit < 0:
+        return None
+    derived = int(window * _RESPONSE_HEADROOM)
+    return max(_MIN_OUTPUT_TOKENS, min(MAX_OUTPUT_TOKENS_CEILING, derived))
 
 
 def _text_of(msg) -> str:
