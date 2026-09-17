@@ -168,6 +168,14 @@ h2{font-size:15px;margin:0;font-weight:600;letter-spacing:-.01em}
   border-radius:var(--r);background:var(--surface);color:var(--ink)}
 .editor .save{background:var(--accent);color:#fff;border-color:var(--accent)}
 .editor .danger{color:var(--hard);border-color:var(--hard)}
+.pieces{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+.pieceshead{font-size:10px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:8px}
+.piece{border:1px solid var(--line-soft);border-radius:var(--r);background:var(--surface);
+  padding:9px 11px;margin-bottom:8px}
+.piecetop{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-bottom:7px}
+.piecetop code{font-family:var(--mono);font-size:11px;color:var(--fmt)}
+pre.piecetext{max-height:220px;font-size:11px;color:var(--ink-2)}
 .noedit{font-size:12px;color:var(--ink-3);max-width:74ch;margin:0 0 10px;
   border-left:2px solid var(--line);padding-left:10px;line-height:1.55}
 .warnshared{font-size:12px;color:var(--soft);border-left:2px solid var(--soft);
@@ -658,6 +666,37 @@ function partLegend(sec){
 
 const SECTIONS = new Map();   /* row key -> the section object it renders */
 
+/* A .format()-assembled block has no single home, but its WRITTEN stretches do:
+   the template's own prose is a verbatim span, and the prose inside a computed
+   stanza is a string constant in the module that builds it. Only the values
+   formatted in have no source text to edit. Each piece registers as its own
+   editor target, so the editor above works on it unchanged. */
+function piecesBlock(sec, key){
+  const pieces = sec.pieces || [];
+  if(!pieces.length) return "";
+  return `<div class="pieces">
+    <div class="pieceshead">Editable pieces \u2014 ${pieces.length}</div>
+    ${pieces.map((pc,i) => {
+      const pk = key + "-p" + i;
+      SECTIONS.set(pk, pc);
+      return `<div class="piece">
+        <div class="piecetop">
+          ${pc.field ? `<code>${esc(pc.field)}</code>` : ""}
+          <span class="src">${esc(srcOf(pc.source))}</span>
+          <span class="chip k-fmt">${pc.edit.mode === "literal"
+            ? "inside a larger literal" : "verbatim span"}</span>
+          <button class="editbtn" type="button" data-edit="${pk}">propose an edit</button>
+          <span data-editchip="${esc(pc.edit.key)}" data-row="${pk}">${
+            editChip(pc.edit.key, pk)}</span>
+        </div>
+        <div class="suggslot" id="sg-${pk}"></div>
+        <div class="editslot" id="ed-${pk}"></div>
+        <pre class="prompt piecetext">${esc(pc.text)}</pre>
+      </div>`;
+    }).join("")}
+  </div>`;
+}
+
 function sectionRow(sec, key){
   SECTIONS.set(key, sec);
   const preview = sec.text.trim().split("\n")[0].slice(0,90);
@@ -690,6 +729,7 @@ function sectionRow(sec, key){
       <div class="editslot" id="ed-${key}"></div>
       ${partLegend(sec)}
       <pre class="prompt" id="txt-${key}">${promptBody(sec)}</pre>
+      ${piecesBlock(sec, key)}
     </div>
   </div>`;
 }

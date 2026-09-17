@@ -837,6 +837,147 @@ def catalog_sections(tool_names: list[str]) -> list[dict]:
     return sections
 
 
+_PLACEHOLDER = re.compile(r"<[a-z0-9_]+>")
+
+#: Shortest stretch worth offering as its own edit. Below this a fragment stops
+#: being prose and starts being a path tail -- "/debug/delegation_log.jsonl"
+#: resolved to an unrelated literal in node.py, which is a citation the page
+#: would have shown as if it were the text's home.
+_MIN_PIECE = 40
+
+
+def _literal_runs(text: str) -> list[str]:
+    """The stretches of a computed stanza that are WRITTEN, not formatted in.
+
+    A stanza like ``{resources}`` is an f-string: its numbers differ per run
+    (and this map has already normalised them to ``<cores>``-style
+    placeholders), but the prose between them is an ordinary string constant
+    with one home in the source. Splitting on the placeholders recovers exactly
+    those constants, and each one is then locatable on its own.
+    """
+    return [run.strip("\n") for run in _PLACEHOLDER.split(text)
+            if len(run.strip()) >= _MIN_PIECE]
+
+
+def _resolvable_runs(runs: list[str], prefer) -> list[str]:
+    """Each run, or — when the whole run is not one literal — its parts.
+
+    A stanza whose variable pieces are NAMES rather than numbers has nothing
+    for the placeholder split to cut on: the delegation roster interleaves
+    fixed prose with each wired node's own description, so the whole run
+    resolves to no single literal. Its fixed header and footer still do, one
+    paragraph at a time, and those are the parts worth editing. Falls back
+    only when the whole run fails, so a stanza that resolves cleanly is still
+    offered as one piece rather than shredded into paragraphs.
+    """
+    out: list[str] = []
+    for run in runs:
+        if containing_literal(run, prefer) is not None:
+            out.append(run)
+            continue
+        paras = [para.strip("\n") for para in run.split("\n\n")
+                 if len(para.strip()) >= _MIN_PIECE
+                 and containing_literal(para.strip("\n"), prefer) is not None]
+        if paras:
+            out += paras
+            continue
+        out += _edge_runs(run, prefer)
+    return out
+
+
+def _edge_runs(run: str, prefer) -> list[str]:
+    """The fixed HEAD and TAIL of a run whose middle is generated.
+
+    The delegation roster is one unbroken block: fixed prose, then a line per
+    wired node built from that node's own description, then fixed prose again.
+    No blank line to cut on and no placeholder, so neither split above finds
+    anything — but the header is a prefix of one literal and the footer a
+    suffix of another, which is enough. Longest first, so the piece offered is
+    the whole stanza's fixed text rather than its first sentence.
+    """
+    lines = run.split("\n")
+    found: list[str] = []
+    for lo in range(len(lines), 0, -1):          # longest prefix that resolves
+        head = "\n".join(lines[:lo])
+        if len(head.strip()) >= _MIN_PIECE and containing_literal(head, prefer):
+            found.append(head)
+            break
+    for lo in range(len(lines), 0, -1):          # longest suffix that resolves
+        tail = "\n".join(lines[len(lines) - lo:])
+        if (len(tail.strip()) >= _MIN_PIECE and tail not in found
+                and containing_literal(tail, prefer)):
+            found.append(tail)
+            break
+    return found
+
+
+def editable_pieces(section: dict) -> list[dict]:
+    """The individually editable stretches of an assembled section.
+
+    A section built by ``.format()`` has no single home, which is true — and
+    was taken to mean none of it could be edited from the page, which is not.
+    The template's own prose IS a verbatim span of ``agent_prompts.py``, and
+    the prose inside a computed stanza IS a string constant in the module that
+    builds it. Only the formatted values have no source text to edit, because
+    they are numbers the runtime supplies.
+
+    So the refusal belongs to the *whole* block, not to its pieces, and this
+    returns the pieces with the same citation-derived honesty used everywhere
+    else: a verbatim span edits in place, a stretch inside a bigger literal
+    edits as a literal, and anything that resolves to neither is left out
+    rather than offered a box that could not be written back.
+    """
+    pieces: list[dict] = []
+    for part in section.get("parts") or []:
+        src = part.get("source") or {}
+        text = (part.get("text") or "").strip("\n")
+        if not text:
+            continue
+        prefer = [REPO / src["file"]] if src.get("file") else None
+        if not part.get("field"):
+            # A template part is a verbatim span ONLY if it survived path
+            # substitution: this map rewrites {study_dir} and friends to
+            # <study_dir> for the reader, and that rewritten text is not in
+            # any file. Offering a box over it would write back text the
+            # source never had. Check, then fall through to the same
+            # placeholder-splitting a computed stanza gets -- the fixed prose
+            # between the substitutions is still a literal with one home.
+            whole = (REPO / src["file"]).read_text(encoding="utf-8") \
+                if src.get("file") else ""
+            if (src.get("match") in ("exact", "ast") and src.get("span")
+                    and text in whole):
+                pieces.append({
+                    "label": text.split("\n")[0][:60],
+                    "text": part["text"], "source": src,
+                    "edit": {"ok": True, "mode": "span",
+                             "key": "{}:{}-{}".format(src["file"].replace("/", "~"),
+                                                      src["line"], src["line_end"]),
+                             "file": src["file"], "line": src["line"],
+                             "line_end": src["line_end"]},
+                })
+                continue
+        seen: set[str] = set()
+        for run in _resolvable_runs(_literal_runs(text), prefer):
+            held = containing_literal(run, prefer)
+            if held is None or held["file"] + str(held["line"]) + run in seen:
+                continue
+            seen.add(held["file"] + str(held["line"]) + run)
+            pieces.append({
+                "label": run.split("\n")[0][:60],
+                "text": run, "source": {"file": held["file"], "line": held["line"],
+                                        "line_end": held["line_end"],
+                                        "match": "literal", "span": False},
+                "field": part.get("field"),
+                "edit": {"ok": True, "mode": "literal",
+                         "key": "{}:{}-{}".format(held["file"].replace("/", "~"),
+                                                  held["line"], held["line_end"]),
+                         "file": held["file"], "line": held["line"],
+                         "line_end": held["line_end"],
+                         "literal_chars": held["chars"]},
+            })
+    return pieces
+
+
 def annotate_edits(roles: list[dict]) -> None:
     """Mark which sections the page may offer to edit, and why not otherwise.
 
@@ -862,10 +1003,20 @@ def annotate_edits(roles: list[dict]) -> None:
                     continue
                 source = section.get("source") or {}
                 if section.get("parts"):
-                    section["edit"] = {"ok": False, "why":
+                    pieces = editable_pieces(section)
+                    section["pieces"] = pieces
+                    section["edit"] = {"ok": False, "why": (
+                        "Assembled by .format() from a template plus stanzas "
+                        "built elsewhere, so the block AS A WHOLE has no single "
+                        "home to write back to. Its written pieces do: "
+                        f"{len(pieces)} of them are listed below and each is "
+                        "editable on its own. Only the formatted-in values are "
+                        "not — they are numbers the runtime supplies, with no "
+                        "source text to change."
+                        if pieces else
                         "Assembled by .format() from a template plus stanzas "
                         "built elsewhere — the pieces have different homes. "
-                        "Edit prompts/agent_prompts.py directly."}
+                        "Edit prompts/agent_prompts.py directly.")}
                 elif source.get("match") in ("exact", "ast"):
                     section["edit"] = {
                         "ok": True,

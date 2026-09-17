@@ -399,3 +399,67 @@ def test_a_per_delegation_rebind_is_not_treated_as_universal():
 
     assert "Write" in pm.injected_tool_docs(), "the Write rebind should still resolve"
     assert "Write" not in pm.universal_tool_names()
+
+
+# ---------------------------------------------------------------------------
+# A .format()-assembled block has no single home. Its pieces do.
+#
+# annotate_edits refused the WHOLE run_paths preamble because it carries
+# parts -- so the template's own prose, which is a verbatim span of
+# agent_prompts.py, and the prose inside a computed stanza, which is a string
+# constant in the module that builds it, were both unreachable from the page.
+# Only the formatted-in values have no source text to edit.
+# ---------------------------------------------------------------------------
+
+
+def _all_pieces(data):
+    return [(role["id"], sec, pc)
+            for role in data["roles"]
+            for lyr in role["layers"]
+            for sec in lyr.get("sections", [])
+            for pc in (sec.get("pieces") or [])]
+
+
+def test_the_assembled_preamble_offers_its_written_pieces(data):
+    for role in data["roles"]:
+        sec = next(s for lyr in role["layers"] for s in lyr.get("sections", [])
+                   if s.get("parts"))
+        assert sec["pieces"], f"{role['id']}: assembled section offers nothing"
+        assert not sec["edit"]["ok"], "the block as a whole still has no one home"
+
+
+def test_no_piece_is_offered_without_somewhere_to_write_it(data):
+    """The map's standing rule: editability is derived from the citation,
+    never asserted. A box with no span behind it is the failure being avoided."""
+    for role_id, _sec, pc in _all_pieces(data):
+        assert pc["edit"]["ok"] and pc["edit"].get("key"), role_id
+        assert pc["edit"]["mode"] in ("span", "literal")
+        assert pc["edit"]["file"] and pc["edit"]["line"]
+
+
+def test_every_pieces_citation_actually_holds_its_text(data):
+    """Re-resolve each piece against the tree. A citation the map cannot
+    reproduce is exactly the overstatement this page exists to avoid."""
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(root / "internal" / "tools"))
+    import promptmap as pm
+
+    for role_id, _sec, pc in _all_pieces(data):
+        text = pc["text"].strip("\n")
+        if pc["edit"]["mode"] == "literal":
+            held = pm.containing_literal(text, [root / pc["edit"]["file"]])
+            assert held is not None, f"{role_id}: {pc['label']!r} no longer resolves"
+            assert held["file"] == pc["edit"]["file"]
+        else:
+            src = (root / pc["edit"]["file"]).read_text(encoding="utf-8")
+            assert text in src, f"{role_id}: {pc['label']!r} is not in its cited file"
+
+
+def test_the_computed_resource_stanza_is_reachable(data):
+    """Its prose is an f-string constant with one home, even though its
+    numbers are supplied per run -- so the wording IS editable from the page."""
+    fields = {pc.get("field") for _r, _s, pc in _all_pieces(data)}
+    assert "{resources}" in fields
