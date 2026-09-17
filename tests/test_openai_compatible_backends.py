@@ -182,3 +182,94 @@ def test_both_converters_drop_unrecognised_roles():
     assert _to_adapter_messages(state) == []
     assert _to_lc_messages([{"role": "system", "content": "x"},
                             {"role": "tool", "content": "y"}]) == []
+
+
+# ---------------------------------------------------------------------------
+# Block content was DESTROYED, not merely flattened
+#
+# Both converters joined block lists on ``c.get("text", "")``, so every block
+# that was not a text block contributed "". A message carrying only
+# tool-result blocks therefore arrived as ``content=""`` — the payload gone,
+# and a user turn left holding nothing. That is silent data loss on its own,
+# and it is also how a request acquires an empty user turn.
+# ---------------------------------------------------------------------------
+
+def test_a_tool_result_block_keeps_its_payload():
+    """The bug: this returned '' and the tool output vanished."""
+    from adda._src.backends.openai_compatible import _flatten_content
+
+    out = _flatten_content([
+        {"type": "tool_result", "tool_use_id": "x", "content": "42 rows"},
+    ])
+    assert out == "42 rows"
+
+
+def test_a_text_block_still_wins_over_content():
+    from adda._src.backends.openai_compatible import _flatten_content
+
+    assert _flatten_content(
+        [{"type": "text", "text": "hello", "content": "ignored"}]) == "hello"
+
+
+def test_mixed_blocks_are_all_kept_in_order():
+    from adda._src.backends.openai_compatible import _flatten_content
+
+    out = _flatten_content([
+        {"type": "text", "text": "ran the sampler"},
+        {"type": "tool_result", "content": "8 rows"},
+    ])
+    assert out == "ran the sampler 8 rows"
+
+
+def test_a_plain_string_is_untouched():
+    from adda._src.backends.openai_compatible import _flatten_content
+
+    assert _flatten_content("just text") == "just text"
+
+
+def test_the_graph_converter_keeps_tool_result_payloads():
+    from langchain_core.messages import HumanMessage
+
+    from adda._src.nodes.parsing import _to_adapter_messages
+
+    out = _to_adapter_messages([
+        HumanMessage(content=[{"type": "tool_result", "content": "8 rows"}]),
+    ])
+    assert out == [{"role": "user", "content": "8 rows"}]
+
+
+# ---------------------------------------------------------------------------
+# An empty turn is the same thing as a missing one
+# ---------------------------------------------------------------------------
+
+def test_an_empty_turn_is_dropped_rather_than_sent():
+    """It carries nothing, and a provider that counts non-empty user turns
+    rejects the WHOLE request over it — so forwarding it can only convert a
+    no-op into a 500."""
+    from adda._src.backends.openai_compatible import _to_lc_messages
+
+    assert _to_lc_messages([{"role": "user", "content": ""}]) == []
+    assert _to_lc_messages([{"role": "user", "content": "   \n"}]) == []
+    assert len(_to_lc_messages([{"role": "user", "content": "real"}])) == 1
+
+
+def test_an_empty_user_turn_does_not_satisfy_the_guard():
+    """The gap that let the reported 500 through: the guard tested for a
+    HumanMessage, and ``HumanMessage(content="")`` is one. The provider does
+    not care about the type, only about whether a user turn says anything."""
+    from adda._src.backends.openai_compatible import UserlessPayloadError
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+
+    class _NeverCalled:
+        def invoke(self, *args, **kwargs):
+            raise AssertionError("must not reach the provider")
+
+    a._agent = _NeverCalled()
+    with pytest.raises(UserlessPayloadError) as exc:
+        a.invoke([{"role": "user", "content": "   "},
+                  {"role": "ai", "content": "sure"}])
+
+    # the ai turn survives; the empty user turn does not, which is the point
+    assert "1 survived" in str(exc.value)
+    assert "empty after flattening" in str(exc.value)

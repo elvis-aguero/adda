@@ -138,27 +138,35 @@ def _parse_verdict(text: str) -> str:
 
 
 def _to_adapter_messages(lc_messages: list) -> list[dict]:
-    """Convert LangChain message objects to adapter-format dicts."""
+    """Convert LangChain message objects to adapter-format dicts.
+
+    Block content is flattened by ``_flatten_content``, which prefers a
+    block's ``text`` and falls back to its ``content``. The previous join on
+    ``c.get("text", "")`` alone turned any non-text block into the empty
+    string, so a HumanMessage carrying tool-result blocks arrived here as
+    ``{"role": "user", "content": ""}`` — its payload destroyed, and the
+    request downstream left with a user turn holding nothing.
+
+    Empty turns are dropped for the same reason they are dropped in
+    ``_to_lc_messages``: they carry nothing, and a provider that counts
+    non-empty user turns rejects the whole request over one.
+    """
     from langchain_core.messages import AIMessage, HumanMessage
+
+    from ..backends.openai_compatible import _flatten_content
 
     result: list[dict] = []
     for msg in lc_messages:
         if isinstance(msg, HumanMessage):
-            content = msg.content
-            if isinstance(content, list):
-                content = " ".join(
-                    c.get("text", "") if isinstance(c, dict) else str(c)
-                    for c in content
-                )
-            result.append({"role": "user", "content": str(content)})
+            role = "user"
         elif isinstance(msg, AIMessage):
-            content = msg.content
-            if isinstance(content, list):
-                content = " ".join(
-                    c.get("text", "") if isinstance(c, dict) else str(c)
-                    for c in content
-                )
-            result.append({"role": "ai", "content": str(content)})
+            role = "ai"
+        else:
+            continue
+        content = _flatten_content(msg.content)
+        if not content.strip():
+            continue
+        result.append({"role": role, "content": content})
     return result
 
 

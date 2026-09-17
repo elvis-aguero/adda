@@ -38,18 +38,51 @@ class UserlessPayloadError(ValueError):
     """
 
 
+def _flatten_content(content) -> str:
+    """Collapse LangChain/Anthropic block content to text WITHOUT losing it.
+
+    A block list was previously joined on ``c.get("text", "")``, so any block
+    that is not a text block contributed the empty string. A HumanMessage
+    carrying only tool-result blocks therefore converted to ``content=""`` —
+    the payload destroyed, not merely reformatted — and the request that went
+    out had a user turn with nothing in it. Providers reject that; Ollama's
+    OpenAI-compatible endpoint answers 500 "no user query found in messages",
+    which names neither the message nor the role and reads as intermittent.
+
+    So: prefer ``text``, fall back to a string ``content`` (tool_result blocks
+    carry their payload there), and only then give up on the block.
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return str(content)
+    parts: list[str] = []
+    for c in content:
+        if not isinstance(c, dict):
+            parts.append(str(c))
+            continue
+        val = c.get("text")
+        if not isinstance(val, str) or not val:
+            val = c.get("content")
+        if isinstance(val, str) and val:
+            parts.append(val)
+        elif val is not None and not isinstance(val, str):
+            parts.append(str(val))
+    return " ".join(parts)
+
+
 def _to_lc_messages(messages: list[dict]) -> list:
     from langchain_core.messages import AIMessage, HumanMessage
 
     result = []
     for m in messages:
         role = m.get("role", "user")
-        content = m.get("content", "")
-        if isinstance(content, list):
-            content = " ".join(
-                c.get("text", "") if isinstance(c, dict) else str(c)
-                for c in content
-            )
+        content = _flatten_content(m.get("content", ""))
+        # An EMPTY turn is dropped rather than sent. It carries nothing, and a
+        # provider that counts non-empty user turns rejects the whole request
+        # because of it — so passing it on can only turn a no-op into a 500.
+        if not content.strip():
+            continue
         if role in ("human", "user"):
             result.append(HumanMessage(content=content))
         elif role in ("ai", "assistant"):
@@ -783,19 +816,29 @@ class OpenAICompatibleAdapter:
         # list. thread_id is fresh per invoke, so nothing server-side
         # backfills the missing turn either.
         #
+        # This check tests for a NON-EMPTY user turn, not merely for a
+        # HumanMessage. Testing the type alone is what let the reported 500
+        # through: HumanMessage(content="") is a HumanMessage, so the guard
+        # passed it, and the provider then rejected the request for having no
+        # user query. An empty turn and a missing one are the same thing to
+        # the server, so they are the same thing here.
+        #
         # Fail here instead, naming what arrived and what survived. This is
-        # an instrument as much as a guard: whether a real run ever reaches
-        # this shape is still unestablished, and an attributable error is how
-        # that question gets answered rather than argued.
+        # an instrument as much as a guard: an attributable error is how the
+        # question of which shape a real run reaches gets answered rather
+        # than argued.
         from langchain_core.messages import HumanMessage as _HumanMessage
-        if not any(isinstance(m, _HumanMessage) for m in lc_msgs):
+        if not any(isinstance(m, _HumanMessage)
+                   and str(m.content).strip() for m in lc_msgs):
             roles = [str(m.get("role", "user")) for m in messages]
             raise UserlessPayloadError(
                 f"refusing to send a request with no user turn: "
                 f"{len(messages)} message(s) in with role(s) {roles!r}, "
-                f"{len(lc_msgs)} survived conversion. Roles other than "
-                "user/human/ai/assistant are dropped by _to_adapter_messages "
-                "and _to_lc_messages."
+                f"{len(lc_msgs)} survived conversion. Two things are dropped "
+                "by _to_adapter_messages and _to_lc_messages: roles other "
+                "than user/human/ai/assistant, and turns whose content is "
+                "empty after flattening. Empty content most often means a "
+                "message carried only blocks with no readable payload."
             )
         cfg = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
