@@ -131,12 +131,12 @@ def test_the_synonym_tier_is_recorded_not_hidden(scores):
     embedding is clearly the answer for.
     """
     assert scores["synonym"]["r@5"] >= 0.68, format_report(scores)
-    assert scores["synonym"]["mrr"] >= 0.58, format_report(scores)
+    assert scores["synonym"]["mrr"] >= 0.55, format_report(scores)
 
 
 def test_overall_quality_does_not_regress(scores):
     assert scores["all"]["r@5"] >= 0.89, format_report(scores)
-    assert scores["all"]["mrr"] >= 0.83, format_report(scores)
+    assert scores["all"]["mrr"] >= 0.82, format_report(scores)
 
 
 # --- the alias map -----------------------------------------------------------
@@ -288,94 +288,25 @@ def test_report(scores, capsys):
         print("\n" + format_report(scores))
 
 
-# --- the structural prior ----------------------------------------------------
-
-def test_a_name_collision_is_ordered_by_centrality(api):
-    """Four symbols are named ``store``. Nothing in the query distinguishes
-    them, so the tie used to fall to key length and "save my results to a
-    file" reached ``Domain.store``. How often the REST of the package refers
-    to a type is what says which one a vague query means."""
-    got = [h.key for h in api._rank("store", 4)]
-
-    assert got[0] == "f3dasm.ExperimentData.store"
-    assert got.index("f3dasm.ExperimentData.store") < got.index(
-        "f3dasm.design.Domain.store")
-
-
-def test_centrality_is_counted_inbound_and_on_word_boundaries(api):
-    """Two mistakes that make the prior say the opposite of the truth.
-
-    SUBSTRINGS: counting ``Parameter`` anywhere scored it 349, because it sits
-    inside ConstantParameter, ContinuousParameter and the rest — the base
-    class would have looked like the most central thing in f3dasm.
-
-    SELF-MENTIONS: a class's own docstring and its own methods' docstrings
-    name it constantly, so counting them makes "has many methods" masquerade
-    as "the rest of the library is written in terms of it".
-    """
-    from adda._src.knowledge.f3dasm_api import _centrality
-
-    prior = _centrality(api._index)
-    assert prior["f3dasm.ExperimentData"] > prior["f3dasm.design.Domain"]
-    assert prior["f3dasm.ExperimentData"] > prior[
-        "f3dasm._src.design.parameter.Parameter"], (
-        "Parameter outranks ExperimentData — mentions are being counted as "
-        "substrings of ConstantParameter and friends")
-
-
-def test_centrality_never_displaces_a_better_named_match(api):
-    """The restriction, pinned. As a multiplier or as a general tiebreak this
-    prior put ``ExperimentSample`` above ``create_sampler`` for "how do I
-    sample the design space" — a central class beating the function actually
-    named for the job. It applies to same-named candidates only."""
-    assert api._rank("how do I sample the design space", 1)[0].key.endswith(
-        "create_sampler")
-    # Domain.add_parameter sits at 2 here and must stay there; the rejected
-    # variants pushed it to 3 behind a second ExperimentData method.
-    assert api._rank("define input parameters", 2)[1].key == (
-        "f3dasm.design.Domain.add_parameter")
-
-
-def test_the_prior_is_computed_once(api):
-    """One regex pass over ~126k characters is cheap, not free."""
-    api._prior = None
-    first = api._centrality_map()
-    assert api._centrality_map() is first
-
-
 # ---------------------------------------------------------------------------
-# Held-out evidence for the centrality tiebreak — and it is thin
+# Collision queries, held out
 #
-# The tiebreak was justified on the 56-query set, where it moved two queries
-# and fixed the `store` ordering. That is the set its RESTRICTION was chosen
-# against, so it cannot also be the evidence that the restriction generalises.
+# tests/f3dasm_collision_queries.py holds 18 queries written from the
+# summaries of symbols that SHARE A LEAF NAME — four `store`s, four
+# `from_yaml`s, six `arm`s — and which the 56-query set never touches. They
+# were frozen before anything was measured against them.
 #
-# tests/f3dasm_collision_queries.py holds 18 queries written afterwards, from
-# the summaries of collisions the 56 never touch, frozen before measuring.
-# Measured on them, the tiebreak changes NOTHING: not one query moves, r@1 and
-# MRR are identical with it on or off.
-#
-# That is not a bug — it is the honest scope. The tiebreak fires only on an
-# EXACT score tie, and a query carrying any distinguishing token does not tie:
-# "save my results to a file" gives the four `store` symbols identical
-# evidence, "build a domain from a hydra yaml config" does not. So the rule is
-# correct where it fires and fires rarely, and the 56-query gain should be read
-# as two queries, not as a general improvement.
-#
-# The queries it would need to help are the AMBIGUOUS ones, and it does not:
-# they sit at r@1 0.25 either way, because they do not produce ties — they
-# produce different scores that favour the wrong symbol. Fixing those needs a
-# prior that SHIFTS scores, which was measured and rejected for regressing the
-# vocab tier. That trade is the open question, not something this file settles.
+# They exist because a centrality tiebreak was once added here to order such
+# symbols, justified on the 56-query set, and then measured on these: it moved
+# not one of them. It was reverted. The queries stayed, because the thing they
+# measure — can this index resolve a name collision — is real regardless of
+# how it is resolved.
 # ---------------------------------------------------------------------------
 
 
-def _held_out_scores(api, *, neutral: bool):
+def _held_out_scores(api):
     from tests.f3dasm_collision_queries import AMBIGUOUS, DISAMBIGUATED
 
-    api._prior = {} if neutral else None
-    if not neutral:
-        api._centrality_map()
     out = {}
     for name, qs in (("disambiguated", DISAMBIGUATED), ("ambiguous", AMBIGUOUS)):
         hits = ranks = 0.0
@@ -388,22 +319,18 @@ def _held_out_scores(api, *, neutral: bool):
     return out
 
 
-def test_the_tiebreak_does_not_regress_a_disambiguated_query(api):
-    """The falsifiable half. When a query NAMES its owner, that is an explicit
-    signal and a structural prior must not override it."""
-    on = _held_out_scores(api, neutral=False)
-    assert on["disambiguated"][0] >= 0.90
-    assert on["disambiguated"][1] >= 0.90
+def test_a_collision_query_that_names_its_owner_resolves(api):
+    """When the query says WHICH class, the right member must come first."""
+    s = _held_out_scores(api)
+    assert s["disambiguated"][0] >= 0.90, s
+    assert s["disambiguated"][1] >= 0.90, s
 
 
-def test_the_tiebreaks_held_out_effect_is_recorded_as_nil(api):
-    """Recorded, not hidden. If a later change makes the prior actually reach
-    these queries — for better or worse — this test is what notices."""
-    off = _held_out_scores(api, neutral=True)
-    on = _held_out_scores(api, neutral=False)
-
-    assert off == on, (
-        "the centrality prior now changes held-out collision queries "
-        f"(off={off}, on={on}) — re-judge it on this evidence, not on the "
-        "56-query set its restriction was chosen against"
-    )
+def test_an_ambiguous_collision_query_is_recorded_as_weak(api):
+    """The open problem, written down rather than hidden. A query that does
+    not say which class sits at r@1 0.25: these do not produce score TIES, so
+    a tiebreak cannot reach them — they produce different scores favouring the
+    wrong symbol. Closing this needs a prior that SHIFTS scores, and every
+    version of that measured so far regressed the vocab tier."""
+    s = _held_out_scores(api)
+    assert s["ambiguous"][0] >= 0.25, s
