@@ -341,3 +341,69 @@ def test_the_prior_is_computed_once(api):
     api._prior = None
     first = api._centrality_map()
     assert api._centrality_map() is first
+
+
+# ---------------------------------------------------------------------------
+# Held-out evidence for the centrality tiebreak — and it is thin
+#
+# The tiebreak was justified on the 56-query set, where it moved two queries
+# and fixed the `store` ordering. That is the set its RESTRICTION was chosen
+# against, so it cannot also be the evidence that the restriction generalises.
+#
+# tests/f3dasm_collision_queries.py holds 18 queries written afterwards, from
+# the summaries of collisions the 56 never touch, frozen before measuring.
+# Measured on them, the tiebreak changes NOTHING: not one query moves, r@1 and
+# MRR are identical with it on or off.
+#
+# That is not a bug — it is the honest scope. The tiebreak fires only on an
+# EXACT score tie, and a query carrying any distinguishing token does not tie:
+# "save my results to a file" gives the four `store` symbols identical
+# evidence, "build a domain from a hydra yaml config" does not. So the rule is
+# correct where it fires and fires rarely, and the 56-query gain should be read
+# as two queries, not as a general improvement.
+#
+# The queries it would need to help are the AMBIGUOUS ones, and it does not:
+# they sit at r@1 0.25 either way, because they do not produce ties — they
+# produce different scores that favour the wrong symbol. Fixing those needs a
+# prior that SHIFTS scores, which was measured and rejected for regressing the
+# vocab tier. That trade is the open question, not something this file settles.
+# ---------------------------------------------------------------------------
+
+
+def _held_out_scores(api, *, neutral: bool):
+    from tests.f3dasm_collision_queries import AMBIGUOUS, DISAMBIGUATED
+
+    api._prior = {} if neutral else None
+    if not neutral:
+        api._centrality_map()
+    out = {}
+    for name, qs in (("disambiguated", DISAMBIGUATED), ("ambiguous", AMBIGUOUS)):
+        hits = ranks = 0.0
+        for q, gold in qs:
+            got = [h.key for h in api._rank(q, 5)]
+            pos = got.index(gold) + 1 if gold in got else None
+            hits += pos == 1
+            ranks += 1 / pos if pos else 0
+        out[name] = (hits / len(qs), ranks / len(qs))
+    return out
+
+
+def test_the_tiebreak_does_not_regress_a_disambiguated_query(api):
+    """The falsifiable half. When a query NAMES its owner, that is an explicit
+    signal and a structural prior must not override it."""
+    on = _held_out_scores(api, neutral=False)
+    assert on["disambiguated"][0] >= 0.90
+    assert on["disambiguated"][1] >= 0.90
+
+
+def test_the_tiebreaks_held_out_effect_is_recorded_as_nil(api):
+    """Recorded, not hidden. If a later change makes the prior actually reach
+    these queries — for better or worse — this test is what notices."""
+    off = _held_out_scores(api, neutral=True)
+    on = _held_out_scores(api, neutral=False)
+
+    assert off == on, (
+        "the centrality prior now changes held-out collision queries "
+        f"(off={off}, on={on}) — re-judge it on this evidence, not on the "
+        "56-query set its restriction was chosen against"
+    )
