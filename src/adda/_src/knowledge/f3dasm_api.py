@@ -53,10 +53,40 @@ _MAX_CHARS = 6000
 #: Dropped from concept queries. An agent writes "how do I sample the design
 #: space"; only three of those words carry signal, and counting the rest
 #: rewards whichever docstring happens to be longest.
+#:
+#: Being short of a function word is not harmless. "get the best design found
+#: so far" kept ``so`` and ``far``; ``so`` then matched ``sobol`` and lifted
+#: that symbol's COVERAGE from 1/5 to 2/5, which is a multiplier on the whole
+#: score — so a stray preposition, not a concept, put a sampler above
+#: ``ExperimentData.get_n_best_output``.
+#:
+#: A stopword may appear INSIDE a symbol name — ``from_file``, ``to_numpy``,
+#: ``store_as_json``, ``select_with_status`` all hinge on a particle — and that
+#: is harmless while some other token still tells those symbols apart. What is
+#: NOT allowed is a stopword that is the ONLY thing distinguishing two symbols:
+#: ``all`` was in this list until ``mark`` and ``mark_all`` showed that it
+#: carries the whole distinction, so it was taken out.
+#: ``tests/test_f3dasm_api_retrieval.py`` enforces exactly that, over the live
+#: index rather than a hand-kept list of exceptions. Exact-name lookup is
+#: scored above tokenisation, so a symbol NAMED for a stopword
+#: (``ExperimentSample.get``) stays reachable regardless.
 _STOP = frozenset("""
-a an and are as at be by can do does for from get how i if in into is it its
-me my of on or that the their then there these this to use used using want
-was what when where which who why will with you your
+a about after again against along already also although always am an and
+another any anyone anything are around as at away back be because been before
+being below between both but by can cannot come could did do does doing done
+down during each either else enough even ever every far few for from further
+get getting give go going good got had has have having he her here hers him his
+how however i if in indeed instead into is it its itself just keep kept let
+like likely made make many may maybe me might mine more most much must my
+myself near need needs neither never next no nor not nothing now of off often
+on once one only onto or other others our ours out over own per perhaps please
+put quite rather really same say see seem seen several shall she should since
+so some somehow someone something sometimes somewhat soon still such sure take
+taken tell than that the their theirs them themselves then there therefore
+these they thing things this those though through thus to together too toward
+under unless until up upon us use used useful using usually very via want was
+way ways we well were what whatever when whenever where whether which while who
+whom whose why will with within without would yet you your yours
 """.split())
 
 
@@ -345,6 +375,15 @@ class F3dasmApi:
         signal, and letting it dilute coverage rewards long docstrings.
         """
         q = query.strip().lower()
+        # A traceback pastes the PRIVATE path —
+        # ``f3dasm._src.experimentdata.ExperimentData`` — and the symbol wanted
+        # is its last segment. Without this the query degrades into a bag of
+        # words over {f3dasm, src, experimentdata}, which every method of that
+        # class matches as well as the class itself: the query above returned
+        # set_project_dir, sort and join, and never the class. Scored BELOW the
+        # whole-query tiers so "ExperimentData.store" still resolves to that
+        # method rather than to every symbol named store.
+        tail = q.rsplit(".", 1)[-1] if "." in q else ""
         toks = [t for t in q.replace(".", " ").replace("_", " ").split()
                 if t and t not in _STOP]
         scored: list[tuple[float, int, str]] = []
@@ -358,9 +397,23 @@ class F3dasmApi:
                 score = 500
             elif q and q in k:
                 score = 250
+            elif tail and (leaf == tail or k.endswith("." + tail)):
+                score = 200
             elif toks:
-                name_toks = set(
-                    leaf.replace("_", " ").split()) | set(k.split("."))
+                # Name tokens are the symbol's IDENTITY: its own name and,
+                # for a method, its owning class. NOT the module path.
+                # ``k.split(".")`` used to drop ``design``, ``optimization``
+                # and ``_src`` into this 60-weight tier, so EVERY
+                # ``f3dasm.design.*`` symbol earned a free name-tier hit on the
+                # word "design" — a word in most DoE queries. That is how
+                # ``design.sobol`` (51.9) outranked
+                # ``ExperimentData.get_n_best_output`` (36.5) for "get the best
+                # design found so far": the right answer matched "best" in both
+                # its name and its summary and still lost to a package folder.
+                name_toks = set(leaf.replace("_", " ").split())
+                if e.owner:
+                    name_toks |= set(e.owner.rsplit(".", 1)[-1]
+                                     .lower().replace("_", " ").split())
                 summ = e.summary.lower()
                 body = e.doc.lower()
                 hit_name = sum(1 for t in toks

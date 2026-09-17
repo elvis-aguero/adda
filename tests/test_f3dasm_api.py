@@ -125,7 +125,12 @@ GOLDEN = [
       "f3dasm.design.latin"}),
     ("sampler", {"f3dasm.create_sampler"}),
     ("store data to disk", {"f3dasm.ExperimentData.store"}),
-    ("define input parameters", {"f3dasm.design.Domain"}),
+    # Domain.add_parameter / .add are better answers than the class itself, and
+    # were what the ranker actually returned all along — the old substring
+    # assertion passed because "f3dasm.design.Domain" is a prefix of them.
+    ("define input parameters",
+     {"f3dasm.design.Domain", "f3dasm.design.Domain.add_parameter",
+      "f3dasm.design.Domain.add", "f3dasm.design.Domain.add_float"}),
     ("run a pipeline on slurm",
      {"f3dasm.SlurmCluster", "f3dasm.SlurmResources", "f3dasm.Pipeline",
       "f3dasm.Pipeline.run"}),
@@ -136,10 +141,15 @@ GOLDEN = [
 def test_golden_query_surfaces_an_acceptable_symbol(api, query, accept):
     """Top FIVE, not top eight. A hit the agent must scroll to is a hit it will
     not take, and "somewhere in the list" is how a ranker rots unnoticed."""
-    out = api.consult(query, limit=5)
-    assert any(a in out for a in accept), (
+    # Keys are compared EXACTLY, not as substrings of the rendered page.
+    # `"f3dasm.ExperimentData" in out` is true when the page contains
+    # `f3dasm.ExperimentData.set_project_dir`, and that false pass hid a real
+    # failure: the traceback query returned three ExperimentData METHODS and
+    # never the class. tests/test_f3dasm_api_retrieval.py found it.
+    got = [h.key for h in api._rank(query, 5)]
+    assert any(a in got for a in accept), (
         f"{query!r} surfaced none of {sorted(accept)} in the top 5."
-        f"\n--- got ---\n{out[:700]}")
+        f"\n--- got ---\n{got}")
 
 
 def test_a_concept_query_prefers_public_symbols(api):
