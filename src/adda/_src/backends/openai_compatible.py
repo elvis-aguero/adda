@@ -14,11 +14,16 @@ The adapter exposes the same public surface as ClaudeAdapter (a mutable
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import uuid
 from pathlib import Path
 from typing import Any
+
+from . import context_budget
+
+log = logging.getLogger(__name__)
 
 __all__ = ["OpenAICompatibleAdapter"]
 
@@ -770,12 +775,108 @@ class OpenAICompatibleAdapter:
         llm = ChatOpenAI(
             model=self.model, base_url=self._base_url, api_key=self._api_key
         )
+        system = system_prompt_with_catalog(
+            self.system_prompt, self.closure_tools)
         return create_react_agent(
             llm,
             self._build_tools(),
-            prompt=SystemMessage(content=system_prompt_with_catalog(
-                self.system_prompt, self.closure_tools)),
+            prompt=SystemMessage(content=system),
+            pre_model_hook=self._context_trim_hook(system),
         )
+
+    # -- context budget -----------------------------------------------------
+
+    def _probe_context_window(self) -> int | None:
+        """Ask the SERVER how much context it will accept, or None.
+
+        OpenAI's ``/models`` is the common shape: vLLM puts ``max_model_len``
+        on each model object and OpenRouter puts ``context_length``. Neither is
+        in the OpenAI spec, so this is best-effort by construction — a backend
+        that answers with neither simply returns None and the caller falls back
+        to a declared value.
+        """
+        import requests
+        try:
+            r = requests.get(f"{self._base_url.rstrip('/')}/models", timeout=5)
+            r.raise_for_status()
+            data = r.json().get("data") or []
+        except Exception:
+            return None
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("id") not in (self.model, None):
+                continue
+            for field in ("max_model_len", "context_length",
+                          "max_context_length"):
+                val = entry.get(field)
+                if isinstance(val, int) and val > 0:
+                    return val
+        return None
+
+    def _resolve_context_window(self) -> tuple[int, str]:
+        """``(window, source)`` — explicit setting, then the server, then a
+        declared default.
+
+        The source is returned, not just the number, because a run whose window
+        came from a guess and a run whose window came from the server are not
+        the same run. ``settings.py``'s precedence applies to the explicit
+        channel, so a study can pin it and an ablation can sweep it.
+        """
+        cached = getattr(self, "_ctx_window", None)
+        if cached is not None:
+            return cached
+        from ..runtime import settings
+        explicit = settings.get_int("context_window", 0)
+        if explicit > 0:
+            out = (explicit, "setting")
+        else:
+            probed = self._probe_context_window()
+            out = ((probed, "server") if probed
+                   else (context_budget.DEFAULT_CONTEXT_WINDOW, "default"))
+        self._ctx_window = out
+        return out
+
+    def _context_trim_hook(self, system_prompt: str):
+        """A ``pre_model_hook`` that keeps one turn inside the served window.
+
+        Returns None when the feature is off, so ``create_react_agent`` is
+        built exactly as it was before this existed — an ablation arm with
+        ``context_trim: false`` is byte-identical to the old behaviour rather
+        than "trimming with a huge budget".
+
+        The hook returns ``llm_input_messages``, which changes only what is
+        SENT. Graph state keeps every message, so the transcript on disk stays
+        complete and a trimmed run is still fully auditable.
+        """
+        from ..runtime import features
+        if not features.enabled("context_trim"):
+            return None
+
+        window, source = self._resolve_context_window()
+        reserve = context_budget.estimate_tokens(system_prompt)
+
+        def _hook(state):
+            msgs = (state or {}).get("messages") or []
+            kept, report = context_budget.trim_to_budget(
+                msgs, context_window=window, reserve_tokens=reserve)
+            if report.fired:
+                from .base import append_transcript, debug_enabled
+                log.warning(
+                    "context trim fired: %d message(s) dropped, %d truncated "
+                    "(%d -> %d est. tokens, budget %d, window %d from %s)",
+                    report.dropped, report.truncated, report.before,
+                    report.after, report.budget, window, source,
+                )
+                if debug_enabled():
+                    append_transcript({
+                        "type": "ContextTrim",
+                        "text": f"window={window} source={source}",
+                        "trim": report.as_dict(),
+                    })
+            return {"llm_input_messages": kept}
+
+        return _hook
 
     def invoke(
         self, messages: list[dict], *,

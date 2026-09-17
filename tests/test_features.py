@@ -75,9 +75,15 @@ def test_every_feature_key_is_a_known_runtime_knob(feature):
 
 @pytest.mark.parametrize("feature", features.FEATURES, ids=lambda f: f.key)
 def test_a_feature_owns_something(feature):
-    """A knob that withholds neither a tool nor a section is not a feature
-    switch; it is a setting, and belongs elsewhere."""
-    assert feature.tools or feature.sections
+    """A knob that withholds nothing nameable is not a feature switch; it is a
+    setting, and belongs elsewhere.
+
+    ``behaviours`` was added for the third kind: a capability with no tool and
+    no prompt surface, such as context trimming. It changes what the model
+    sees without the agent ever being told, which makes measuring it more
+    important than for a feature the agent can at least notice is gone.
+    """
+    assert feature.tools or feature.sections or feature.behaviours
 
 
 def test_done_is_never_owned_by_a_feature():

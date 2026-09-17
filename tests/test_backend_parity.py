@@ -363,7 +363,15 @@ def test_bash_companions_are_at_parity():
 # slip past the name-based method-parity check above).
 # ---------------------------------------------------------------------------
 
-_ENDPOINT_AUTH_ATTRS = {"DEFAULT_BASE_URL", "BASE_URL_ENV", "API_KEY", "API_KEY_ENV"}
+#: What a thin subclass may legitimately own: knowledge OF ITS ENDPOINT.
+#: ``_probe_context_window`` belongs here for the same reason
+#: ``DEFAULT_BASE_URL`` does — asking a server how much context it will
+#: accept is endpoint-specific (Ollama answers on its native /api/show and
+#: reports the SERVED num_ctx; vLLM answers on /v1/models with
+#: max_model_len). The trimming BEHAVIOUR that consumes the answer stays
+#: in OpenAICompatibleAdapter, which is what this test protects.
+_ENDPOINT_AUTH_ATTRS = {"DEFAULT_BASE_URL", "BASE_URL_ENV", "API_KEY",
+                        "API_KEY_ENV", "_probe_context_window"}
 
 
 def test_openai_compatible_subclasses_are_thin():

@@ -80,6 +80,8 @@ rather than silently reverting to the default.
 
 | key | meaning | default |
 |---|---|---|
+| `context_trim` | keep one agent turn inside the served context window (OpenAI-compatible backends only — the Claude SDK compacts on its own and does it better). The first user turn is never evicted. Off is byte-identical to no trimming | `true` |
+| `context_window` | tokens the backend will accept. `0` asks the server (Ollama's served `num_ctx`, vLLM's `max_model_len`); set it to pin the value or to sweep it. The resolved number AND its source are recorded | `0` |
 | `debug` | capture full transcripts, diagnostics and per-delegation logs under `runs/<ts>/debug/`. Required for the run-analysis workflow | `false` |
 | `doe_playbook` | the implementer's DoE method prior: the space-filling recipe, the eval-budget arithmetic and the surrogate-guided exploit loop. Off leaves the f3dasm API and the oracle contract intact and makes the agent choose its own method | `true` |
 | `f3dasm_api` | let the implementer and datagenerator look up the INSTALLED f3dasm's API (`ConsultF3dasmDocs`): signatures, docstrings and source, read off the package the run actually executes against, so it cannot go stale. Off withholds the tool and the one prompt section that instructs its use; the CI-verified `<f3dasm_api>` excerpt stays, so the arm is "excerpt only" — the state before the tool existed | `true` |
