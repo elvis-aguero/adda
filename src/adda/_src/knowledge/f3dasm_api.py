@@ -90,6 +90,100 @@ whom whose why will with within without would yet you your yours
 """.split())
 
 
+#: Everyday English -> the word f3dasm actually uses in a symbol name.
+#:
+#: WHY THIS EXISTS. Four of the five query tiers are saturated (r@5 = 1.00);
+#: every remaining point is in `synonym`, where the query deliberately avoids
+#: f3dasm's vocabulary — "save my results to disk" for ``store``, "load a
+#: previous run" for ``from_file``. That is VOCABULARY MISMATCH, and no amount
+#: of lexical tuning reaches it: the right symbol shares no token with the
+#: query, so it scores zero before any weighting applies.
+#:
+#: HOW IT WAS AUTHORED, which decides whether the measurement means anything.
+#: The right-hand side is the token frequency of f3dasm's own symbol NAMES
+#: (``store`` 16, ``call`` 13, ``sample`` 12, ``load`` 8 …); the left-hand side
+#: is ordinary English for each. It was written from the API surface and from
+#: general usage, NOT by reading which labelled queries fail — an alias map
+#: tuned against the query set would score well and generalise to nothing.
+#: Terms already in f3dasm's vocabulary are deliberately absent: "sample" needs
+#: no alias.
+_ALIASES: dict[str, tuple[str, ...]] = {
+    # persistence
+    "save": ("store",), "write": ("store",), "persist": ("store",),
+    "dump": ("store",), "serialize": ("store",), "export": ("store",),
+    "read": ("load", "from"), "open": ("load", "from"),
+    "restore": ("load", "from"), "import": ("load", "from"),
+    "deserialize": ("load", "from"), "reload": ("load", "from"),
+    # running an evaluation
+    "execute": ("call", "run"), "invoke": ("call", "run"),
+    "apply": ("call", "run"), "simulate": ("evaluate", "call"),
+    "compute": ("evaluate", "call"), "score": ("evaluate",),
+    "solver": ("datagenerator",), "simulator": ("datagenerator",),
+    "oracle": ("datagenerator",), "blackbox": ("datagenerator",),
+    "objective": ("output",), "response": ("output",), "target": ("output",),
+    # the design space
+    "variable": ("parameter",), "knob": ("parameter",),
+    "feature": ("parameter",), "dimension": ("parameter",),
+    "factor": ("parameter",),
+    "category": ("categorical",), "choice": ("categorical",),
+    "option": ("categorical",), "label": ("categorical", "output"),
+    "integer": ("discrete",), "int": ("discrete",), "float": ("continuous",),
+    "real": ("continuous",), "bounds": ("continuous", "parameter"),
+    "range": ("continuous", "parameter"), "fixed": ("constant",),
+    # designs of experiments
+    "doe": ("sample", "sampler"), "draw": ("sample",),
+    "lhs": ("latin",), "hypercube": ("latin",),
+    "quasirandom": ("sobol",), "discrepancy": ("sobol",),
+    "factorial": ("grid",), "sweep": ("grid",),
+    # the data
+    "dataset": ("data", "experimentdata"), "table": ("pandas", "data"),
+    "dataframe": ("pandas",), "matrix": ("numpy", "array"),
+    "vector": ("numpy", "array"), "tensor": ("numpy", "array"),
+    "missing": ("nan",), "null": ("nan",), "empty": ("nan",),
+    "size": ("len",), "count": ("len",), "many": ("len",),
+    "merge": ("add",), "combine": ("add",), "concatenate": ("add",),
+    "append": ("add",), "join": ("add",),
+    "filter": ("select",), "subset": ("select",), "where": ("select",),
+    "optimal": ("best",), "optimum": ("best",),
+    "minimum": ("best",), "maximum": ("best",), "top": ("best",),
+    # execution environment
+    "parallel": ("mpi",), "cluster": ("mpi",), "hpc": ("mpi",),
+    "slurm": ("mpi",), "distributed": ("mpi",),
+    "config": ("yaml",), "settings": ("yaml",),
+    "workflow": ("step", "pipeline"), "chain": ("step", "pipeline"),
+    "stage": ("step",),
+}
+
+#: An alias hit is real evidence but weaker than the word f3dasm itself uses,
+#: so it never outranks a literal match. Below ~0.5 the expansion stops
+#: rescuing anything; above ~0.8 it starts reordering queries that were
+#: already right.
+_ALIAS_WEIGHT = 0.6
+
+
+def _expand(toks: list[str]) -> dict[str, str]:
+    """``{alias term: the query token it stands in for}``.
+
+    Keyed by the introduced term so scoring can look it up, valued by the
+    origin so COVERAGE is still counted per query token — an expanded term
+    must not let one query word cover the query twice.
+    """
+    out: dict[str, str] = {}
+    for t in toks:
+        for alias in _ALIASES.get(t, ()):
+            if alias not in toks:
+                out.setdefault(alias, t)
+    # An English term for one f3dasm identifier is often TWO words -- "black
+    # box" for ``blackbox``, "latin hypercube" for ``latin``. Looking up single
+    # tokens alone can never reach those keys, which is a gap in the mechanism
+    # rather than in the vocabulary.
+    for a, b in zip(toks, toks[1:], strict=False):
+        for alias in _ALIASES.get(a + b, ()):
+            if alias not in toks:
+                out.setdefault(alias, a)
+    return out
+
+
 @dataclass(frozen=True)
 class Entry:
     """One f3dasm symbol, as an agent needs to see it."""
@@ -386,6 +480,10 @@ class F3dasmApi:
         tail = q.rsplit(".", 1)[-1] if "." in q else ""
         toks = [t for t in q.replace(".", " ").replace("_", " ").split()
                 if t and t not in _STOP]
+        # Everyday English -> f3dasm's own word, at a discount (see _ALIASES).
+        # Scored alongside the literal tokens rather than replacing them, so a
+        # query that already speaks f3dasm is ranked exactly as before.
+        aliases = _expand(toks)
         scored: list[tuple[float, int, str]] = []
         for key, e in self._index.items():
             leaf = key.rsplit(".", 1)[-1].lower()
@@ -420,6 +518,13 @@ class F3dasmApi:
                                if any(_akin(t, n) for n in name_toks))
                 hit_summ = sum(1 for t in toks if _in_text(t, summ))
                 hit_body = sum(1 for t in toks if _in_text(t, body))
+                a_name = sum(1 for t in aliases
+                             if any(_akin(t, n) for n in name_toks))
+                a_summ = sum(1 for t in aliases if _in_text(t, summ))
+                a_body = sum(1 for t in aliases if _in_text(t, body))
+                hit_name += _ALIAS_WEIGHT * a_name
+                hit_summ += _ALIAS_WEIGHT * a_summ
+                hit_body += _ALIAS_WEIGHT * a_body
                 if hit_name or hit_summ or hit_body:
                     score = 60 * hit_name + 12 * hit_summ + 2 * hit_body
                     # Coverage is measured over name AND summary TOGETHER, on
@@ -429,9 +534,15 @@ class F3dasmApi:
                     # `ExperimentSample.store` outranked the samplers for
                     # "sample the design space": it matched "sample" (a data
                     # record, not the verb) and nothing else.
+                    # An alias covers the QUERY TOKEN it stands in for, never
+                    # itself: "save my results" must not count as two terms
+                    # covered because ``store`` was added on "save"'s behalf.
                     covered = {t for t in toks
                                if any(_akin(t, n) for n in name_toks)
                                or _in_text(t, summ)}
+                    covered |= {origin for alias, origin in aliases.items()
+                                if any(_akin(alias, n) for n in name_toks)
+                                or _in_text(alias, summ)}
                     score *= 0.35 + 0.65 * (len(covered) / len(toks))
             if not score:
                 continue

@@ -24,10 +24,11 @@ asserted the expected key as a SUBSTRING of the rendered page:
 below are measured against exact-key comparison.
 
 ON THE FLOORS
-    They are recorded measurements, not targets. ``synonym`` sits at 0.59 r@5
-    and that is the honest number: the ranker is lexical and those queries
-    deliberately avoid f3dasm's vocabulary. Writing the floor down is what lets
-    a future alias map or embedding be judged rather than argued about.
+    They are recorded measurements, not targets. ``synonym`` read 0.59 r@5
+    with a purely lexical ranker; the alias map took it to 0.71 and the floors
+    below were re-recorded against that. Writing them down is exactly what let
+    the map be judged rather than argued about — and what will let an
+    embedding be judged against the map.
 """
 from __future__ import annotations
 
@@ -107,19 +108,86 @@ def test_a_concept_in_f3dasms_own_words_is_found(scores):
 def test_the_synonym_tier_is_recorded_not_hidden(scores):
     """The KNOWN-WEAK tier. These queries avoid f3dasm's vocabulary on purpose
     — "save" not "store", "supercomputer" not "slurm", "black box" not
-    "DataGenerator" — and a lexical ranker cannot bridge that.
+    "DataGenerator" — which is vocabulary mismatch: the right symbol shares no
+    token with the query, so it scores zero before any weighting applies.
 
-    The floor is a floor, not a target: it exists so a later alias map or
-    embedding can be shown to move it, and so a ranker change cannot quietly
-    trade this tier away for a better aggregate.
+    The alias map (``_ALIASES``) is what the floor was written down FOR. It
+    moved this tier, measured on the same 56 queries:
+
+        r@1  0.29 -> 0.47      r@3  0.41 -> 0.65
+        r@5  0.59 -> 0.71      MRR  0.39 -> 0.57
+
+    and left every other tier byte-identical, which is the property that
+    matters — an expansion that bought this tier by disturbing the four
+    saturated ones would be a worse ranker with a better average.
+
+    Six of 17 still miss at k=5, and they are worth naming because they say
+    what an embedding would and would not buy. Two are RANKING, not
+    vocabulary ("save my results to a file" reaches ``store`` and then loses
+    to ``Domain.store``: three classes carry that method and nothing tells
+    them apart). Two are vocabulary this map simply does not carry. Two are
+    genuinely conceptual — "pick points to try next" shares no word with
+    ``create_optimizer`` in any vocabulary — and those are the only ones an
+    embedding is clearly the answer for.
     """
-    assert scores["synonym"]["r@5"] >= 0.55, format_report(scores)
-    assert scores["synonym"]["mrr"] >= 0.35, format_report(scores)
+    assert scores["synonym"]["r@5"] >= 0.68, format_report(scores)
+    assert scores["synonym"]["mrr"] >= 0.54, format_report(scores)
 
 
 def test_overall_quality_does_not_regress(scores):
-    assert scores["all"]["r@5"] >= 0.85, format_report(scores)
-    assert scores["all"]["mrr"] >= 0.75, format_report(scores)
+    assert scores["all"]["r@5"] >= 0.89, format_report(scores)
+    assert scores["all"]["mrr"] >= 0.81, format_report(scores)
+
+
+# --- the alias map -----------------------------------------------------------
+
+def test_a_query_already_in_f3dasms_words_is_unchanged(api):
+    """Expansion must be additive. A query that already speaks f3dasm has to
+    rank exactly as it did before the map existed, or the four saturated tiers
+    were bought at a price paid somewhere invisible."""
+    from adda._src.knowledge.f3dasm_api import _expand
+
+    for q in ("store the experiment data", "create_sampler latin",
+              "call the datagenerator", "domain add_float"):
+        toks = [t for t in q.replace("_", " ").split()]
+        introduced = _expand(toks)
+        assert not (set(introduced) & set(toks)), (
+            f"{q!r}: expansion re-introduced a token the query already had")
+
+
+def test_an_alias_covers_its_origin_not_itself(api):
+    """"save my results" must not count as two terms covered because ``store``
+    was added on "save"'s behalf — coverage multiplies the whole score, so a
+    double-count there inflates every aliased query."""
+    from adda._src.knowledge.f3dasm_api import _expand
+
+    assert _expand(["save"]) == {"store": "save"}
+
+
+def test_a_two_word_english_term_reaches_a_one_word_identifier(api):
+    """"black box" cannot match the key ``blackbox`` by single-token lookup.
+    That is a gap in the mechanism, not in the vocabulary."""
+    from adda._src.knowledge.f3dasm_api import _expand
+
+    assert "datagenerator" in _expand(["black", "box"])
+
+
+def test_every_alias_points_at_a_word_f3dasm_actually_uses(api):
+    """Derived from the live index, not from a hand-kept list. An alias whose
+    target appears in no symbol name is dead weight that can only add noise —
+    and would survive forever, because nothing else would ever mention it."""
+    from adda._src.knowledge.f3dasm_api import _ALIASES
+
+    vocab: set[str] = set()
+    for key, entry in api._index.items():
+        leaf = key.rsplit(".", 1)[-1].lower()
+        vocab |= set(leaf.replace("_", " ").split())
+        if entry.owner:
+            vocab |= set(entry.owner.rsplit(".", 1)[-1].lower().split("_"))
+
+    dead = sorted({t for targets in _ALIASES.values() for t in targets}
+                  - vocab)
+    assert not dead, f"aliases pointing at words f3dasm never uses: {dead}"
 
 
 # --- the two fixed bugs, pinned as behaviour --------------------------------
