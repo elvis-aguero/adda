@@ -40,7 +40,9 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import math
 import pkgutil
+import re
 import warnings
 from dataclasses import dataclass, field
 
@@ -161,6 +163,61 @@ _ALIASES: dict[str, tuple[str, ...]] = {
 _ALIAS_WEIGHT = 0.6
 
 
+def _centrality(index: dict[str, Entry]) -> dict[str, float]:
+    """How central each symbol is to f3dasm, from the docs' own link structure.
+
+    THE PROBLEM. Four symbols are named ``store`` — on ``Domain``,
+    ``ExperimentData``, ``ExperimentSample`` and the private ``ToDiskValue``.
+    A query matching the word "store" matches all four identically, because
+    scoring sees only the leaf name, and the tie then falls to something
+    incidental. "how do I save my results to a file" resolved to
+    ``Domain.store``.
+
+    WHY NOT PROSE. The obvious fix — score the owning class's summary against
+    the query — fails on exactly the case that needs it: ``ExperimentData`` has
+    NO docstring summary at all, while ``Domain``'s reads "Main class for
+    defining the domain of the design of experiments". Matching query words
+    against owner prose would make the wrong answer win by more.
+
+    SO: STRUCTURE, NOT PROSE. Count how often the REST of the package refers to
+    a symbol by name. A type the rest of the library is written in terms of is
+    the one a vague query usually means:
+
+        ExperimentData 114    ExperimentSample 85    Domain 19    ToDiskValue 1
+
+    Two details carry that result. Mentions are counted on WORD BOUNDARIES —
+    substring counting scored ``Parameter`` at 349 because it is inside
+    ``ConstantParameter``, ``ContinuousParameter`` and the rest, making the
+    base class look like the most central thing in f3dasm. And they are
+    INBOUND only: a symbol's own docstring and those of its own methods are
+    excluded, or a class would rank itself up simply by having many methods
+    that mention it.
+
+    Returned as a 0..1 log-normalised score: the distances that matter here are
+    ratios, and one very heavily referenced type should not flatten everything
+    else to zero.
+    """
+    texts = {k: ((e.doc or "") + " " + (e.signature or ""))
+             for k, e in index.items()}
+    raw: dict[str, int] = {}
+    for key, entry in index.items():
+        if entry.owner:                      # a method inherits its owner's weight
+            continue
+        leaf = key.rsplit(".", 1)[-1]
+        if len(leaf) < 3:
+            continue
+        pat = re.compile(rf"\b{re.escape(leaf)}\b")
+        raw[key] = sum(
+            len(pat.findall(text)) for other, text in texts.items()
+            if other != key and index[other].owner != key
+        )
+    if not raw:
+        return {}
+    top = math.log1p(max(raw.values()))
+    return {k: (math.log1p(v) / top if top else 0.0) for k, v in raw.items()}
+
+
+
 def _expand(toks: list[str]) -> dict[str, str]:
     """``{alias term: the query token it stands in for}``.
 
@@ -181,6 +238,42 @@ def _expand(toks: list[str]) -> dict[str, str]:
         for alias in _ALIASES.get(a + b, ()):
             if alias not in toks:
                 out.setdefault(alias, a)
+    return out
+
+
+def _break_name_ties(scored, index: dict[str, Entry],
+                     prior: dict[str, float]) -> list[str]:
+    """Order SAME-NAMED symbols that scored identically by centrality.
+
+    Applied only to a collision — candidates sharing a leaf name AND a score —
+    because that is the only case where centrality is the right signal and the
+    only one it cannot damage.
+
+    Both halves of that restriction were measured. Used as a score multiplier,
+    or as a general tiebreak, centrality fixed two queries and broke two
+    others: it put ``ExperimentSample`` above ``create_sampler`` for "how do I
+    sample the design space" and ``ExperimentData.move_to_input`` above
+    ``Domain.add_parameter`` for "define input parameters" — in both cases a
+    central class displacing the symbol actually named for the job, which is
+    the failure the name tier exists to prevent. Those two candidates do not
+    share a leaf name, so restricting to collisions keeps the wins
+    (``DataGenerator`` over its own method, ``ExperimentData.__add__`` over
+    ``Domain.__add__``) and drops the losses.
+    """
+    by_group: dict[tuple, list[str]] = {}
+    order: list[tuple] = []
+    for score, _, key in scored:
+        g = (score, key.rsplit(".", 1)[-1])
+        if g not in by_group:
+            by_group[g] = []
+            order.append(g)
+        by_group[g].append(key)
+    out: list[str] = []
+    for g in order:
+        keys = by_group[g]
+        if len(keys) > 1:
+            keys = sorted(keys, key=lambda k: -prior.get(index[k].owner or k, 0.0))
+        out += keys
     return out
 
 
@@ -447,8 +540,19 @@ class F3dasmApi:
 
     def __init__(self) -> None:
         self._index = build_index()
+        self._prior: dict[str, float] | None = None
 
     # -- retrieval ---------------------------------------------------------
+
+    def _centrality_map(self) -> dict[str, float]:
+        """``_centrality`` over this index, computed once per process.
+
+        It is one pass of regex counting over ~126k characters — cheap, but not
+        cheap enough to repeat on every keystroke of every query.
+        """
+        if self._prior is None:
+            self._prior = _centrality(self._index)
+        return self._prior
 
     def _rank(self, query: str, limit: int) -> list[Entry]:
         """Name matches first, then summary, then the body of the docstring.
@@ -484,6 +588,7 @@ class F3dasmApi:
         # Scored alongside the literal tokens rather than replacing them, so a
         # query that already speaks f3dasm is ranked exactly as before.
         aliases = _expand(toks)
+        prior = self._centrality_map()
         scored: list[tuple[float, int, str]] = []
         for key, e in self._index.items():
             leaf = key.rsplit(".", 1)[-1].lower()
@@ -553,9 +658,21 @@ class F3dasmApi:
                 score *= 0.15
             if e.kind != "method":
                 score *= 1.15      # a class/function is a better entry point
+            # Centrality is a TIEBREAK, never a multiplier. Scaling scores by
+            # it was measured and rejected: at any weight that fixed anything
+            # it also put ``ExperimentSample`` above ``create_sampler`` for
+            # "how do I sample the design space" and ``ExperimentData`` above
+            # ``Domain.add_parameter`` for "define input parameters" — a
+            # central class beating the function actually named for the job,
+            # which is the precise failure this ranker's name tier exists to
+            # prevent. As a tiebreak it cannot do that: it only orders
+            # candidates that already scored IDENTICALLY, which is the
+            # collision it was built for — four symbols named ``store``, on
+            # Domain, ExperimentData, ExperimentSample and a private class.
             scored.append((score, -len(key), key))
         scored.sort(reverse=True)
-        return [self._index[k] for _, _, k in scored[:limit]]
+        return [self._index[k]
+                for k in _break_name_ties(scored, self._index, prior)[:limit]]
 
     # -- rendering ---------------------------------------------------------
 

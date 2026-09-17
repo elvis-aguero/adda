@@ -131,12 +131,12 @@ def test_the_synonym_tier_is_recorded_not_hidden(scores):
     embedding is clearly the answer for.
     """
     assert scores["synonym"]["r@5"] >= 0.68, format_report(scores)
-    assert scores["synonym"]["mrr"] >= 0.54, format_report(scores)
+    assert scores["synonym"]["mrr"] >= 0.58, format_report(scores)
 
 
 def test_overall_quality_does_not_regress(scores):
     assert scores["all"]["r@5"] >= 0.89, format_report(scores)
-    assert scores["all"]["mrr"] >= 0.81, format_report(scores)
+    assert scores["all"]["mrr"] >= 0.83, format_report(scores)
 
 
 # --- the alias map -----------------------------------------------------------
@@ -286,3 +286,58 @@ def test_report(scores, capsys):
     diagnostic to run when changing the ranker."""
     with capsys.disabled():
         print("\n" + format_report(scores))
+
+
+# --- the structural prior ----------------------------------------------------
+
+def test_a_name_collision_is_ordered_by_centrality(api):
+    """Four symbols are named ``store``. Nothing in the query distinguishes
+    them, so the tie used to fall to key length and "save my results to a
+    file" reached ``Domain.store``. How often the REST of the package refers
+    to a type is what says which one a vague query means."""
+    got = [h.key for h in api._rank("store", 4)]
+
+    assert got[0] == "f3dasm.ExperimentData.store"
+    assert got.index("f3dasm.ExperimentData.store") < got.index(
+        "f3dasm.design.Domain.store")
+
+
+def test_centrality_is_counted_inbound_and_on_word_boundaries(api):
+    """Two mistakes that make the prior say the opposite of the truth.
+
+    SUBSTRINGS: counting ``Parameter`` anywhere scored it 349, because it sits
+    inside ConstantParameter, ContinuousParameter and the rest — the base
+    class would have looked like the most central thing in f3dasm.
+
+    SELF-MENTIONS: a class's own docstring and its own methods' docstrings
+    name it constantly, so counting them makes "has many methods" masquerade
+    as "the rest of the library is written in terms of it".
+    """
+    from adda._src.knowledge.f3dasm_api import _centrality
+
+    prior = _centrality(api._index)
+    assert prior["f3dasm.ExperimentData"] > prior["f3dasm.design.Domain"]
+    assert prior["f3dasm.ExperimentData"] > prior[
+        "f3dasm._src.design.parameter.Parameter"], (
+        "Parameter outranks ExperimentData — mentions are being counted as "
+        "substrings of ConstantParameter and friends")
+
+
+def test_centrality_never_displaces_a_better_named_match(api):
+    """The restriction, pinned. As a multiplier or as a general tiebreak this
+    prior put ``ExperimentSample`` above ``create_sampler`` for "how do I
+    sample the design space" — a central class beating the function actually
+    named for the job. It applies to same-named candidates only."""
+    assert api._rank("how do I sample the design space", 1)[0].key.endswith(
+        "create_sampler")
+    # Domain.add_parameter sits at 2 here and must stay there; the rejected
+    # variants pushed it to 3 behind a second ExperimentData method.
+    assert api._rank("define input parameters", 2)[1].key == (
+        "f3dasm.design.Domain.add_parameter")
+
+
+def test_the_prior_is_computed_once(api):
+    """One regex pass over ~126k characters is cheap, not free."""
+    api._prior = None
+    first = api._centrality_map()
+    assert api._centrality_map() is first
