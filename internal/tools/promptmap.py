@@ -427,22 +427,26 @@ def _resources_text(for_worker: bool) -> str:
 
 
 def _roster_text(role: str) -> str:
-    """The delegation roster, built by the live method on a demo graph.
+    """The delegation roster, built by the live method on the default graph.
 
-    Shown against the default graph so the map has something concrete to
-    print; the real one is whatever the study's own graph declares, which is
+    The SAME graph ``build_roles`` enumerates its roles from, so the map's
+    roster and the map's role list cannot disagree. Shown against the default
+    because the real one is whatever the study's own graph declares — which is
     the entire point of the field existing.
+
+    Deliberately not wrapped in a try/except. An earlier version guessed at an
+    import, failed, and returned "" — and the map then printed "roster is empty
+    for strategizer — nothing is injected", which is false for every real run.
+    A generated map that quietly claims a prompt section is absent is worse
+    than one that fails to build.
     """
+    from adda._src.agents import _graphs
     from adda._src.runtime.agent_runtime import AgenticRun
 
-    try:
-        from adda import default_graph
-        graph = default_graph()
-    except Exception:
-        return ""
+    graph = _graphs._default_graph()
     run = AgenticRun.__new__(AgenticRun)
     run._graph_spec = graph
-    return run._delegation_roster(getattr(graph, "entry", role))
+    return run._delegation_roster(graph.entry)
 
 
 def _knowledge_text(role: str) -> str:

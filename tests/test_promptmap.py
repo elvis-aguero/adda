@@ -313,3 +313,43 @@ def test_a_gate_message_is_what_its_cited_expression_renders(promptmap):
                 f"{gate['symbol']}: the card shows a message its source does not render")
             assert message["edit"]["ok"] and message["edit"]["mode"] == "message"
     assert total >= 10, "the gates stopped saying anything to the agent — suspicious"
+
+
+def test_a_computed_block_is_never_silently_reported_as_absent(data):
+    """A generated map that claims a prompt section is empty, when every real
+    run injects one, is worse than a map that fails to build.
+
+    The `{roster}` helper first guessed at an import, failed, and hit its own
+    `except Exception: return ""`. The map then printed "roster is empty for
+    strategizer — nothing is injected" and looked perfectly fine. The entry
+    role's roster is non-empty on the default graph, so an empty one means the
+    builder broke, not that the prompt changed.
+    """
+    entry = [r for r in data["roles"]
+             if r["layers"][0]["label"] == "RUN_PATHS_PREAMBLE_TEMPLATE"]
+    assert entry, "no entry role found"
+    for role in entry:
+        parts = {p["field"]: p for p in role["layers"][0]["sections"][0]["parts"]
+                 if p.get("field")}
+        roster = parts["{roster}"]
+        assert not roster["empty"], (
+            f"{role['id']}: the roster rendered empty — the builder is broken, "
+            "since the default graph wires four delegation targets")
+        assert "<delegation_roster>" in roster["text"]
+
+
+def test_the_rendered_roster_matches_the_graph_it_claims_to_describe(data):
+    """The map enumerates its roles from `_graphs._default_graph()`; the roster
+    must come from the same graph, or the page shows two different systems."""
+    from adda._src.agents import _graphs
+
+    graph = _graphs._default_graph()
+    targets = {e.target for e in graph.edges if e.source == graph.entry}
+
+    entry = next(r for r in data["roles"]
+                 if r["layers"][0]["label"] == "RUN_PATHS_PREAMBLE_TEMPLATE")
+    text = next(p["text"] for p in entry["layers"][0]["sections"][0]["parts"]
+                if p.get("field") == "{roster}")
+
+    for t in targets:
+        assert t in text, f"{t} is wired but missing from the rendered roster"
