@@ -683,6 +683,80 @@ def tool_docs() -> dict[str, dict]:
     return out
 
 
+def injected_tool_docs() -> dict[str, dict]:
+    """Tools registered by ASSIGNMENT rather than declared as a method.
+
+    ``tool_docs`` finds a tool by its PascalCase ``def``. ConsultHandbook has
+    none: ``agent_runtime`` does ``closure_tools["ConsultHandbook"] =
+    _consult_handbook``, binding a snake_case function under a PascalCase key.
+    At runtime that is invisible — ``render_tool_catalog`` reads the live dict's
+    KEYS, so every agent really is shown ``### ConsultHandbook`` — but a map
+    built by scanning ``def``s could not see it, and the handbook lookup every
+    node gets was missing from the agent's-eye view entirely.
+
+    Read off the same assignment the runtime performs: the subscript key is the
+    registered name, the assigned identifier is resolved to its function
+    definition, and that function's docstring is what the agent reads.
+    """
+    out: dict[str, dict] = {}
+    targets: dict[str, tuple[str, int]] = {}
+    for path in _py_files():
+        tree = ast.parse(_read(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            for tgt in node.targets:
+                if not (isinstance(tgt, ast.Subscript)
+                        and isinstance(tgt.slice, ast.Constant)
+                        and isinstance(tgt.slice.value, str)
+                        and _TOOL_NAME.match(tgt.slice.value)):
+                    continue
+                base = tgt.value
+                if getattr(base, "attr", getattr(base, "id", "")) != "closure_tools":
+                    continue
+                if isinstance(node.value, ast.Name):
+                    targets[tgt.slice.value] = (node.value.id, _rel(path))
+    if not targets:
+        return out
+    wanted = {fn for fn, _ in targets.values()}
+    defs: dict[str, dict] = {}
+    for path in _py_files():
+        tree = ast.parse(_read(path))
+        for node in ast.walk(tree):
+            if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name in wanted and ast.get_docstring(node)):
+                lit = node.body[0]
+                defs[node.name] = {
+                    "doc": ast.get_docstring(node), "examples": [],
+                    "file": _rel(path), "line": lit.lineno,
+                    "line_end": lit.end_lineno, "def_line": node.lineno,
+                    "ambiguous": [],
+                }
+    for tool, (fn, site) in targets.items():
+        if fn in defs:
+            out[tool] = dict(defs[fn], registered_at=site)
+    return out
+
+
+#: Where a registration has to happen for the tool to reach EVERY role.
+_UNIVERSAL_SITE = "runtime/agent_runtime.py"
+
+
+def universal_tool_names() -> list[str]:
+    """Tools no agent declares but every adapter is given at construction.
+
+    Scoped to the one construction site that runs for every node. Not every
+    assignment is universal: ``leaf.py`` rebinds ``closure_tools["Write"]`` to
+    a freshly-sandboxed closure before EACH delegation, which is a per-worker
+    rebind of a tool those agents already declare — adding it to every role
+    would put Write in the strategizer's catalog, which does not have it.
+    """
+    return sorted(
+        t for t, d in injected_tool_docs().items()
+        if d.get("registered_at", "").endswith(_UNIVERSAL_SITE)
+    )
+
+
 #: The two tools whose docstring is rebuilt per node at dispatch (``with_doc``
 #: in nodes/tools/routing/_binding.py), so what the agent reads is not what the
 #: source says — Delegate embeds its node's connected targets, AskForFeedback
@@ -696,7 +770,7 @@ def catalog_sections(tool_names: list[str]) -> list[dict]:
     Mirrors ``render_tool_catalog``'s own formatting so the text here is the
     text the model reads, and cites each entry to the docstring it comes from.
     """
-    docs = tool_docs()
+    docs = {**tool_docs(), **injected_tool_docs()}
     header = (
         "Your available tools, generated from the live tool set (AUTHORITATIVE "
         "— these exact names are the ones you call; anything not listed here is "
@@ -920,6 +994,10 @@ def build_roles(shared: list[dict]) -> list[dict]:
 
         # Layer 4 — the <tools> catalog, generated from the live closure set.
         tools = [getattr(t, "__name__", str(t)) for t in (getattr(agent, "tools", ()) or ())]
+        # Universally injected tools are not in agent.tools -- they are bound
+        # onto every adapter at construction. The agent sees them; so must the
+        # map. (ConsultHandbook was absent from this view until this line.)
+        tools += [t for t in universal_tool_names() if t not in tools]
         layers.append({
             "kind": "catalog",
             "label": "<tools> catalog",

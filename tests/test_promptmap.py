@@ -353,3 +353,49 @@ def test_the_rendered_roster_matches_the_graph_it_claims_to_describe(data):
 
     for t in targets:
         assert t in text, f"{t} is wired but missing from the rendered roster"
+
+
+# ---------------------------------------------------------------------------
+# A tool the agent gets must be a tool the map shows
+#
+# render_tool_catalog builds the <tools> block from the LIVE closure dict's
+# keys, so ConsultHandbook -- bound at agent_runtime.py as
+# closure_tools["ConsultHandbook"] = _consult_handbook -- is really in every
+# agent's prompt. The map built its catalog by scanning PascalCase `def`s, and
+# that function is snake_case, so the one tool every single node is given was
+# absent from the page that claims to be the agent's-eye view.
+# ---------------------------------------------------------------------------
+
+
+def test_every_role_shows_the_universally_injected_handbook_tool(data):
+    for role in data["roles"]:
+        assert "ConsultHandbook" in role["tools"], (
+            f"{role['id']}: gets ConsultHandbook at runtime but the map omits it"
+        )
+
+
+def test_the_injected_tool_carries_its_real_docstring(data):
+    """Showing the name without the text would be a different lie: the agent
+    reads _consult_handbook's docstring, so the map must cite that."""
+    for role in data["roles"]:
+        catalog = next(lyr for lyr in role["layers"] if lyr["kind"] == "catalog")
+        entry = next((s for s in catalog["sections"]
+                      if s.get("label") == "ConsultHandbook"), None)
+        assert entry is not None, f"{role['id']}: no ConsultHandbook catalog entry"
+        assert "handbook" in entry["text"].lower()
+        assert "chapter" in entry["text"].lower()
+
+
+def test_a_per_delegation_rebind_is_not_treated_as_universal():
+    """leaf.py rebinds closure_tools["Write"] per delegation. That is not a
+    universal injection, and adding it would put Write in the strategizer's
+    catalog -- a tool it does not have."""
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                           / "internal" / "tools"))
+    import promptmap as pm
+
+    assert "Write" in pm.injected_tool_docs(), "the Write rebind should still resolve"
+    assert "Write" not in pm.universal_tool_names()
