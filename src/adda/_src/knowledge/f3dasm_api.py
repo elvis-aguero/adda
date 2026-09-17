@@ -586,31 +586,36 @@ def build_f3dasm_api_closures() -> dict:
     # the generated <tools> catalog, which is the agent's only documentation
     # for it.
     def ConsultF3dasmDocs(query: str, limit: int = 8, source: bool = False):
-        """Look up the INSTALLED f3dasm's API — signatures, docstrings, source.
+        """Look up the INSTALLED f3dasm's API — signature, docstring, source.
 
-        Read off the package this run actually executes against, so it is never
-        out of date. Use it before guessing an f3dasm name or signature.
+        Introspected from the package this run executes against, so it cannot
+        be out of date. Use it before guessing any f3dasm name or argument.
 
-        Two steps, like a reference:
-          ConsultF3dasmDocs("sample the design space") -> a short list of
-              matching symbols, one line each
-          ConsultF3dasmDocs("f3dasm.create_sampler")   -> that symbol's entry:
-              the correct import line, full signature, and docstring
-        Add source=True on a known symbol to read its implementation, when the
-        docstring does not settle the question.
+        Two steps, like a reference. A DESCRIPTION returns a menu: one line per
+        matching symbol, up to `limit`. A NAME from that menu returns its entry:
+        the import line to write, the full signature, and the docstring.
+          ConsultF3dasmDocs("sample the design space")   # menu
+          ConsultF3dasmDocs("f3dasm.create_sampler")     # entry
+          ConsultF3dasmDocs("f3dasm.create_sampler", source=True)
+        Add source=True only when the docstring does not settle the question.
 
-        Search is LEXICAL: it matches your words against symbol names (weighted
-        heavily) and docstrings. Prefer the real name if you know it; otherwise
-        describe the operation in f3dasm's vocabulary ("sample", "store",
-        "optimize", "domain"). Singular/plural is handled.
+        Search is LEXICAL — your words against symbol names (weighted heavily)
+        and docstrings; singular/plural and sampler/sampling are folded. Give
+        the real name when you know it, otherwise f3dasm's own vocabulary
+        ("sample", "store", "optimize", "domain"). A traceback's private path
+        resolves to its public symbol.
 
-        The entry always gives the PUBLIC import path — f3dasm defines classes
-        under f3dasm._src.* but that is not what you import. A symbol marked
-        PRIVATE is internal: read it to understand a traceback, never import
-        it. Where adda replaces an f3dasm method at runtime, the entry says so
-        and shows what actually executes.
+        Three things no other source gives you:
+          - The PUBLIC import path. f3dasm defines its classes under
+            f3dasm._src.*, which is NOT what you import; the entry gives the
+            line to write.
+          - PRIVATE marks an internal symbol: read it to understand a
+            traceback, never import it.
+          - Where adda REPLACES an f3dasm method at runtime, the entry says so
+            and describes what actually executes.
 
-        Covers f3dasm only — not your study code, not other libraries.
+        Covers the installed f3dasm only — not your study code and not other
+        libraries, so a miss means "not an f3dasm symbol", not "does not exist".
         """
         return api.consult(query, limit=int(limit), source=bool(source))
 

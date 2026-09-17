@@ -113,18 +113,35 @@ FEATURES: tuple[Feature, ...] = (
         default=True,
         tools=frozenset({"ConsultF3dasmDocs"}),
         sections=("f3dasm_api_lookup",),
-        # The tag is f3dasm_api_LOOKUP, not f3dasm_api: the implementer
-        # prompt already owns a <f3dasm_api> section — 217 hand-written lines
-        # (~2,800 tokens) of API excerpt that this tool makes largely
-        # redundant. Reusing the name would have made the ablation strip that
-        # excerpt too, so the arm would measure "no cheat sheet AND no lookup"
-        # while claiming to measure the lookup.
+        # The tag is f3dasm_api_LOOKUP, not f3dasm_api: <f3dasm_api> is the
+        # fixed excerpt — the canonical imports, the Domain surface and
+        # F3DASM_CORE_IDIOMS, which CI executes against the installed f3dasm.
+        # Reusing the name would make this arm strip the excerpt too, so it
+        # would measure "no cheat sheet AND no lookup" while claiming to
+        # measure the lookup.
         #
         # Not pervasive: f3dasm is named throughout both prompts, but nothing
         # outside this section tells the agent to CONSULT it. Off removes the
         # instruction and the tool together, leaving an agent that writes
-        # f3dasm from memory plus the excerpt — the state before this tool
+        # f3dasm from the excerpt and memory — the state before this tool
         # existed, and so an honest control arm.
+    ),
+    Feature(
+        key="doe_playbook",
+        default=True,
+        # No tools — it is pure method prior: the space-filling recipe, the
+        # eval-budget arithmetic and the surrogate-guided exploit loop, roughly
+        # 625 tokens on every implementer call. It used to sit inside
+        # <f3dasm_api>, which conflated three unrelated things: f3dasm API
+        # facts (now the excerpt plus the lookup), the adda oracle contract
+        # (<oracle_contract>, run substrate and NOT ablatable — an agent
+        # without it writes unledgered evaluations rather than a worse loop),
+        # and this. Separating them is what makes either arm interpretable.
+        #
+        # The hypothesis it tests is the interesting one for a small model:
+        # whether an explicit method prior substitutes for capability. Expect
+        # a large model to lose little and a 27B-class model to lose a lot.
+        sections=("doe_playbook",),
     ),
     Feature(
         key="pipeline_deliverable",

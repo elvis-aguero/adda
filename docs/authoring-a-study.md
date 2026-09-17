@@ -81,7 +81,8 @@ rather than silently reverting to the default.
 | key | meaning | default |
 |---|---|---|
 | `debug` | capture full transcripts, diagnostics and per-delegation logs under `runs/<ts>/debug/`. Required for the run-analysis workflow | `false` |
-| `f3dasm_api` | let the implementer and datagenerator look up the INSTALLED f3dasm's API (`ConsultF3dasmDocs`): signatures, docstrings and source, read off the package the run actually executes against, so it cannot go stale. Off = they write f3dasm from memory | `true` |
+| `doe_playbook` | the implementer's DoE method prior: the space-filling recipe, the eval-budget arithmetic and the surrogate-guided exploit loop. Off leaves the f3dasm API and the oracle contract intact and makes the agent choose its own method | `true` |
+| `f3dasm_api` | let the implementer and datagenerator look up the INSTALLED f3dasm's API (`ConsultF3dasmDocs`): signatures, docstrings and source, read off the package the run actually executes against, so it cannot go stale. Off withholds the tool and the one prompt section that instructs its use; the CI-verified `<f3dasm_api>` excerpt stays, so the arm is "excerpt only" — the state before the tool existed | `true` |
 | `hypothesis_ledger` | the run's falsifiable-hypothesis record. Off withholds its five tools and its prompt section too, so the agent is never told to use a tool that is gone. PARTIAL: the Popperian workflow is argued throughout the strategizer's method, which stays | `true` |
 | `milestones_enabled` | run the process-milestone gate | `true` |
 | `science_monitor` | the runtime drift monitor that flags unledgered evals and unstamped rows, and escalates repeats to the critic | `true` |

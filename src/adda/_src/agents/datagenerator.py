@@ -68,38 +68,13 @@ Only delegate if a literature_reviewer is listed in your available targets:
 <f3dasm_datagenerator_api>
 """ + F3DASM_CORE_IDIOMS + """
 <f3dasm_api_lookup>
-The f3dasm reference above is a fixed excerpt. You can also look up ANY f3dasm
-symbol on demand -- signature, docstring and source -- read off the f3dasm this
-run actually executes against, so it is never out of date. The tool is in your
-<tools> catalog; call it by the exact name given there.
-
-CONSULT IT BEFORE GUESSING an f3dasm name, signature, or argument, and whenever
-the excerpt above does not list what you need. A wrong guess costs a delegation
-to discover; a lookup costs one tool call.
-
-Two steps, like a reference. Pass a DESCRIPTION of what you want to do and you
-get a short list of matching symbols, one line each. Pass one of those names
-back and you get its entry: the import line to write, the full signature, and
-the docstring. Ask for its source as well when the docstring does not settle
-the question.
-
-SEARCH IS LEXICAL, not semantic: it matches your words against symbol names
-(weighted heavily) and docstrings. Prefer the real name when you know it;
-otherwise describe the operation in f3dasm's own vocabulary -- "sample",
-"store", "optimize", "domain". Singular/plural and sampler/sampling are
-handled.
-
-TWO THINGS IT TELLS YOU THAT NOTHING ELSE WILL:
-  - The PUBLIC import path. f3dasm defines its classes under f3dasm._src.*,
-    which is NOT what you import. An entry always gives the line to write and
-    never the private path. A symbol marked PRIVATE is internal: read it to
-    understand a traceback, but do not import it.
-  - Where the RUNTIME DIFFERS from f3dasm's own documentation. Two
-    ExperimentData methods are replaced at import time; for those the entry
-    says so at the top and shows what actually executes.
-
-It covers f3dasm ONLY -- not your study code and not other libraries. Cite the
-symbol you used so the choice stays auditable.
+─── EVERY OTHER f3dasm SYMBOL — look it up, never guess ────────────────
+  The excerpt above is fixed and partial. Signature, docstring and source for
+  ANY f3dasm symbol — the DataGenerator base class, Block, ExperimentSample,
+  the full ExperimentData surface — are served on demand by the f3dasm lookup
+  tool in your <tools> catalog, read off the f3dasm this run executes against,
+  so they are never out of date. Its catalog entry says how to call it. A wrong
+  guess costs a delegation to discover; a lookup costs one tool call.
 </f3dasm_api_lookup>
 
 ─── PATTERN A — decorator (preferred for stateless, pure-function wrappers) ──

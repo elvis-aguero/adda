@@ -166,3 +166,60 @@ def test_a_disabled_features_tools_never_reach_the_catalog(tmp_path):
 
     for name in features.by_key("milestones_enabled").tools:
         assert name not in node.adapter.closure_tools, name
+
+
+# --- the three things <f3dasm_api> used to conflate -------------------------
+
+def test_turning_off_the_lookup_keeps_the_verified_excerpt():
+    """The lookup arm must measure the LOOKUP, not "no f3dasm reference".
+
+    `<f3dasm_api>` is the fixed excerpt — canonical imports, the Domain
+    surface, and `F3DASM_CORE_IDIOMS`, which `tests/test_f3dasm_idioms.py`
+    executes against the installed f3dasm. That is the control condition the
+    tool is measured against, so the arm strips `<f3dasm_api_lookup>` and
+    nothing else.
+    """
+    from adda._src.knowledge.idioms import F3DASM_CORE_IDIOMS
+
+    settings.configure({"f3dasm_api": False})
+    prompts = _all_role_prompts()
+    out = features.strip_disabled_sections(prompts["F3dasmImplementerAgent"])
+
+    assert "<f3dasm_api_lookup>" not in out
+    assert "<f3dasm_api>" in out
+    assert F3DASM_CORE_IDIOMS.strip() in out
+    assert "ConsultF3dasmDocs" in features.disabled_tool_names()
+
+
+def test_the_oracle_contract_is_not_ablatable():
+    """`<oracle_contract>` is run substrate, not a feature.
+
+    An agent without it does not run a worse experiment — it reaches the oracle
+    by some other path, and every evaluation it makes is unledgered and
+    unreproducible. There is no arm to be had here, only a broken run, so no
+    feature may own the tag.
+    """
+    owned = {t for f in features.FEATURES for t in f.sections}
+    assert "oracle_contract" not in owned
+
+    prompts = _all_role_prompts()
+    assert "<oracle_contract>" in prompts["F3dasmImplementerAgent"]
+    for key in features.FEATURE_KEYS:
+        settings.configure({key: False})
+        out = features.strip_disabled_sections(
+            prompts["F3dasmImplementerAgent"])
+        assert "THE ORACLE DOOR" in out, key
+
+
+def test_turning_off_the_playbook_leaves_the_api_and_the_contract():
+    """The method prior is separable from the API facts and from the ledger
+    rules; before the split, one tag owned all three."""
+    settings.configure({"doe_playbook": False})
+    out = features.strip_disabled_sections(
+        _all_role_prompts()["F3dasmImplementerAgent"])
+
+    assert "<doe_playbook>" not in out
+    assert "SURROGATE-GUIDED EXPLOIT LOOP" not in out
+    assert "<f3dasm_api>" in out
+    assert "<oracle_contract>" in out
+    assert "get_evaluator()" in out
