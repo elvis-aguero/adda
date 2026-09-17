@@ -122,3 +122,54 @@ def test_documented_default_matches_the_source(key):
     assert documented == expected, (
         f"{key}: docs say {documented!r}, source default is {src_default!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# The knob table serves three audiences; it must not read as one list
+#
+# `test_runtime_block_is_documented_for_study_authors` only asks that a key
+# appear SOMEWHERE in the doc, so every knob landed in one flat table: study
+# settings, infrastructure tuning and ablation arms interleaved, 24 rows deep.
+# `context_trim` sat directly above `context_window` — "never touch this"
+# adjacent to "raise this if your server is small", indistinguishable.
+#
+# That is a real cost to a study author, who reads the table to find out what
+# they may set and is shown seven knobs that can only make their run worse.
+# The fix is a heading, and this is what keeps the heading true.
+# ---------------------------------------------------------------------------
+
+_ABLATION_HEADING = "#### Ablation switches"
+
+
+def _ablation_table() -> str:
+    """Everything under the ablation heading, to the end of its table."""
+    text = _DOC.read_text(encoding="utf-8")
+    assert _ABLATION_HEADING in text, (
+        "the ablation switches no longer have their own heading — every knob "
+        "is back in one flat table")
+    return text[text.index(_ABLATION_HEADING):]
+
+
+def test_every_ablation_switch_is_documented_as_one():
+    """A new Feature documented in the infrastructure table reads to a study
+    author as something they may tune. It is an experimental arm."""
+    from adda._src.runtime import features
+
+    table = _ablation_table()
+    for f in features.FEATURES:
+        assert f"`{f.key}`" in table, (
+            f"{f.key} is a Feature but is not documented under "
+            f"{_ABLATION_HEADING!r}")
+
+
+def test_no_ordinary_knob_is_filed_as_an_ablation_switch():
+    """The converse, and the easier mistake: a timeout listed among the arms
+    invites someone to 'ablate' it and report the result as a finding."""
+    from adda._src.runtime import features
+
+    keys = set(re.findall(r"^\| `([a-z0-9_]+)` \|", _ablation_table(),
+                          re.MULTILINE))
+    stray = keys - {f.key for f in features.FEATURES}
+    assert not stray, (
+        f"{sorted(stray)} are documented as ablation switches but own no "
+        "feature — they are settings, and belong in the run-knobs table")

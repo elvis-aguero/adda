@@ -80,15 +80,8 @@ rather than silently reverting to the default.
 
 | key | meaning | default |
 |---|---|---|
-| `context_trim` | keep one agent turn inside the served context window (OpenAI-compatible backends only — the Claude SDK compacts on its own and does it better). The first user turn is never evicted. Off is byte-identical to no trimming | `true` |
 | `context_window` | tokens the backend will accept. `0` asks the server (Ollama's served `num_ctx`, vLLM's `max_model_len`); set it to pin the value or to sweep it. The resolved number AND its source are recorded | `0` |
 | `debug` | capture full transcripts, diagnostics and per-delegation logs under `runs/<ts>/debug/`. Required for the run-analysis workflow | `false` |
-| `doe_playbook` | the implementer's DoE method prior: the space-filling recipe, the eval-budget arithmetic and the surrogate-guided exploit loop. Off leaves the f3dasm API and the oracle contract intact and makes the agent choose its own method | `true` |
-| `f3dasm_api` | let the implementer and datagenerator look up the INSTALLED f3dasm's API (`ConsultF3dasmDocs`): signatures, docstrings and source, read off the package the run actually executes against, so it cannot go stale. Off withholds the tool and the one prompt section that instructs its use; the CI-verified `<f3dasm_api>` excerpt stays, so the arm is "excerpt only" — the state before the tool existed | `true` |
-| `hypothesis_ledger` | the run's falsifiable-hypothesis record. Off withholds its five tools and its prompt section too, so the agent is never told to use a tool that is gone. PARTIAL: the Popperian workflow is argued throughout the strategizer's method, which stays | `true` |
-| `milestones_enabled` | run the process-milestone gate | `true` |
-| `science_monitor` | the runtime drift monitor that flags unledgered evals and unstamped rows, and escalates repeats to the critic | `true` |
-| `pipeline_deliverable` | require `pipeline.ipynb` as the deliverable; turn off for a study with no notebook | `true` |
 | `recursion_limit` | LangGraph step ceiling for one run | `2000` |
 | `max_consecutive_errors` | consecutive failures to one target before the run halts | `12` |
 | `run_backstop_multiple` | multiple of the wall budget after which the run is force-closed | `2.0` |
@@ -101,9 +94,40 @@ rather than silently reverting to the default.
 | `llm_metadata_fetch` | look up model metadata (context window, pricing) at startup | `true` |
 | `llm_metadata_timeout_s` | seconds to wait for that lookup | `8.0` |
 | `llm_quantization` | quantization hint for a locally-served model | none |
+
+**Literature retrieval.** Only relevant when the graph has a literature
+reviewer.
+
+| key | meaning | default |
+|---|---|---|
 | `retrieval_mode` | corpus ranking strategy: `auto` (RRF when BM25+dense are available, else BM25, else substring), `hybrid`, `bm25`, `substring`. Only `auto` degrades — an explicitly requested mode that cannot be satisfied errors rather than silently falling back to a different one | `auto` |
 | `citation_weighting` | multiply BM25 scores by `1 + log10(citations+1)` before rank fusion. A popularity prior on the lexical side only; untested | `true` |
 | `semantic_scholar_api_key` | Semantic Scholar key; raises the literature rate limit | none |
+
+#### Ablation switches — leave these alone unless you are running an experiment
+
+These are the switchable parts of the scaffolding, and they are here to be
+*measured*, not tuned: every one defaults to on, and turning one off makes a
+normal run worse by construction. They are the arms of an ablation — the
+question "does this machinery earn its cost" — so an experiment sweeps them
+and a study author leaves them alone.
+
+Each one withholds everything it owns at once: its runtime object, the tools
+that exist only because of it, and the prompt section that tells the agent to
+use them. An agent in an arm is never left calling a tool that is gone.
+
+(`pipeline_deliverable` is the exception that is also an ordinary study
+choice: a study with no notebook deliverable legitimately turns it off.)
+
+| key | meaning | default |
+|---|---|---|
+| `hypothesis_ledger` | the run's falsifiable-hypothesis record. Off withholds its five tools and its prompt section too, so the agent is never told to use a tool that is gone. PARTIAL: the Popperian workflow is argued throughout the strategizer's method, which stays | `true` |
+| `milestones_enabled` | run the process-milestone gate | `true` |
+| `science_monitor` | the runtime drift monitor that flags unledgered evals and unstamped rows, and escalates repeats to the critic | `true` |
+| `f3dasm_api` | let the implementer and datagenerator look up the INSTALLED f3dasm's API (`ConsultF3dasmDocs`): signatures, docstrings and source, read off the package the run actually executes against, so it cannot go stale. Off withholds the tool and the one prompt section that instructs its use; the CI-verified `<f3dasm_api>` excerpt stays, so the arm is "excerpt only" — the state before the tool existed | `true` |
+| `doe_playbook` | the implementer's DoE method prior: the space-filling recipe, the eval-budget arithmetic and the surrogate-guided exploit loop. Off leaves the f3dasm API and the oracle contract intact and makes the agent choose its own method | `true` |
+| `context_trim` | keep one agent turn inside the served context window (OpenAI-compatible backends only — the Claude SDK compacts on its own and does it better). The first user turn is never evicted. Off is byte-identical to no trimming | `true` |
+| `pipeline_deliverable` | require `pipeline.ipynb` as the deliverable; turn off for a study with no notebook | `true` |
 
 ## How designs get evaluated (the evaluator)
 
