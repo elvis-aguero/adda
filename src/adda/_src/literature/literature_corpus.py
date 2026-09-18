@@ -392,6 +392,16 @@ class LiteratureCorpus:
 
         return chunks, _np.array(rows, dtype=_np.float32)
 
+    def consult(self, query: str, limit: int = 10) -> str:
+        """The canonical name from ``knowledge.protocol``.
+
+        ``search`` remains and is what the CorpusSearch tool calls: the name
+        is written into the literature reviewer's prompt, so renaming it is a
+        prompt change rather than a refactor, and there is no measurement
+        saying the new name works better.
+        """
+        return self.search(query, top_k=limit)
+
     def search(self, query: str, top_k: int = 10) -> str:
         """Search FULL-TEXT papers for passages relevant to *query*.
 

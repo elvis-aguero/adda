@@ -201,6 +201,20 @@ class KnowledgeBase:
         )
         return header + "\n" + "\n".join(rows) + "\n</knowledge_base>\n"
 
+    def consult(self, query: str, limit: int = 3) -> str:
+        """The canonical name from ``knowledge.protocol``, rendered as text.
+
+        ``search`` returns KBEntry objects and stays, because its callers want
+        them. This is the string-returning form every other provider offers,
+        so an agent handling five references handles them the same way.
+        """
+        hits = self.search(query, k=limit)
+        if not hits:
+            return (f"No handbook entry matches {query!r}. The handbook covers "
+                    "this project's conventions only, so a miss means it is "
+                    "not a convention here, not that it does not exist.")
+        return "\n\n".join(f"{e.id} — {e.title}\n{e.body}" for e in hits)
+
     def search(self, query: str, k: int = 3) -> list[KBEntry]:
         """Return up to ``k`` entries most relevant to ``query``.
 

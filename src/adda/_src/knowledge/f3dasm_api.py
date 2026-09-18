@@ -48,9 +48,10 @@ from dataclasses import dataclass, field
 __all__ = ["ADDA_UNITS", "AddaApi", "Entry", "F3dasmApi", "PackageApi",
            "build_index"]
 
-#: Cap on a single consult() reply. The point of the tool is to keep the
-#: package OUT of the context window; an unbounded page defeats it.
-_MAX_CHARS = 6000
+#: Cap on a single consult() reply, from the shared contract. Every provider
+#: uses the same number so the budget is a constant an agent can ignore rather
+#: than something it has to reason about per tool.
+from .protocol import MAX_REPLY_CHARS as _MAX_CHARS
 
 #: Dropped from concept queries. An agent writes "how do I sample the design
 #: space"; only three of those words carry signal, and counting the rest

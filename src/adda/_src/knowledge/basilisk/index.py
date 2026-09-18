@@ -14,6 +14,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..protocol import clip
 from .extract import closure, co_occurrence, example_index, header_index
 
 _WORD = re.compile(r"[a-z0-9_]+")
@@ -171,7 +172,12 @@ class BasiliskIndex:
             lines += ["", (self.src / key).read_text(errors="ignore")]
         return "\n".join(lines)
 
-    def consult(self, query: str, limit: int = 8, source: bool = False) -> str:
+    def consult(self, query: str, limit: int = 8,
+                source: bool = False) -> str:
+        return clip(self._consult(query, limit, source))
+
+    def _consult(self, query: str, limit: int = 8,
+                 source: bool = False) -> str:
         key = query.strip()
         if key in self.headers or key in self.examples:
             return self._entry(key, source)

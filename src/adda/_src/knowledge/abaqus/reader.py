@@ -37,6 +37,8 @@ import re
 import sqlite3
 from pathlib import Path
 
+from ..protocol import clip
+
 # ---------------------------------------------------------------------------
 # what we index
 # ---------------------------------------------------------------------------
@@ -277,6 +279,9 @@ class AbaqusDocs:
 
     # -- query ------------------------------------------------------------
     def consult(self, query: str, limit: int = 8) -> str:
+        return clip(self._consult(query, limit))
+
+    def _consult(self, query: str, limit: int = 8) -> str:
         """Search, or return a page when `query` is a known page_id."""
         db = sqlite3.connect(self.db_path)
         q = (query or "").strip()
