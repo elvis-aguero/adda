@@ -15,7 +15,7 @@ help:
 	@echo "  promptmap   Regenerate internal/promptmap.html (prompt + gate provenance)"
 
 test:
-	uv run pytest -m "not integration and not ollama"
+	uv run pytest -m "not integration and not ollama and not corpus"
 
 test-html:
 	pytest

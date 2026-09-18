@@ -52,7 +52,7 @@ jobs:
             runner.os == 'Linux' && '--with-deps' || '' }}
       - name: Test with pytest
         run: |
-          pytest -m "not integration and not ollama"
+          pytest -m "not integration and not ollama and not corpus"
   build-docs:
     strategy:
       matrix:

@@ -50,6 +50,7 @@ def test_env_var_is_honoured(monkeypatch, tmp_path):
     assert corpus_dir() == Path(tmp_path)
 
 
+@pytest.mark.corpus
 @pytest.mark.skipif(not os.environ.get(ENV_VAR),
                     reason="needs a locally built Abaqus corpus")
 def test_search_and_page_fetch_round_trip():

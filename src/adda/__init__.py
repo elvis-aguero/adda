@@ -6,6 +6,8 @@ Architecture: LangGraph StateGraph with a 5-node default topology:
 - **DataGeneratorAgent** — BUILDS the physics DataGenerator Block.
 - **AbaqusDataGeneratorAgent** — DataGeneratorAgent + offline Abaqus docs
   (opt-in; set ADDA_ABAQUS_DOC_CORPUS).
+- **BasiliskDataGeneratorAgent** — DataGeneratorAgent + the Basilisk source
+  tree (opt-in; set ADDA_BASILISK_SRC).
 - **F3dasmImplementerAgent** — RUNS the f3dasm pipeline end-to-end:
   DoE-execution (sampling), data-generation runs, ML, Optimization.
   The ONLY agent that evaluates designs.
@@ -19,6 +21,7 @@ from __future__ import annotations
 from ._src.agents import (
     AbaqusDataGeneratorAgent,
     AdversarialCritiqueAgent,
+    BasiliskDataGeneratorAgent,
     DataGeneratorAgent,
     DebuggerAgent,
     F3dasmImplementerAgent,
@@ -63,6 +66,7 @@ __all__ = [
     "load_experiments",
     "AgenticOptimizerAdapter",
     "AbaqusDataGeneratorAgent",
+    "BasiliskDataGeneratorAgent",
     "DataGeneratorAgent",
     "F3dasmImplementerAgent",
     "AgenticRun",
