@@ -163,3 +163,26 @@ def header_index(src: Path) -> dict[str, dict]:
             continue
         out[rel] = card(path, rel)
     return out
+
+
+def closure(src: Path, rel: str, _seen: set[str] | None = None) -> set[str]:
+    """Every header `rel` pulls in, transitively.
+
+    Needed to keep the co-occurrence signal honest. A header you already get
+    for free through another one never appears beside it in a case's include
+    list, which looks identical to incompatibility and is the opposite of it:
+    `two-phase.h` reaches `fractions.h` through `vof.h`, so no case names both,
+    yet they are not alternatives at all.
+    """
+    seen = _seen if _seen is not None else set()
+    if rel in seen:
+        return seen
+    seen.add(rel)
+    path = src / rel
+    for child in includes(path):
+        for cand in (str((path.parent / child).resolve().relative_to(
+                         src.resolve())) if (path.parent / child).exists()
+                     else child,):
+            if (src / cand).exists():
+                closure(src, cand, seen)
+    return seen
