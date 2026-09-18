@@ -33,9 +33,10 @@ class AbaqusDataGeneratorAgent(DataGeneratorAgent):
     """DataGeneratorAgent that can read the Abaqus reference manual.
 
     Set ``ADDA_ABAQUS_DOC_CORPUS`` to a corpus directory, or pass
-    ``corpus_dir=`` to the constructor. With neither, the tool is still
-    declared but reports that it is unconfigured -- deliberately, so the agent
-    cannot read "no corpus" as "this keyword is undocumented".
+    ``corpus_dir=`` to the constructor. With neither, the tool is WITHHELD and
+    this agent is indistinguishable from its base class -- see
+    ``build_abaqus_docs_closures`` for why that is safer than declaring a tool
+    that cannot answer.
     """
 
     role = "datagenerator"

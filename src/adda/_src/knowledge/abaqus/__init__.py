@@ -13,8 +13,12 @@ WHAT SHIPS HERE AND WHAT DOES NOT
     redistributed. Point ADDA_ABAQUS_DOC_CORPUS at a directory you built from
     the documentation your own licence entitles you to read.
 
-    Both modules are stdlib-only (sqlite3, re, html, pathlib) -- no new
-    dependency is added to adda.
+    DEPENDENCIES, precisely. READING a corpus is stdlib-only (sqlite3, re,
+    html, pathlib), so an agent consulting the docs adds nothing to adda.
+    BUILDING one parses the documentation's HTML and needs lxml, declared as
+    the optional `abaqus` extra: it was reaching lxml only as a transitive of
+    `arxiv`, which is the trap the viewer extra is explicitly declared to
+    avoid.
 """
 from __future__ import annotations
 
@@ -39,11 +43,24 @@ def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
     The switch is "is this argument a known page_id", which is unambiguous:
     page ids are distinctive and search hands the exact string back.
 
-    A missing or unreadable corpus must never break the agent -- it degrades
-    to a tool that reports the corpus is unavailable, because an agent that
-    cannot tell "no corpus" from "not documented" will conclude the latter.
+    UNCONFIGURED RETURNS NOTHING AT ALL, not a tool that explains itself.
+    The first version declared the tool anyway, reasoning that an agent must
+    not read "no corpus" as "not documented". But that belief is only
+    available to an agent that HAS the tool; withhold it and the agent is
+    simply one without an Abaqus manual, exactly like the base
+    DataGeneratorAgent. ``runtime/features.py`` states the rule this follows:
+    "Withholding is the point. Leaving a dead tool registered does not produce
+    an agent without the feature -- it produces an agent that keeps calling a
+    tool that errors", and those errors are counted as ERROR_RETURN, the one
+    KPI whose target is zero. It also stops a study that will never use Abaqus
+    paying catalog tokens for it in every model call.
+
+    A corpus that IS configured but cannot be read is the genuinely ambiguous
+    case, and there the tool stays and says which failure occurred.
     """
     root = Path(corpus) if corpus else corpus_dir()
+    if root is None:
+        return {}
 
     def ConsultAbaqusDocs(query: str, limit: int = 8) -> str:
         """Look up Abaqus reference documentation.
@@ -51,10 +68,6 @@ def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
         Pass a keyword (``*FREQUENCY``), a phrase, or a page_id returned by an
         earlier search to read that page in full.
         """
-        if root is None:
-            return (f"Abaqus docs unavailable: {ENV_VAR} is not set. "
-                    "This means NOT CONFIGURED, not 'undocumented' -- do not "
-                    "conclude a keyword does not exist from this message.")
         try:
             from .reader import AbaqusDocs
             return AbaqusDocs(root).consult(query, limit=limit)

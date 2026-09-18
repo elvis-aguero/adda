@@ -1,46 +1,44 @@
-"""Offline Abaqus documentation corpus: structure-aware ingest + hybrid search.
+"""Abaqus documentation HTML -> structured page text.
 
 WHY THIS EXISTS
-    The datagenerator writes Abaqus input decks and Abaqus-Python scripts against
-    a solver whose reference documentation it cannot consult. This indexes the
-    SIMULIA 2024 documentation locally so it can.
+    The datagenerator writes Abaqus input decks against a solver whose
+    reference documentation it cannot consult. ``reader.AbaqusDocs.build``
+    calls ``extract_page`` here on each documentation file and indexes the
+    result; this module is that extractor and nothing else.
 
-WHAT MAKES THE PREPROCESSING NON-NAIVE
+WHAT MAKES THE EXTRACTION NON-NAIVE
     A measured survey of 1,200 pages found 99% carry tables, 52% MathML, 37%
     <pre> code blocks, and parameter documentation lives in <dl>/<dt>/<dd>
     definition lists. Flattening a page to text destroys exactly the content a
     reference lookup needs -- a parameter table becomes word soup, and a
-    keyword's syntax block gets shredded. So each of those is handled
-    explicitly:
+    keyword's syntax block gets shredded. So each is handled explicitly:
 
-      <pre>      kept verbatim and ATOMIC (never split across chunks)
+      <pre>      kept verbatim and atomic
       <table>    rendered as a markdown table, row/column binding preserved
       <dl>       rendered as "term -- definition" pairs
       MathML     rendered to readable inline text rather than dropped
       chrome     .DocHeader*, <script>, <style>, <link>, nav stripped by selector
 
     Boilerplate removal matters more than it sounds: text repeated on every
-    page carries zero discriminative power but inflates every BM25 score.
+    page carries zero discriminative power but inflates every search score.
 
-CHUNKING
-    Semantic-boundary-first: split on the page's own <section> structure, and
-    only window an oversized section. Every chunk is prefixed with its
-    breadcrumb ("Analysis Reference > Riks method > ...") so a retrieved chunk
-    is self-describing and the lexical index can match on section titles.
+WHAT THIS MODULE NO LONGER CARRIES, AND WHY
+    It also held ``AbaqusDocCorpus``: a second, complete retrieval stack --
+    semantic chunking, BM25, an optional dense blend at 2:1 -- referenced by
+    nothing. The tool that ships runs sqlite FTS in ``reader.py``, so the
+    docstring here advertised a design that never executed, and 315 lines of
+    it sat untested behind an undeclared rank_bm25/numpy/embedder path. Two
+    retrieval implementations where one runs is the "which one is actually
+    answering?" problem this package exists to avoid. It is in git history if
+    the chunking approach is ever measured against the FTS one.
 
-RETRIEVAL
-    Lexical-dominant hybrid. For reference documentation the query is often a
-    literal token (*STATIC, RIKS / ALLSD / B31) where BM25 is exactly right and
-    dense similarity actively hurts by pulling in "conceptually related" prose.
-    Default blend is BM25:dense = 2:1; dense is optional and the corpus works
-    without it.
+DEPENDENCY
+    lxml, for the HTML parse. Declared as the optional ``abaqus`` extra --
+    READING a built corpus needs only the stdlib.
 """
 from __future__ import annotations
 
-import json
-import math
 import re
-import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -344,319 +342,3 @@ def extract_page(path: Path, root: Path) -> Page | None:
 
 # --------------------------------------------------------------------------
 # chunking
-# --------------------------------------------------------------------------
-def chunk_page(page: Page, target_words: int = 220,
-               overlap_words: int = 60) -> list[dict]:
-    """Split on the page's own '## heading' structure; window oversized parts.
-
-    Code fences are atomic: a chunk boundary is never placed inside one.
-    Every chunk is prefixed with its breadcrumb so it stands alone.
-    """
-    breadcrumb = f"{page.book_name} > {page.title}".strip(" >")
-    blocks = re.split(r"\n## ", page.text)
-    sections: list[tuple[str, str]] = []
-    for i, blk in enumerate(blocks):
-        if not blk.strip():
-            continue
-        if i == 0:
-            sections.append(("", blk.strip()))
-        else:
-            head, _, rest = blk.partition("\n")
-            sections.append((head.strip(), rest.strip()))
-
-    chunks: list[dict] = []
-    for head, content in sections:
-        if not content:
-            continue
-        crumb = breadcrumb + (f" > {head}" if head else "")
-        # split into atomic units: fenced code stays whole
-        units = re.split(r"(```.*?```)", content, flags=re.DOTALL)
-        buf: list[str] = []
-        count = 0
-
-        def flush():
-            nonlocal buf, count
-            if not buf:
-                return
-            body = " ".join(buf).strip()
-            if body:
-                chunks.append({
-                    "page_id": page.page_id, "book": page.book,
-                    "book_name": page.book_name, "title": page.title,
-                    "section": head, "breadcrumb": crumb,
-                    "text": f"[{crumb}]\n{body}",
-                })
-            buf, count = [], 0
-
-        for unit in units:
-            if not unit or not unit.strip():
-                continue
-            if unit.startswith("```"):
-                buf.append(unit)
-                count += len(unit.split())
-                if count >= target_words:
-                    flush()
-                continue
-            words = unit.split()
-            idx = 0
-            while idx < len(words):
-                room = max(target_words - count, 1)
-                take = words[idx:idx + room]
-                buf.append(" ".join(take))
-                count += len(take)
-                idx += len(take)
-                if count >= target_words:
-                    tail = " ".join(" ".join(buf).split()[-overlap_words:])
-                    flush()
-                    if tail:
-                        buf, count = [tail], len(tail.split())
-        flush()
-    return chunks
-
-
-# --------------------------------------------------------------------------
-# corpus
-# --------------------------------------------------------------------------
-def _tokenize(s: str) -> list[str]:
-    """Tokenizer that PRESERVES Abaqus syntax tokens.
-
-    '*STATIC, RIKS' must survive as searchable units; a naive \\w+ split throws
-    away the leading '*' that distinguishes a keyword from prose, and splits
-    'E11' or 'B31' cleanly but loses '*step'. Keeps both a starred and bare
-    form so either query style hits.
-    """
-    s = s.lower()
-    toks = re.findall(r"\*?[a-z_][a-z0-9_]*|\d+[a-z]+\d*|[a-z]+\d+", s)
-    out = []
-    for t in toks:
-        out.append(t)
-        if t.startswith("*"):
-            out.append(t[1:])
-    return out
-
-
-class AbaqusDocCorpus:
-    """Build once, then search. State lives in one SQLite file plus an
-    optional embeddings .npy next to it."""
-
-    def __init__(self, corpus_dir):
-        self.dir = Path(corpus_dir)
-        self.dir.mkdir(parents=True, exist_ok=True)
-        self.db_path = self.dir / "corpus.sqlite"
-        self.vec_path = self.dir / "chunk_vectors.npy"
-        self._bm25 = None
-        self._chunks = None
-        self._vectors = None
-
-    # -- build -------------------------------------------------------------
-    def build(self, pages_dir, log=print) -> dict:
-        pages_dir = Path(pages_dir)
-        files = sorted(pages_dir.rglob("*.htm"))
-        log(f"  pages found: {len(files):,}")
-
-        db = sqlite3.connect(self.db_path)
-        db.executescript("""
-            drop table if exists pages;
-            drop table if exists chunks;
-            create table pages(
-                page_id text, title text, book text, book_name text,
-                rel_path text primary key, text text,
-                n_pre int, n_table int, n_math int, n_dl int, keywords text);
-            create table chunks(
-                chunk_id integer primary key, page_id text, rel_path text,
-                book text, book_name text, title text, section text,
-                breadcrumb text, text text);
-        """)
-
-        stats = {"pages": 0, "parse_fail": 0, "empty": 0, "chunks": 0,
-                 "pre": 0, "table": 0, "math": 0, "dl": 0, "chars": 0}
-        thin = []
-        cid = 0
-        for f in files:
-            page = extract_page(f, pages_dir)
-            if page is None:
-                stats["parse_fail"] += 1
-                continue
-            if len(page.text) < 200:
-                stats["empty"] += 1
-                thin.append((f.relative_to(pages_dir).as_posix(),
-                             len(page.text)))
-            db.execute(
-                "insert or replace into pages values (?,?,?,?,?,?,?,?,?,?,?)",
-                (page.page_id, page.title, page.book, page.book_name,
-                 page.rel_path, page.text, page.n_pre, page.n_table,
-                 page.n_math, page.n_dl, json.dumps(page.keywords)))
-            stats["pages"] += 1
-            stats["pre"] += page.n_pre
-            stats["table"] += page.n_table
-            stats["math"] += page.n_math
-            stats["dl"] += page.n_dl
-            stats["chars"] += len(page.text)
-            for ch in chunk_page(page):
-                db.execute(
-                    "insert into chunks values (?,?,?,?,?,?,?,?,?)",
-                    (cid, ch["page_id"], page.rel_path, ch["book"],
-                     ch["book_name"], ch["title"], ch["section"],
-                     ch["breadcrumb"], ch["text"]))
-                cid += 1
-                stats["chunks"] += 1
-        db.commit()
-        db.close()
-
-        # extraction QA: pages that yielded almost nothing are a selector bug,
-        # not a fact about the document. Surface them instead of hiding them.
-        (self.dir / "thin_pages.txt").write_text(
-            "\n".join(f"{n}\t{c}" for n, c in sorted(thin, key=lambda x: x[1])))
-        stats["thin_report"] = str(self.dir / "thin_pages.txt")
-        return stats
-
-    # -- load --------------------------------------------------------------
-    def _load(self):
-        if self._chunks is not None:
-            return
-        db = sqlite3.connect(self.db_path)
-        self._chunks = [
-            {"chunk_id": r[0], "page_id": r[1], "rel_path": r[2], "book": r[3],
-             "book_name": r[4], "title": r[5], "section": r[6],
-             "breadcrumb": r[7], "text": r[8]}
-            for r in db.execute(
-                "select chunk_id,page_id,rel_path,book,book_name,title,"
-                "section,breadcrumb,text from chunks order by chunk_id")
-        ]
-        db.close()
-        from rank_bm25 import BM25Okapi
-        self._bm25 = BM25Okapi([_tokenize(c["text"]) for c in self._chunks])
-        if self.vec_path.exists():
-            import numpy as np
-            self._vectors = np.load(self.vec_path)
-
-    # -- search ------------------------------------------------------------
-    def search(self, query: str, top_k: int = 8, book: str | None = None,
-               lexical_weight: float = 2.0, use_dense: bool = False) -> str:
-        """Search; returns a formatted passage list.
-
-        ``use_dense`` defaults to FALSE deliberately. Embedding the query goes
-        through a3dasm's out-of-process worker, which costs ~26 s per call
-        (measured warm) -- unusable for an interactive agent tool that is
-        supposed to be consulted freely. Lexical-only answers the full golden
-        set (36/36), so the fast path is also the accurate one for reference
-        lookups, where queries are literal Abaqus tokens. Pass use_dense=True
-        for a paraphrase-style question carrying no exact token, and accept
-        the latency.
-        """
-        self._load()
-        if not self._chunks:
-            return "ERROR: corpus is empty — run build() first."
-
-        scores = self._bm25.get_scores(_tokenize(query))
-        import numpy as np
-        scores = np.asarray(scores, dtype=float)
-        if scores.max() > 0:
-            lex = scores / scores.max()
-        else:
-            lex = scores
-
-        combined = lexical_weight * lex
-        if use_dense and self._vectors is not None:
-            qv = self._embed([query])
-            if qv is not None:
-                import numpy as np
-                q = np.asarray(qv[0], dtype=float)
-                q /= (np.linalg.norm(q) + 1e-9)
-                V = self._vectors
-                dense = V @ q
-                if dense.max() > 0:
-                    dense = dense / dense.max()
-                combined = combined + 1.0 * dense
-
-        order = list(range(len(self._chunks)))
-        if book:
-            b = book.lower()
-            order = [i for i in order
-                     if b in self._chunks[i]["book"].lower()
-                     or b in self._chunks[i]["book_name"].lower()]
-            if not order:
-                return f"ERROR: no book matching {book!r}."
-        order.sort(key=lambda i: combined[i], reverse=True)
-        hits = order[:max(1, int(top_k))]
-        if not hits or combined[hits[0]] <= 0:
-            return f"No passages matched {query!r}."
-
-        out = []
-        for rank, i in enumerate(hits, 1):
-            c = self._chunks[i]
-            body = c["text"]
-            if len(body) > 1400:
-                body = body[:1400] + " …"
-            out.append(
-                f"[{rank}] score={combined[i]:.3f}  page_id={c['page_id']}\n"
-                f"    {c['breadcrumb']}\n    ({c['rel_path']})\n{body}\n")
-        return "\n".join(out)
-
-    def get_page(self, page_id: str) -> str:
-        db = sqlite3.connect(self.db_path)
-        row = db.execute(
-            "select title, book_name, rel_path, text from pages "
-            "where page_id=? or rel_path=?", (page_id, page_id)).fetchone()
-        db.close()
-        if not row:
-            return f"ERROR: no page {page_id!r}."
-        title, book, rel, text = row
-        return f"# {title}\n({book} — {rel})\n\n{text}"
-
-    def list_books(self) -> str:
-        db = sqlite3.connect(self.db_path)
-        rows = db.execute(
-            "select book_name, book, count(*) from pages "
-            "group by book order by count(*) desc").fetchall()
-        db.close()
-        return "\n".join(f"  {n:6,}  {bn}  [{b}]" for bn, b, n in rows)
-
-    # -- embeddings (optional) --------------------------------------------
-    def _embed(self, texts, timeout: float = 1800.0):
-        """Embed via a3dasm's out-of-process worker.
-
-        Each call pays ~18 s of fixed subprocess + model-load overhead, so
-        batches want to be large -- but the worker's own default timeout is
-        600 s, and a 512-batch of real 2,000-char chunks exceeds it (measured:
-        failed at 616 s). Hence an explicit, generous timeout here.
-        """
-        try:
-            from adda._src.literature_corpus import _SubprocessEmbedder
-        except Exception:
-            return None
-        try:
-            return _SubprocessEmbedder(timeout=timeout).embed(texts)
-        except Exception:
-            return None
-
-    def embed_chunks(self, batch: int = 128, log=print,
-                     timeout: float = 1800.0) -> bool:
-        """Optional dense index. Corpus works without it (BM25-dominant).
-
-        Resumable: partial progress is saved after every batch, so an
-        interrupted run continues instead of restarting.
-        """
-        import numpy as np
-        self._load()
-        part_path = self.dir / "chunk_vectors.partial.npy"
-        vecs = []
-        if part_path.exists():
-            vecs = [v for v in np.load(part_path)]
-            log(f"  resuming from {len(vecs):,} embedded chunks")
-        for i in range(len(vecs), len(self._chunks), batch):
-            part = [c["text"][:2000] for c in self._chunks[i:i + batch]]
-            got = self._embed(part, timeout=timeout)
-            if got is None:
-                log("  embeddings unavailable — staying lexical-only")
-                return False
-            vecs.extend(got)
-            np.save(part_path, np.asarray(vecs, dtype="float32"))
-            log(f"  embedded {min(i + batch, len(self._chunks)):,}"
-                f"/{len(self._chunks):,}")
-        V = np.asarray(vecs, dtype="float32")
-        V /= (np.linalg.norm(V, axis=1, keepdims=True) + 1e-9)
-        np.save(self.vec_path, V)
-        part_path.unlink(missing_ok=True)
-        self._vectors = V
-        return True

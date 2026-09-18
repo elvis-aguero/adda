@@ -8,6 +8,8 @@ The specialist roles the strategizer delegates to.
 
 ::: adda.DataGeneratorAgent
 
+::: adda.AbaqusDataGeneratorAgent
+
 ::: adda.LiteratureReviewAgent
 
 ::: adda.AdversarialCritiqueAgent

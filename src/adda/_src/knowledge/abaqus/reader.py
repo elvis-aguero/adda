@@ -33,7 +33,6 @@ SIZES (measured)
 from __future__ import annotations
 
 import html as _html
-import os
 import re
 import sqlite3
 from pathlib import Path
@@ -176,7 +175,12 @@ class AbaqusDocs:
     # -- build ------------------------------------------------------------
     def build(self, pages_root, log=print) -> dict:
         from lxml import etree
-        from abaqus_doc_corpus import extract_page  # reuse the HTML extractor
+
+        # The extractor lives in builder.py, this package's own module. It was
+        # imported as `abaqus_doc_corpus` -- the name the file had as a
+        # standalone script -- which no longer resolves anywhere, so build()
+        # could never run.
+        from .builder import extract_page
 
         pages_root = Path(pages_root)
         db = sqlite3.connect(self.db_path)
@@ -231,7 +235,11 @@ class AbaqusDocs:
             stats["books"] += 1
             root = etree.parse(str(sx), etree.XMLParser(recover=True)).getroot()
 
-            def walk(el, parent_id, depth):
+            # `book` is bound as a default for the same reason flush() does
+            # it in builder.py: walk() recurses inside a per-book loop, and a
+            # late-bound reference would file this book's TOC nodes under
+            # whichever book the loop had reached.
+            def walk(el, parent_id, depth, book=book):
                 nonlocal nid
                 for order, it in enumerate(el.findall("ITEM")):
                     href_raw = it.get("href") or ""
