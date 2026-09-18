@@ -50,17 +50,17 @@ requires-python = ">=3.10"
 version = "0.1.0"
 
 [project.optional-dependencies]
-all = [
-  "adda[abaqus]",
-  "adda[extra]",
-  "adda[viewer]"
-]
 # Building the offline Abaqus documentation corpus. The reader needs nothing
 # beyond the stdlib; the BUILDER parses the documentation's HTML with lxml,
 # which currently arrives only as a transitive of `arxiv` — the same
 # undeclared-transitive trap the viewer extra below is declared to avoid.
 abaqus = [
   "lxml>=5.0"
+]
+all = [
+  "adda[abaqus]",
+  "adda[extra]",
+  "adda[viewer]"
 ]
 dev = [
   "pre-commit>=4.4.0",
