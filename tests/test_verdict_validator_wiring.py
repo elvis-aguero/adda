@@ -243,3 +243,50 @@ def test_env_kill_switch_disables_validator(tmp_path, monkeypatch):
     assert critic.calls == 0
     assert _last_note(n, h) is None
     assert not diag.exists() or "VERDICT_SUBSTANCE_FLAG" not in diag.read_text()
+
+
+# ── the switch is a knob now, not a bare environment read ────────────────────
+#
+# It read os.environ["F3DASM_VERDICT_VALIDATOR"] directly, which put a real
+# feature switch outside the knob system: invisible to the settings contract
+# test, absent from the documented table, and unreachable from a study's
+# `runtime:` block — so an ablation could not sweep it while sweeping
+# everything else.
+
+
+def test_the_switch_is_reachable_from_a_studys_runtime_block():
+    """The point of folding it in. Before, this did nothing at all."""
+    from adda._src.nodes.critic_gate import verdict_validator_enabled
+    from adda._src.runtime import settings
+
+    settings.configure({"verdict_validator": False})
+    assert verdict_validator_enabled() is False
+    settings.configure({"verdict_validator": True})
+    assert verdict_validator_enabled() is True
+    settings.configure({})
+    assert verdict_validator_enabled() is True
+
+
+def test_the_old_environment_variable_still_works(monkeypatch):
+    """Nobody's shell breaks: settings derives the env name as
+    "F3DASM_" + key.upper(), which reproduces the name this switch already
+    used, and env still outranks config.yaml exactly as it did."""
+    from adda._src.nodes.critic_gate import verdict_validator_enabled
+    from adda._src.runtime import settings
+
+    settings.configure({"verdict_validator": True})
+    monkeypatch.setenv("F3DASM_VERDICT_VALIDATOR", "0")
+    assert verdict_validator_enabled() is False
+
+
+def test_the_knob_is_declared_and_documented():
+    """Without this it is a knob only its author knows about — the state it
+    was just brought out of."""
+    from pathlib import Path
+
+    from adda._src.runtime.settings import KNOWN_KEYS
+
+    assert "verdict_validator" in KNOWN_KEYS
+    docs = (Path(__file__).resolve().parent.parent
+            / "docs" / "authoring-a-study.md").read_text(encoding="utf-8")
+    assert "`verdict_validator`" in docs

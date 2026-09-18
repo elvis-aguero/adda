@@ -63,6 +63,18 @@ class Feature:
     tools: frozenset[str] = field(default_factory=frozenset)
     #: prompt section tags (``<tag>…</tag>``) this feature owns outright
     sections: tuple[str, ...] = ()
+    #: named RUNTIME behaviours this feature owns — a capability with no tool
+    #: and no prompt surface, which the runtime consults by key.
+    #:
+    #: The registry was built when every feature had a tool or a prompt
+    #: section, and the invariant "a feature owns one of those two" followed
+    #: from the sample rather than from the idea. The verdict validator owns
+    #: neither: it is a judge that reviews each HypothesisUpdate and appends a
+    #: concern. An agent run whose verdicts are second-guessed is as different
+    #: from one whose are not as an agent missing a tool, so calling it a mere
+    #: setting would put it outside the ablation registry — precisely where it
+    #: must not be.
+    behaviours: tuple[str, ...] = ()
     #: True when the feature's CONCEPT also appears outside its own sections,
     #: so disabling it is a partial ablation. See the module docstring.
     pervasive: bool = False
@@ -142,6 +154,17 @@ FEATURES: tuple[Feature, ...] = (
         # whether an explicit method prior substitutes for capability. Expect
         # a large model to lose little and a 27B-class model to lose a lot.
         sections=("doe_playbook",),
+    ),
+    Feature(
+        key="verdict_validator",
+        default=True,
+        # No tools and no prompt section: it owns a runtime behaviour. The
+        # agent is never told a judge is reading its verdicts, which is the
+        # point — it must not write for the judge. Advisory by construction:
+        # it annotates a HypothesisUpdate, never blocks one, so the arm
+        # measures whether being second-guessed changes the science rather
+        # than whether a gate stopped the run.
+        behaviours=("verdict_validator",),
     ),
     Feature(
         key="pipeline_deliverable",

@@ -3,7 +3,6 @@ audit, persist the verdict, build the feedback task message. A mixin on the
 strategizer (uses its instance attrs + RecordingMixin methods via MRO)."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 # Bound on how many earlier reviews are echoed back to the critic, and the
@@ -17,19 +16,24 @@ _PRIOR_REVIEWS_CHAR_BUDGET = 6000
 # a full critic re-audit on repeat is a deferred §4 follow-up).
 VERDICT_FLAG_ESCALATE_AFTER = 2
 
-_VERDICT_VALIDATOR_OFF = {"0", "false", "off", "no"}
-
-
 def verdict_validator_enabled() -> bool:
-    """The #9 live verdict validator is ON by default. Set the env var
-    ``F3DASM_VERDICT_VALIDATOR=0`` (or false/off/no) to disable it entirely —
-    HypothesisUpdate then behaves exactly as it did before #9 (no judge call, no
-    note, no diagnostics). The single, easy kill switch for the sentinel.
+    """The #9 live verdict validator is ON by default; ``verdict_validator:
+    false`` disables it entirely — HypothesisUpdate then behaves exactly as it
+    did before #9 (no judge call, no note, no diagnostics).
+
+    This read ``os.environ["F3DASM_VERDICT_VALIDATOR"]`` directly, which put a
+    real feature switch outside the knob system: absent from ``KNOWN_KEYS``, so
+    the contract test could not see it; absent from the documented table, so
+    nobody knew it existed; and unreachable from a study's ``runtime:`` block,
+    so an ablation could not sweep it while sweeping everything else.
+
+    Nothing breaks for anyone already setting the variable: ``settings``
+    derives the env name as ``"F3DASM_" + key.upper()``, which reproduces
+    ``F3DASM_VERDICT_VALIDATOR`` byte-for-byte, and it still outranks
+    config.yaml exactly as before.
     """
-    return (
-        os.environ.get("F3DASM_VERDICT_VALIDATOR", "1").strip().lower()
-        not in _VERDICT_VALIDATOR_OFF
-    )
+    from ..runtime import features
+    return features.enabled("verdict_validator")
 
 
 def _prior_rulings_digest(h: dict, *, max_entries: int = 6, max_chars: int = 240) -> str:
@@ -346,7 +350,7 @@ class CriticGateMixin:
         always stand (Q1=(B), advise-with-teeth).
         """
         if not verdict_validator_enabled():
-            return ""  # kill switch (F3DASM_VERDICT_VALIDATOR=0) — fully bypassed
+            return ""  # kill switch (verdict_validator: false) — fully bypassed
         try:
             from ..epistemics.verdict_validator import (
                 build_judge_prompt,

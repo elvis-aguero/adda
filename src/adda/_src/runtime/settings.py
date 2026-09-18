@@ -71,6 +71,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "run_backstop_multiple",
     "science_monitor",
     "semantic_scholar_api_key",
+    "verdict_validator",
 })
 
 _lock = threading.Lock()
