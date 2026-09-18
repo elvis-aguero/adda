@@ -1,6 +1,23 @@
 repos:
   - repo: local
     hooks:
+      # The paper is a living design register, so the moment a design
+      # decision lands in the code is the only moment anyone is looking at
+      # both. This does NOT check that paper/ is correct -- nothing can --
+      # it shows what changed and makes ignoring it deliberate.
+      #
+      # pass_filenames: false and always_run because the question is about
+      # the STAGED SET as a whole, not any one file. The script itself
+      # no-ops when nothing staged touches the watched paths, which is also
+      # what makes `pre-commit run --all-files` in CI a no-op.
+      - id: paper_attestation
+        name: paper attested against these changes
+        entry: python internal/tools/paper_attestation.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+
       - id: sort_pyproject
         name: sort_pyproject
         entry: toml-sort -i --sort-table-keys --sort-inline-tables
