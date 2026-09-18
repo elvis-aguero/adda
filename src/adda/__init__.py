@@ -4,6 +4,8 @@ Architecture: LangGraph StateGraph with a 5-node default topology:
 - **StrategizerAgent** — entry; forms hypotheses, plans, synthesises.
 - **LiteratureReviewAgent** — methodology from primary literature.
 - **DataGeneratorAgent** — BUILDS the physics DataGenerator Block.
+- **AbaqusDataGeneratorAgent** — DataGeneratorAgent + offline Abaqus docs
+  (opt-in; set ADDA_ABAQUS_DOC_CORPUS).
 - **F3dasmImplementerAgent** — RUNS the f3dasm pipeline end-to-end:
   DoE-execution (sampling), data-generation runs, ML, Optimization.
   The ONLY agent that evaluates designs.
@@ -15,6 +17,7 @@ The user's only required input is ``<study-dir>/PROBLEM_STATEMENT.md``.
 from __future__ import annotations
 
 from ._src.agents import (
+    AbaqusDataGeneratorAgent,
     AdversarialCritiqueAgent,
     DataGeneratorAgent,
     DebuggerAgent,
@@ -59,6 +62,7 @@ __all__ = [
     "get_evaluator",
     "load_experiments",
     "AgenticOptimizerAdapter",
+    "AbaqusDataGeneratorAgent",
     "DataGeneratorAgent",
     "F3dasmImplementerAgent",
     "AgenticRun",
