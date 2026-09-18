@@ -31,6 +31,19 @@ Usage::
 
     python internal/tools/promptmap.py                 # -> internal/promptmap.html
     python internal/tools/promptmap.py --json-only     # -> stdout
+    python internal/tools/promptmap.py --stamp         # adds a build stamp
+                                                         # (see note below)
+
+The committed ``internal/promptmap.html`` is generated with NO flags. Its
+embedded data deliberately carries no ``generated_at``/``commit`` fields: an
+embedded commit hash can never be correct, because the hash of the commit
+that would contain it is not known until after that commit is made -- so the
+stamp is structurally always one commit stale, and it turns every
+regeneration (content unchanged or not) into a full-payload diff, since the
+whole map is one line of JSON. Provenance for this file belongs to git's own
+history of it (``git log -- internal/promptmap.html``), not to bytes inside
+it. Pass ``--stamp`` only for an interactive, uncommitted copy that wants a
+human-readable "as of" line.
 """
 
 from __future__ import annotations
@@ -1332,17 +1345,19 @@ def build_gates() -> list[dict]:
 
 # --------------------------------------------------------------------------
 
-def build() -> dict:
+def build(*, stamp: bool = False) -> dict:
+    """Assemble the map's data.
+
+    ``stamp=False`` (the default, and what every committed regeneration
+    uses) omits ``generated_at``/``commit`` entirely, so the payload is a
+    pure function of the working tree: same tree in, byte-identical bytes
+    out. ``stamp=True`` is for an interactive, throwaway copy that wants a
+    human "as of" line -- it must never be what lands in git, because a
+    commit hash embedded IN a commit is, by construction, always one commit
+    behind the commit that contains it.
+    """
     shared = shared_blocks()
-    try:
-        sha = subprocess.run(
-            ["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"],
-            capture_output=True, text=True, check=True).stdout.strip()
-    except Exception:
-        sha = "unknown"
-    return {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "commit": sha,
+    data = {
         "roles": build_roles(shared),
         "gates": build_gates(),
         "shared": [{k: v for k, v in b.items() if k != "text"} | {"text": b["text"]}
@@ -1350,6 +1365,16 @@ def build() -> dict:
         "done_chain": done_chain(),
         "switches": _switches(),
     }
+    if stamp:
+        try:
+            sha = subprocess.run(
+                ["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, check=True).stdout.strip()
+        except Exception:
+            sha = "unknown"
+        data["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        data["commit"] = sha
+    return data
 
 
 def _switches() -> list[dict]:
@@ -1374,12 +1399,18 @@ def _switches() -> list[dict]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--json-only", action="store_true")
     ap.add_argument("-o", "--out", type=Path, default=DEFAULT_OUT)
+    ap.add_argument(
+        "--stamp", action="store_true",
+        help="embed a generated_at/commit build stamp (off by default; the "
+             "committed internal/promptmap.html must never carry one -- see "
+             "the module docstring)")
     args = ap.parse_args()
 
-    data = build()
+    data = build(stamp=args.stamp)
     if args.json_only:
         json.dump(data, sys.stdout, indent=2)
         return

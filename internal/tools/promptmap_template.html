@@ -622,7 +622,14 @@ function buildRail(){
     b.onclick=()=>{ view={kind:k}; query=""; $("#q").value=""; render(); };
     views.appendChild(b);
   });
-  $("#stamp").textContent = `${DATA.commit} · ${DATA.generated_at}`;
+  /* The committed page carries no generated_at/commit: an embedded commit
+     hash can never be correct (the hash of the commit that would contain it
+     isn't known until after that commit), and it made every regeneration a
+     full-payload diff. Provenance lives in git's history of this file, not
+     in its bytes -- so a stamp only shows up on an uncommitted --stamp copy. */
+  $("#stamp").textContent = DATA.commit
+    ? `${DATA.commit} · ${DATA.generated_at}`
+    : "static build · see git log for provenance";
 }
 
 function syncRail(){
@@ -837,7 +844,7 @@ async function saveEdit(key){
       base: sec.text,                 /* the text this edit was written against */
       proposed: kind === "note" ? "" : proposed,
       note, saved_at: new Date().toISOString(),
-      base_commit: DATA.commit, history,
+      base_commit: DATA.commit || null, history,
     });
     slot.innerHTML = "";
   } catch(err){
