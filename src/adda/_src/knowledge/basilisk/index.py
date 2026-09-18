@@ -8,7 +8,9 @@ is what turns a corpus rebuild from a project into a script.
 """
 from __future__ import annotations
 
+import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -27,6 +29,10 @@ _STOP = frozenset({
 #: stacked" on the strength of an absence.
 _ESTABLISHED = 8
 
+#: BM25 term-frequency saturation and length normalisation. The standard
+#: defaults; nothing here is tuned to this corpus.
+_K1, _B = 1.5, 0.75
+
 
 def _tokens(text: str) -> list[str]:
     return [t for t in _WORD.findall(text.lower())
@@ -40,8 +46,10 @@ class BasiliskIndex:
     examples: dict[str, dict]
     pairs: dict[frozenset, int]
     singles: dict[str, int]
-    _tok: dict[str, set[str]] = field(default_factory=dict)
+    _tok: dict[str, Counter] = field(default_factory=dict)
     _closure: dict[str, set[str]] = field(default_factory=dict)
+    _idf: dict[str, float] = field(default_factory=dict)
+    _avglen: float = 0.0
 
     @classmethod
     def build(cls, src: Path) -> "BasiliskIndex":
@@ -52,27 +60,50 @@ class BasiliskIndex:
         for key in headers:
             idx._closure[key] = closure(src, key)
         for key, c in headers.items():
-            idx._tok[key] = set(_tokens(
+            idx._tok[key] = Counter(_tokens(
                 f"{key} {c['summary']} {c['doc'][:2000]} "
                 f"{' '.join(c['provides'])} {' '.join(c['requires'])} "
                 f"{' '.join(c['events'])}"))
         for key, e in examples.items():
-            idx._tok[key] = set(_tokens(f"{key} {e['title']}"))
+            idx._tok[key] = Counter(_tokens(f"{key} {e['title']}"))
+
+        n = len(idx._tok) or 1
+        df: Counter = Counter()
+        for toks in idx._tok.values():
+            df.update(toks.keys())
+        # Standard BM25 IDF. This is the half the naive overlap count was
+        # missing, and the reason specialised variants outranked the canonical
+        # header: a word the whole corpus uses must not score like a rare one.
+        idx._idf = {t: math.log(1 + (n - c + 0.5) / (c + 0.5))
+                    for t, c in df.items()}
+        idx._avglen = sum(sum(t.values()) for t in idx._tok.values()) / n
         return idx
 
     # -- ranking -------------------------------------------------------
-    def _rank(self, query: str, limit: int) -> list[tuple[str, int]]:
-        q = set(_tokens(query))
+    def _rank(self, query: str, limit: int) -> list[tuple[str, float]]:
+        q = _tokens(query)
         if not q:
             return []
-        scored: list[tuple[str, int]] = []
+        scored: list[tuple[str, float]] = []
         for key, toks in self._tok.items():
-            overlap = len(q & toks)
-            if not overlap:
+            length = sum(toks.values()) or 1
+            score = 0.0
+            for term in q:
+                f = toks.get(term, 0)
+                if not f:
+                    continue
+                idf = self._idf.get(term, 0.0)
+                score += idf * f * (_K1 + 1) / (
+                    f + _K1 * (1 - _B + _B * length / (self._avglen or 1)))
+            if score <= 0:
                 continue
-            # A query naming a file means that file. Weight the key's own
-            # words heavily so an exact name beats a topical match.
-            scored.append((key, overlap + 3 * len(q & set(_tokens(key)))))
+            # A query naming a file means that file, so the key's own words
+            # count for more -- but as a proportional boost, not a flat bonus
+            # that a long document can accumulate its way past.
+            key_terms = set(_tokens(key))
+            if key_terms:
+                score *= 1 + 1.5 * len(set(q) & key_terms) / len(key_terms)
+            scored.append((key, score))
         scored.sort(key=lambda kv: (-kv[1], kv[0]))
         return scored[:limit]
 
