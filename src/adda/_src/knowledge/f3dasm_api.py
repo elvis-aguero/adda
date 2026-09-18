@@ -45,7 +45,8 @@ import pkgutil
 import warnings
 from dataclasses import dataclass, field
 
-__all__ = ["Entry", "F3dasmApi", "PackageApi", "build_index"]
+__all__ = ["ADDA_UNITS", "AddaApi", "Entry", "F3dasmApi", "PackageApi",
+           "build_index"]
 
 #: Cap on a single consult() reply. The point of the tool is to keep the
 #: package OUT of the context window; an unbounded page defeats it.
@@ -350,10 +351,19 @@ def _constant_entries(mods: dict, package: str, index: dict) -> None:
             rendered = repr(v)
             if len(rendered) > 600:
                 rendered = rendered[:600] + " …"
+            # The module's own docstring is prepended to the BODY (weight 2,
+            # not 12) so the constant is reachable by the concept its module
+            # explains -- BACKSTOP_USD = 'backstop_usd' is a literal that
+            # teaches nothing on its own, while terminal.py's docstring is
+            # what says a run can be stopped by a cost ceiling. Body weight,
+            # because the module already has its own entry and should still
+            # outrank its constants for a question about the concept.
+            mdoc = inspect.getdoc(mod) or ""
             index[key] = Entry(
                 key=key, kind="constant", import_line=None, signature="",
                 summary=f"{attr} = {rendered[:200]}",
-                doc=f"{attr} = {rendered}", where=f"{where}:1", private=False,
+                doc=f"{attr} = {rendered}\n\n{mdoc}",
+                where=f"{where}:1", private=False,
             )
 
 
@@ -652,6 +662,15 @@ class PackageApi:
                 # ``ExperimentData.get_n_best_output`` (36.5) for "get the best
                 # design found so far": the right answer matched "best" in both
                 # its name and its summary and still lost to a package folder.
+                # Withholding the name tier from MODULE entries was tried
+                # and REJECTED. The reasoning was sound -- a module's key is a
+                # file path, so `runtime.run`, `run_setup` and `run_diagram`
+                # each take a 60-weight hit on the bare word "run" -- and one
+                # query visibly improved. On all 128 labelled queries it made
+                # things worse: r@1 0.344 -> 0.320, MRR 0.436 -> 0.424, and
+                # the comparison against ripgrep fell out of significance
+                # (p 0.0385 -> 0.117). A filename is a weak signal, not a
+                # worthless one.
                 name_toks = set(leaf.replace("_", " ").split())
                 if e.owner:
                     name_toks |= set(e.owner.rsplit(".", 1)[-1]
@@ -727,7 +746,7 @@ class PackageApi:
             lines += [
                 "",
                 f"!! REPLACED AT RUNTIME BY {e.patched_by}. In a run, this is "
-                f"NOT f3dasm's",
+                f"NOT {self._package}'s",
                 f"   implementation — {e.patched_by} substitutes its own at "
                 "import time. The",
                 "   signature and docstring below are the REPLACEMENT's, and "
@@ -782,16 +801,16 @@ class PackageApi:
         hits = self._rank(q, limit)
         if not hits:
             return (
-                f"No f3dasm symbol matches {q!r}.\n\n"
-                "This searches the INSTALLED f3dasm only — it does not know "
-                "about your study code, Abaqus, or other libraries. If you "
-                "expected an f3dasm symbol here, try the bare name "
-                "(ExperimentData, create_sampler) or a word from what it does "
-                "('sample', 'optimize', 'store')."
+                f"No {self._package} symbol matches {q!r}.\n\n"
+                f"This searches the INSTALLED {self._package} only — not your "
+                f"study code, not Abaqus, not other libraries. A miss here "
+                f"means it is not in {self._package}, not that it does not "
+                f"exist.\n\nTry the bare name of something you know is "
+                f"there ({self._examples()}), or a word for what it DOES."
             )
         body = "\n".join(self._render_hit(h) for h in hits)
         return _clip(
-            f"{len(hits)} match(es) for {q!r} in f3dasm "
+            f"{len(hits)} match(es) for {q!r} in {self._package} "
             f"{self.version()}:\n\n{body}\n\n"
             "Pass one of these names back to read its full entry."
         )
@@ -820,8 +839,6 @@ class PackageApi:
         return None
 
     def _source(self, e: Entry) -> str:
-        import f3dasm  # noqa: F401  (ensures the package is importable)
-
         obj = self._object(e.key)
         if obj is None:
             return f"ERROR: could not locate {e.key} to read its source."
@@ -846,12 +863,25 @@ class PackageApi:
                 return obj
         return None
 
+    def _examples(self) -> str:
+        """Two real public names, for a miss message that can help.
+
+        Derived from the live index rather than hardcoded. The hardcoded pair
+        this replaced named f3dasm symbols, which is useless advice when the
+        index holds a different package -- and would go stale in either.
+        """
+        names = sorted(
+            k.rsplit(".", 1)[-1] for k, e in self._index.items()
+            if not e.private and e.kind == "class" and "." in k
+        )
+        return ", ".join(names[:2]) if names else "a public name"
+
     # -- orientation -------------------------------------------------------
 
     def version(self) -> str:
         try:
             from importlib.metadata import version
-            return version("f3dasm")
+            return version(self._package)
         except Exception:  # noqa: BLE001
             return "(version unknown)"
 
@@ -862,7 +892,7 @@ class PackageApi:
             if not e.private and e.kind in ("class", "function")
         )
         lines = [
-            f"f3dasm {self.version()} — {len(pub)} public symbols "
+            f"{self._package} {self.version()} — {len(pub)} public symbols "
             f"({len(self._index)} indexed including methods and internals).",
             "",
         ]
@@ -890,6 +920,29 @@ class F3dasmApi(PackageApi):
 
     def __init__(self) -> None:
         super().__init__("f3dasm", _ALIASES)
+
+
+#: What indexing adda needs that indexing f3dasm does not, measured on 128
+#: labelled queries. f3dasm's knowledge is in its symbols, so modules and
+#: constants are pure crowding there (r@1 0.77 -> 0.62). adda's is in its
+#: module docstrings, its declared constants and its knowledge-base markdown,
+#: and indexing all four is the difference between losing to ripgrep and
+#: beating it (r@1 0.24 -> 0.41 on the set that motivated the change).
+ADDA_UNITS = ("symbol", "module", "constant", "markdown")
+
+
+class AddaApi(PackageApi):
+    """``PackageApi`` bound to adda itself, for an agent reading THIS package.
+
+    No alias map. f3dasm's is 84 hand-written English->f3dasm pairs added
+    after seeing which queries missed, and on 70 independently written queries
+    it bought nothing at all (synonym r@1 0.47 on the set it came from, 0.06
+    on the blind set). Carrying that shape to adda would inherit the fitting
+    without the benefit.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("adda", {}, units=ADDA_UNITS)
 
 
 _API: F3dasmApi | None = None
