@@ -176,26 +176,92 @@ def test_search_respects_top_k(tmp_path):
     assert passage_count <= 3
 
 
-def test_bm25_search_finds_paraphrase(tmp_path):
-    """BM25 search should find documents by shared vocabulary (not exact match)."""
+def test_bm25_ranks_by_relevance_where_substring_cannot(tmp_path):
+    """BM25 must rank the truly relevant paper first; naive substring can't.
+
+    The original version of this test (``test_bm25_search_finds_paraphrase``)
+    injected ONE paper and asserted only ``result != "No results found."`` —
+    that passes identically under ``retrieval_mode="substring"`` (ranking
+    disabled entirely), so it could not tell BM25 apart from no ranking at
+    all (verified: it does pass with substring). This version discriminates
+    the two on purpose, with THREE papers:
+
+    - ``distractor`` (added FIRST, so it is what a naive first-match scan
+      would return) contains the query's exact words as one contiguous
+      substring, but only once, in a single unrelated aside — thin lexical
+      relevance.
+    - ``filler`` shares no vocabulary with the query at all.
+    - ``target`` (added LAST, so a naive scan reaches it last) never
+      contains the query's exact word sequence anywhere, but densely
+      repeats the query's vocabulary across several sentences — high BM25
+      relevance despite zero substring overlap.
+
+    Under ``retrieval_mode="bm25"`` the densely-relevant ``target`` must
+    rank first. Under ``retrieval_mode="substring"`` it CANNOT (it contains
+    no substring match for the query at all — see the corpus's own
+    docstring: substring is "no ranking at all"), and the query instead
+    surfaces ``distractor``'s thin, incidental match first because
+    ``_search_substring`` returns hits in corpus.csv row order, not by
+    relevance. That gap — ranking vs. none — is the actual claim BM25
+    retrieval makes, and is what this test asserts.
+    """
+    from adda._src.runtime import settings
+
     corpus = _make_corpus(tmp_path)
+    query = "maximum sigma_crit buckling stress"
+
     _inject_paper(
-        corpus,
-        "arxiv_9999_00001",
-        title="Buckling Analysis",
+        corpus, "arxiv_distractor", title="Coating Durability Under Thermal Cycling",
         text=(
             "<!-- page 1 -->\n"
-            "The critical buckling stress is maximized when the plate thickness "
-            "is optimized. The maximum load-bearing capacity depends on the "
-            "critical stress value sigma_crit in structural design.\n"
+            "This paper investigates coating durability under thermal cycling "
+            "in aerospace composites. As an aside, unrelated prior work once "
+            "reported a maximum sigma_crit buckling stress figure in a "
+            "different context, which is not the focus here. The remainder "
+            "of this paper is entirely about fatigue crack growth in "
+            "adhesive bonds and thermal expansion mismatch.\n"
+        ),
+    )
+    _inject_paper(
+        corpus, "arxiv_filler", title="Polymer Crystallization Kinetics",
+        text=(
+            "<!-- page 1 -->\n"
+            "This work studies polymer crystallization kinetics under "
+            "isothermal annealing conditions, unrelated to mechanical "
+            "loading or structural stability.\n"
+        ),
+    )
+    _inject_paper(
+        corpus, "arxiv_target", title="Critical Plate Buckling Under Compression",
+        text=(
+            "<!-- page 1 -->\n"
+            "The critical buckling stress sigma_crit is maximized when the "
+            "plate thickness is optimized to resist buckling. We analyze "
+            "sigma_crit under a range of buckling stress conditions, showing "
+            "sigma_crit reaches its maximum stress at the critical buckling "
+            "threshold. This buckling stress analysis determines sigma_crit's "
+            "maximum value under critical loading, and the maximum buckling "
+            "stress corresponds to the critical sigma_crit onset.\n"
         ),
     )
 
-    # Query uses different phrasing but overlapping vocabulary
-    result = corpus.search("maximum sigma_crit", top_k=5)
-    # Should find something — BM25 scores on shared tokens (maximum, sigma_crit)
-    # OR graceful fallback via _search_substring which also finds the passage
-    assert result != "No results found."
+    try:
+        settings.configure({"retrieval_mode": "bm25"})
+        bm25_result = corpus.search(query, top_k=5)
+        assert corpus.resolved_mode == "bm25"
+        assert bm25_result.index("Critical Plate Buckling Under Compression") < \
+            bm25_result.index("Coating Durability Under Thermal Cycling")
+
+        settings.configure({"retrieval_mode": "substring"})
+        substring_result = corpus.search(query, top_k=5)
+        assert corpus.resolved_mode == "substring"
+        # The exact 4-word query never appears verbatim in the target paper,
+        # so substring search cannot find it at all -- unlike BM25, it is
+        # not merely outranked, it is ABSENT.
+        assert "Critical Plate Buckling Under Compression" not in substring_result
+        assert "Coating Durability Under Thermal Cycling" in substring_result
+    finally:
+        settings.configure(None)
 
 
 # ---------------------------------------------------------------------------
