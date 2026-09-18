@@ -334,3 +334,36 @@ def test_an_ambiguous_collision_query_is_recorded_as_weak(api):
     version of that measured so far regressed the vocab tier."""
     s = _held_out_scores(api)
     assert s["ambiguous"][0] >= 0.25, s
+
+
+# ---------------------------------------------------------------------------
+# Dense embeddings, measured and rejected
+#
+# fastembed with BAAI/bge-small-en-v1.5 -- the same model and library
+# literature_corpus.py already reaches for -- was run against these 56
+# queries. Embedding all 271 symbols (name + summary + 600 chars of docstring)
+# takes 13.5s once; a query costs 3ms. Three configurations:
+#
+#                     name r@1  dotted r@1  vocab r@1  synonym r@5  all MRR
+#   lexical (shipped)   0.90       1.00       0.83        0.71       0.83
+#   dense only          0.70       0.43       0.72        0.53       0.65
+#   hybrid RRF k=10     0.90       0.71       0.89        0.71       0.80
+#   hybrid RRF k=60     0.90       0.71       0.89        0.65       0.79
+#
+# Dense alone is worse on EVERY tier, including the synonym tier it was meant
+# to rescue. Hybrid buys vocab r@1 (+0.06) and pays for it on dotted
+# (1.00 -> 0.71): those queries are exact lookups -- a symbol path, a
+# traceback -- and fusing in semantically-near-but-wrong symbols drags the
+# right answer down, which is the failure the name tier exists to prevent.
+# Synonym, the whole reason to try, does not move at all.
+#
+# The likely why, for whoever revisits this: 271 short API docstrings are a
+# tiny and unusually homogeneous corpus -- almost every one says "does X with
+# ExperimentData" -- so cosine similarity has little to separate. And agent
+# queries skew towards identifiers, where rare tokens like get_n_best_output
+# are precisely what a small embedding model represents worst.
+#
+# This is not an argument against embeddings in general; literature retrieval
+# uses them over a corpus where they earn it. It is a measurement on THIS
+# corpus, recorded so the question does not get re-opened by intuition.
+# ---------------------------------------------------------------------------
