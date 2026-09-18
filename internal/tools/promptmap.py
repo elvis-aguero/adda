@@ -82,7 +82,22 @@ def _line_of(text: str, offset: int) -> int:
 
 
 def _rel(path: Path) -> str:
-    return str(path.relative_to(REPO))
+    """*path* relative to the repo root, for a citation a reader can click.
+
+    Every path this module resolves normally sits under ``PKG`` (an editable
+    install of adda puts ``__file__`` inside the repo tree), so this is a
+    plain ``relative_to``. But a role's own module is found by walking the
+    LIVE ``Graph``/``Agent`` objects (``type(agent).__module__``), and if
+    adda was installed non-editable that import resolves into site-packages
+    -- outside ``REPO`` entirely, which ``relative_to`` cannot express as a
+    relative path and used to raise on. Degrade to the absolute path rather
+    than crash the whole generator over one citation: the map is still
+    correct, the citation is just not clickable relative to this checkout.
+    """
+    try:
+        return str(path.relative_to(REPO))
+    except ValueError:
+        return str(path)
 
 
 def _py_files() -> list[Path]:
