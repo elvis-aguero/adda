@@ -103,10 +103,10 @@ viewer = [
 ]
 
 [project.scripts]
-# The agent-facing surface: `adda-explain "<question>"`. A console script
+# The agent-facing surface: `adda-docs "<question>"`. A console script
 # rather than an MCP server because it needs no configuration -- any coding
 # agent with a shell can call it on the first try.
-adda-explain = "adda.explain:main"
+adda-docs = "adda.explain:main"
 
 [project.urls]
 Documentation = "https://elvis-aguero.github.io/adda/"

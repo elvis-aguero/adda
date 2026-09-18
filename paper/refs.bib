@@ -1,0 +1,117 @@
+% Citations for the adda draft.
+%
+% RULE (paper/README.md #4): a work may be cited here only if it was READ IN
+% FULL. Entries marked % READ carry a note on what transfers. Anything else is
+% marked [VERIFY] in its note and must be checked against the source before
+% submission; tests/test_paper.py counts those so they cannot be forgotten.
+
+% ---------------------------------------------------------------- read in full
+
+@article{abaqusagent2026,
+  title  = {AbaqusAgent: a multi-agent framework for end-to-end finite element analysis},
+  author = {{LIRAM-LIN authors}},
+  year   = {2026},
+  note   = {arXiv:2606.00138. READ IN FULL. Nearest neighbour. Does not ingest
+            documentation: curates 104 worked cases in one FAISS store,
+            retrieval unit is a whole case. Ablation (n=20, Opus-4.6): RAG on
+            90\% success / 634,690 tokens vs RAG off 80\% / 2,203,778 --- the
+            large effect is efficiency, not accuracy. Same table on GPT-5.2
+            gives 65\%/45\%: model choice moved the result more than the
+            ablated feature. 40 of 50 eval cases are drawn from the retrieval
+            library. [VERIFY] author list and exact title against the source.},
+}
+
+@article{pdeagents2026,
+  title  = {PDE-Agents: LLM-orchestrated multi-agent finite element modelling
+            with knowledge-graph reasoning},
+  author = {{PDE-Agents authors}},
+  year   = {2026},
+  note   = {arXiv:2606.07850. READ IN FULL. Also routes around documentation:
+            the graph holds material properties and run lineage, not manuals.
+            Headline we lean on: ``integration pattern, rather than knowledge
+            content, [decides] whether GraphRAG augmentation helps or hinders''.
+            [VERIFY] author list and exact title against the source.},
+}
+
+@article{grepallyouneed2026,
+  title  = {Is Grep All You Need? How agent harnesses reshape agentic search},
+  author = {{Authors of arXiv:2605.15184}},
+  year   = {2026},
+  note   = {arXiv:2605.15184. READ IN FULL. Grep beat vector retrieval in their
+            Experiment 1, but their own conclusion is that the harness, not the
+            retrieval strategy, dominates. Benchmark is LongMemEval, where
+            answers are licensed by distinctive strings --- the best case for
+            lexical matching and a poor analogy for technical documentation.
+            [VERIFY] author list against the source.},
+}
+
+@article{chunking2026,
+  title  = {A systematic analysis of chunking strategies for reliable question answering},
+  author = {{Authors of arXiv:2601.14123}},
+  year   = {2026},
+  note   = {arXiv:2601.14123. READ IN FULL. Reports no measurable benefit from
+            chunk overlap FOR ITS CONFIGURATION (Natural Questions, SPLADE,
+            Mistral-8B). Recorded because it was initially over-read as a
+            general result. [VERIFY] author list against the source.},
+}
+
+% ------------------------------------------------------- methods and standards
+
+@article{mcnemar1947,
+  title   = {Note on the sampling error of the difference between correlated
+             proportions or percentages},
+  author  = {McNemar, Quinn},
+  journal = {Psychometrika},
+  volume  = {12},
+  number  = {2},
+  pages   = {153--157},
+  year    = {1947},
+  note    = {The paired test used for every index-vs-baseline comparison here.
+             The systems answer the same queries, so an unpaired
+             two-proportion test is the wrong instrument and less powerful.},
+}
+
+@article{wilson1927,
+  title   = {Probable inference, the law of succession, and statistical inference},
+  author  = {Wilson, Edwin B.},
+  journal = {Journal of the American Statistical Association},
+  volume  = {22},
+  number  = {158},
+  pages   = {209--212},
+  year    = {1927},
+  note    = {Interval used for every rate reported. At n=34 with p near 0.3 the
+             normal approximation runs past 0 and 1.},
+}
+
+@article{robertson2009bm25,
+  title   = {The probabilistic relevance framework: BM25 and beyond},
+  author  = {Robertson, Stephen and Zaragoza, Hugo},
+  journal = {Foundations and Trends in Information Retrieval},
+  volume  = {3},
+  number  = {4},
+  pages   = {333--389},
+  year    = {2009},
+  note    = {BM25, used for the Abaqus corpus. Cited for the two properties
+             that decide where it belongs: IDF and document-length
+             normalisation, neither of which the f3dasm ranker has or needs.},
+}
+
+% ------------------------------------------------------------------- artifacts
+
+@misc{f3dasm,
+  title        = {f3dasm: Framework for Data-Driven Design and Analysis of
+                  Structures and Materials},
+  author       = {van der Schelling, Martin and Bessa, Miguel A.},
+  howpublished = {\url{https://github.com/bessagroup/f3dasm}},
+  note         = {The substrate adda orchestrates. [VERIFY] --- there is a
+                  published paper for f3dasm; cite that rather than the
+                  repository once its details are confirmed.},
+}
+
+@misc{langgraph,
+  title        = {LangGraph},
+  author       = {{LangChain, Inc.}},
+  howpublished = {\url{https://github.com/langchain-ai/langgraph}},
+  note         = {The graph runtime. Cited as an implementation detail, not a
+                  contribution.},
+}

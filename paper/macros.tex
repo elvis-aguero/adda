@@ -1,0 +1,27 @@
+% Macros that enforce the paper's house style mechanically.
+%
+% The method section is a REGISTER, not prose: one entry per mechanism, each
+% owing the reader the same three things. A macro is the cheapest way to stop
+% that decaying into paragraphs of varying shape, and it makes an entry that
+% omits its cost a visible hole rather than a stylistic choice.
+
+% \decision{Name}{what it does}{what it is instead of}{what it costs}
+\newcommand{\decision}[4]{%
+  \paragraph{#1}#2
+  \emph{Instead of:} #3
+  \emph{Costs:} #4
+}
+
+% A measured figure that must carry where it came from. Using it is how
+% paper/README.md rule 1 ("every number carries its source") is kept true:
+% a number without one cannot be typeset with this macro.
+% \measured{value}{source}
+\newcommand{\measured}[2]{#1\footnote{Computed from \texttt{#2}.}}
+
+% Marks a claim that is argued but not yet measured. Deliberately ugly in the
+% output so it cannot survive to submission unnoticed.
+\newcommand{\conjecture}[1]{\textbf{[CONJECTURE]}~#1}
+
+% Marks a citation whose bibliographic details have not been verified against
+% the source. refs.bib carries the same marker; tests/test_paper.py counts them.
+\newcommand{\unverified}[1]{#1~\textbf{[VERIFY]}}

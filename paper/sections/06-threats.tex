@@ -1,0 +1,84 @@
+\section{Threats to validity}
+\label{sec:threats}
+
+Several of these are the most defensible content the paper has. They were found
+by the system reporting something untrue and being caught, which argues for the
+provenance machinery better than any claim we could make for it.
+
+\subsection{Measurement --- things the system got wrong about itself}
+
+\paragraph{The run's outcome was recovered by grepping its own prose.}
+Terminal state was determined by searching the final report for banner strings
+and defaulting to success when none matched. Two classes of non-success were
+therefore recorded as validated successes: a run killed by the time backstop,
+the cost ceiling or repeated errors, whose banner matches no pattern; and any
+run in a graph with no critic, where no banner is emitted at all. Rows of both
+kinds are in the ledger now, so any analysis of historical data must treat the
+success label as unreliable before the fix.
+
+\paragraph{A feature's flag did not turn the feature off.}
+Tools were gated on a static declaration rather than on whether the backing
+object existed, and each role prompt was one literal string. A disabled feature
+left its tools registered and its instructions in the prompt; the agent called
+a tool, received an error string, and the run recorded the one diagnostic whose
+target is zero. Three successive backlog entries are three rounds of this for a
+single feature. An arm built that way measures an agent confused by broken
+tools.
+
+\paragraph{Cost was unmeasured for an entire class of run.}
+Tokens and cost were parsed out of the stamped deliverable, so a study
+configured without a notebook recorded no cost at all, and only two of four
+token fields survived --- the two dropped being the cache fields, which are
+precisely what a prompt-section change moves. Unpriced calls were summed as
+zero, so an open-weight run reported a cost indistinguishable from free.
+
+\paragraph{A contract test disabled itself.}
+The guard asserting that every documented knob default matches the source
+scrapes call sites for a literal. Moving feature defaults into the feature
+registry left no literal at the call site, so six of seven feature knobs became
+\emph{passing skips}. Nothing was wrong underneath, and nothing would have said
+so if it had been.
+
+\textbf{Implication.} Any figure computed from a run predating these fixes
+inherits them. \cref{sec:reproducibility} states which figures fall on which
+side of that line, and the ablation runs on the fixed system.
+
+\subsection{Statistical}
+
+\textbf{Informative censoring} and \textbf{low dose} are stated with their
+pre-registered handling in \cref{sec:evaluation}. \textbf{The variance prior
+does not transfer}: every dispersion figure was measured on one study, one
+model, and runs spanning 66 commits. \textbf{No correction for multiplicity} is
+applied: a leave-one-out sweep over twelve factors is twelve comparisons, and
+we either pre-register the primary factor or report adjusted intervals --- not
+both, post hoc.
+
+\subsection{Construct}
+
+\textbf{``Success'' is the system's own gate.} It means a critic agent of the
+same model family passed the conclusion; that is not ground truth, and for the
+critic arm it is not even meaningful. \textbf{Partial ablations} answer
+narrower questions than their names suggest and are reported as the narrower
+ones. \textbf{Judge and judged share a model} --- the critic, the verdict
+referee and the agent under review are one family, so shared blind spots are
+invisible to this design.
+
+\subsection{External validity}
+
+\textbf{One system, one framework}: no claim transfers without re-measurement.
+\textbf{Small task set}, and the anchor study is not committed to the
+repository --- both an external-validity threat and a reproducibility defect.
+\textbf{Model dependence is large and demonstrated}~\cite{abaqusagent2026}, so
+any single-model result is a statement about that model.
+
+\subsection{Accepted deliberately}
+
+\textbf{Cross-run corpus reuse}: the literature corpus is study-scoped by
+design, so a run can answer using papers acquired by an earlier one. This is
+intentional --- re-embedding every run is waste --- but it is a contamination
+channel for literature arms, which need either a cold corpus or an explicit
+note. \textbf{Study-scoped deliverable}: parallel runs of one study are unsafe
+without a per-run copy; the sweep layer owns this. \textbf{No seed or
+temperature control} exists anywhere, so replicates are the only handle on
+run-to-run variance and there is no ``same seed, one flag flipped'' comparison
+available. The paper must not imply otherwise.

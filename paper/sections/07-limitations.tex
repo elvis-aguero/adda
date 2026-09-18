@@ -1,0 +1,22 @@
+\section{Limitations and future work}
+\label{sec:limitations}
+
+\textbf{Related work is four papers.} Enough to position against, nowhere near
+a survey. Missing entirely: autonomous-scientist systems outside FEA, the
+self-verification and self-consistency literature, agent memory and provenance,
+and evaluation methodology for agentic systems --- which is the literature this
+paper's evaluation design should itself be answerable to.
+
+\textbf{No results.} The evaluation is designed, pre-registered and unrun.
+
+\textbf{The retrieval tools are unevenly measured.} adda's index has 128
+labelled queries and a baseline; f3dasm's has 126 and no baseline comparison
+against grep; the Abaqus tool has 60 queries and 50 fuzzy pairs written but
+\emph{cannot be scored}, because the corpus is licensed and not shipped. The
+asymmetry is stated rather than hidden.
+
+\textbf{Deliberately not built.} Full run-scoped isolation; a minimum-score
+floor on the knowledge tools, which cannot be judged by recall (a floor can
+only lower it) and needs a set of questions the system genuinely cannot answer,
+scored on how often it says so; and the traversable documentation tree of
+\cref{sec:related}, which needs a traversal policy before it is worth building.

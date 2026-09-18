@@ -1,0 +1,113 @@
+\section{Evaluation}
+\label{sec:evaluation}
+
+Fixed before any run, so the analysis cannot be chosen after seeing the data.
+Every figure below is computed from \texttt{studies/run\_ledger.csv} and is
+reproducible from it.
+
+\subsection{What the existing data is, and is not}
+
+The ledger holds \measured{76 runs across 66 distinct
+commits}{studies/run\_ledger.csv} --- close to one commit per run. It is a
+longitudinal log, not an experiment: every row confounds a feature change with
+everything else in that diff. It is used \emph{only} to estimate variance and
+activation rates, never as a result. The anchor study ($n=46$) closes GATED 28
+times, UNGATED 6, FAILED 2, and is watchdog-killed 10 times.
+
+\subsection{Two findings that constrain the design}
+
+\paragraph{Dose: most features do nothing in most runs.}
+Activation, as the fraction of the 46 anchor runs in which a signal fired at
+least once: milestone block 93.5\%, error return 78.3\%, science drift 19.6\%,
+consistency flag 15.2\%, reproduction bounce 13.0\%, verdict-substance flag
+8.7\%. A feature that does nothing in 80\% of runs has an intent-to-treat
+effect near $1.0$ whatever it does to the runs it touches: a true $1.5\times$
+effect among treated runs becomes roughly $1.08\times$ in ITT, and the required
+$n$ rises by more than an order of magnitude at the same variance.
+\textbf{Consequence, pre-registered:} activation rate is a manipulation check
+reported per arm, and features below roughly 20\% dose are reported as
+descriptive, not inferential.
+
+\paragraph{Censoring: the endpoint is missing exactly where it matters.}
+All 10 watchdog-killed runs carry no token and no cost data, and the watchdog
+is an \emph{external} wall-clock cutoff rather than an error --- at least one
+killed run had already reached a critic PASS. The continuous endpoint is
+therefore computed over survivors only, and survival is post-treatment: if
+disabling a feature makes runs hang, those runs vanish from the token analysis
+and the survivors look cheaper, so an arm could be reported as a cost saving
+when it in fact broke the system. \textbf{Pre-registered:} killed runs are
+reported as right-censoring and never pooled with failures; completion rate is
+reported per arm beside the endpoint; the token result is stated as conditional
+on completion; and attrition of 21.7\% means retaining 10 usable runs per arm
+needs $\approx 13$ launched.
+
+\subsection{Endpoints}
+
+\textbf{Primary, continuous: tokens to outcome.} Over the 36 completed anchor
+runs the log-scale spread is small --- $\mathrm{sd}(\log)=0.321$ for output
+tokens, giving $n=10$ per arm for a $1.5\times$ effect. Cost gives $0.354$ and
+delegations $0.438$. Ledger rows are excluded as an endpoint: at
+$\mathrm{sd}(\log)=1.064$ they are noise at this scale.
+
+\textbf{Secondary, binary: success rate}, with a Wilson
+interval~\cite{wilson1927} and an explicit underpowered label. Detecting a
+shift from the observed $0.61$ to $0.71$ at $\alpha=0.05$ and 80\% power needs
+$\approx 351$ runs per arm, which is why the binary endpoint cannot be primary
+on a paid model. On an open-weight backend cost is unavailable entirely, so
+tokens and wall-clock carry the analysis there.
+
+\subsection{Design}
+
+Leave-one-out against a full baseline; twelve factors full-factorial is 4096
+cells and is not on the table. A pair is promoted to a $2^k$ design only where
+one-factor-at-a-time suggests coupling. The model is pinned and named ---
+\cite{abaqusagent2026} moves from 90\%/90\% to 65\%/45\% purely by changing
+model at fixed architecture. Arm order is randomised across the sweep so
+condition is not confounded with time, replicate is a blocking factor, and
+analysis is on the log scale.
+
+Two factors are settled. The \textbf{delegation log is not ablatable}: it is
+run substrate. The \textbf{critic arm cannot use the run outcome}, because with
+no critic nothing reviews the conclusion --- it needs a post-hoc judge over the
+archived deliverable, blinded to condition. The \textbf{hypothesis-ledger arm
+is partial} and must be reported as such: its tools and prompt section can be
+withheld, but the Popperian workflow is argued across three other prompt
+sections that are the agent's scientific method rather than ledger
+documentation, and removing those would produce a different agent, not an
+ablation.
+
+\subsection{Retrieval, measured separately}
+\label{sec:retrieval-eval}
+
+The knowledge tools of \cref{sec:knowledge} are measured offline against
+labelled query sets, because a run-level arm says whether an arm moved and not
+why. The honest control is \texttt{ripgrep} on the same questions, not nothing,
+and the paired test is exact McNemar~\cite{mcnemar1947}.
+
+\textbf{Query sets are written before the tool, and by someone else.} This is
+not a stylistic preference. f3dasm's ranker carries a hand-written
+English-to-f3dasm alias map added after observing which queries missed. On the
+56 queries it was written from it lifts the synonym tier from
+$\mathrm{r@}1=0.29$ to $0.47$. On 70 queries written by an agent barred from
+running the retriever it scores $0.06$, against $0.12$ with the map disabled,
+and only one of its 84 keys is triggered by both sets. It memorised a
+vocabulary rather than learning one, and no measurement taken on the set it was
+tuned against could have shown that.
+
+\textbf{Result for the adda index}, over 128 queries (48 written alongside the
+tool, 80 written blind): $\mathrm{r@}1 = 0.375$ against $0.23$ for ripgrep,
+$\mathrm{MRR} = 0.459$ against $0.32$, exact McNemar $p = 0.0096$. The
+shrinkage between the two sets is itself the finding --- $\mathrm{r@}1$ falls
+from $0.40$ on the set written alongside the tool to $0.31$ on the blind set,
+the same effect the alias map shows at full strength.
+
+\subsection{Unanswered before the first run}
+
+\textbf{What is the baseline?} Leave-one-out gives within-system comparisons
+and does not answer ``compared to what'' --- an agent with no scaffolding, a
+competent human, or the same system on an easier problem. This must be named
+before the runs.
+\textbf{Is the task set off the floor?} If baseline success is near zero no
+ablation can move it; the fix would be an easier task tier, not a larger $n$.
+\textbf{A pilot is required.} Every figure here was measured on one model and
+one study. Roughly 10 baseline runs, measured, before any arm is sized.

@@ -38,10 +38,10 @@ WHAT IT IS NOT
     is what lets it be correct on a cluster where no checkout exists.
 
 USE
-    adda-explain "how do I stop a run that is burning money"
-    adda-explain AgenticRun                 # an exact name gives the entry
-    adda-explain --source AgenticRun        # then the source, if needed
-    adda-explain --overview                 # the public surface, one line each
+    adda-docs "how do I stop a run that is burning money"
+    adda-docs AgenticRun                 # an exact name gives the entry
+    adda-docs --source AgenticRun        # then the source, if needed
+    adda-docs --overview                 # the public surface, one line each
 
     Or from Python::
 
@@ -79,7 +79,7 @@ def overview() -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="adda-explain",
+        prog="adda-docs",
         description="Look up adda's own API, concepts and rules.",
         epilog="A phrase returns a menu of matches; pass a name back for its "
                "full entry. Searches the INSTALLED adda only.")
