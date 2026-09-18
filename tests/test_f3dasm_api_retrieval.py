@@ -145,12 +145,12 @@ def test_a_query_already_in_f3dasms_words_is_unchanged(api):
     """Expansion must be additive. A query that already speaks f3dasm has to
     rank exactly as it did before the map existed, or the four saturated tiers
     were bought at a price paid somewhere invisible."""
-    from adda._src.knowledge.f3dasm_api import _expand
+    from adda._src.knowledge.f3dasm_api import _ALIASES, _expand
 
     for q in ("store the experiment data", "create_sampler latin",
               "call the datagenerator", "domain add_float"):
         toks = [t for t in q.replace("_", " ").split()]
-        introduced = _expand(toks)
+        introduced = _expand(toks, _ALIASES)
         assert not (set(introduced) & set(toks)), (
             f"{q!r}: expansion re-introduced a token the query already had")
 
@@ -159,17 +159,17 @@ def test_an_alias_covers_its_origin_not_itself(api):
     """"save my results" must not count as two terms covered because ``store``
     was added on "save"'s behalf — coverage multiplies the whole score, so a
     double-count there inflates every aliased query."""
-    from adda._src.knowledge.f3dasm_api import _expand
+    from adda._src.knowledge.f3dasm_api import _ALIASES, _expand
 
-    assert _expand(["save"]) == {"store": "save"}
+    assert _expand(["save"], _ALIASES) == {"store": "save"}
 
 
 def test_a_two_word_english_term_reaches_a_one_word_identifier(api):
     """"black box" cannot match the key ``blackbox`` by single-token lookup.
     That is a gap in the mechanism, not in the vocabulary."""
-    from adda._src.knowledge.f3dasm_api import _expand
+    from adda._src.knowledge.f3dasm_api import _ALIASES, _expand
 
-    assert "datagenerator" in _expand(["black", "box"])
+    assert "datagenerator" in _expand(["black", "box"], _ALIASES)
 
 
 def test_every_alias_points_at_a_word_f3dasm_actually_uses(api):

@@ -44,7 +44,7 @@ import pkgutil
 import warnings
 from dataclasses import dataclass, field
 
-__all__ = ["Entry", "F3dasmApi", "build_index"]
+__all__ = ["Entry", "F3dasmApi", "PackageApi", "build_index"]
 
 #: Cap on a single consult() reply. The point of the tool is to keep the
 #: package OUT of the context window; an unbounded page defeats it.
@@ -161,7 +161,7 @@ _ALIASES: dict[str, tuple[str, ...]] = {
 _ALIAS_WEIGHT = 0.6
 
 
-def _expand(toks: list[str]) -> dict[str, str]:
+def _expand(toks: list[str], aliases: dict[str, tuple]) -> dict[str, str]:
     """``{alias term: the query token it stands in for}``.
 
     Keyed by the introduced term so scoring can look it up, valued by the
@@ -170,7 +170,7 @@ def _expand(toks: list[str]) -> dict[str, str]:
     """
     out: dict[str, str] = {}
     for t in toks:
-        for alias in _ALIASES.get(t, ()):
+        for alias in aliases.get(t, ()):
             if alias not in toks:
                 out.setdefault(alias, t)
     # An English term for one f3dasm identifier is often TWO words -- "black
@@ -178,7 +178,7 @@ def _expand(toks: list[str]) -> dict[str, str]:
     # tokens alone can never reach those keys, which is a gap in the mechanism
     # rather than in the vocabulary.
     for a, b in zip(toks, toks[1:], strict=False):
-        for alias in _ALIASES.get(a + b, ()):
+        for alias in aliases.get(a + b, ()):
             if alias not in toks:
                 out.setdefault(alias, a)
     return out
@@ -243,25 +243,29 @@ def _signature(obj, drop_self: bool = False) -> str:
     return str(sig)
 
 
-def _where(obj) -> tuple[str, str | None]:
+def _where(obj, package: str = "f3dasm") -> tuple[str, str | None]:
     """``(file:line, patched_by)`` for a live object.
 
-    ``patched_by`` is set when the source file lies OUTSIDE the f3dasm package
-    — i.e. something has replaced f3dasm's own function. adda does exactly that
-    to two ExperimentData methods, so the distinction is not hypothetical, and
-    an index that silently reported adda's patch as f3dasm's API would be
-    actively misleading.
+    ``patched_by`` is set when the source file lies OUTSIDE the package being
+    indexed — i.e. something has replaced that package's own function. adda
+    does exactly that to two f3dasm ExperimentData methods, so the distinction
+    is not hypothetical, and an index that silently reported adda's patch as
+    f3dasm's API would be actively misleading.
+
+    When the package being indexed IS adda, the same test does the right thing
+    by construction: adda's own files sit inside adda's root, so they take the
+    early return and no patch is claimed.
     """
     try:
         f = inspect.getsourcefile(obj) or "?"
         _, line = inspect.getsourcelines(obj)
     except (OSError, TypeError):
         return "?", None
-    pkg = _f3dasm_root()
+    pkg = _package_root(package)
     if pkg and f.startswith(pkg):
         # package-relative: the absolute site-packages prefix is noise and
         # differs between machines
-        return f"f3dasm{f[len(pkg):]}:{line}", None
+        return f"{package}{f[len(pkg):]}:{line}", None
     owner = "adda" if "/adda/" in f else _pkg_of(f)
     short = f.rsplit("/site-packages/", 1)[-1]
     if "/src/" in short:
@@ -269,10 +273,11 @@ def _where(obj) -> tuple[str, str | None]:
     return f"{short}:{line}", owner
 
 
-def _f3dasm_root() -> str | None:
+def _package_root(package: str = "f3dasm") -> str | None:
+    """Directory the package lives in, or None when it does not import."""
     try:
-        import f3dasm
-        return (f3dasm.__file__ or "").rsplit("/", 1)[0] or None
+        mod = importlib.import_module(package)
+        return (mod.__file__ or "").rsplit("/", 1)[0] or None
     except Exception:  # noqa: BLE001
         return None
 
@@ -282,21 +287,31 @@ def _pkg_of(path: str) -> str:
     return tail.split("/", 1)[0].removesuffix(".py")
 
 
-def build_index() -> dict[str, Entry]:
-    """Introspect the installed f3dasm. Returns ``{key: Entry}``.
+def build_index(package: str = "f3dasm") -> dict[str, Entry]:
+    """Introspect an INSTALLED package. Returns ``{key: Entry}``.
 
-    Raises ``ImportError`` when f3dasm is absent — the caller decides whether
-    that is fatal (it is not: the tool simply is not offered).
+    Raises ``ImportError`` when the package is absent — the caller decides
+    whether that is fatal (for f3dasm it is not: the tool simply is not
+    offered).
+
+    ``package`` exists because the three problems this function solves are not
+    f3dasm's. Any package that keeps its implementation under a private
+    subpackage and re-exports a curated surface has the same ones: a
+    ``__module__`` that names the private definition site rather than the
+    import a caller must write, a public surface much smaller than the set of
+    defined symbols, and no way to tell from source alone whether something
+    has been replaced at run time. adda is built exactly that way, so the same
+    walk indexes it with no special-casing.
     """
-    import f3dasm
+    pkg_mod = importlib.import_module(package)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        root = f3dasm.__file__
+        root = pkg_mod.__file__
         assert root
         pkg_dir = root.rsplit("/", 1)[0]
-        names = ["f3dasm"] + [
-            m.name for m in pkgutil.walk_packages([pkg_dir], "f3dasm.")
+        names = [package] + [
+            m.name for m in pkgutil.walk_packages([pkg_dir], f"{package}.")
         ]
         mods = {}
         for n in names:
@@ -317,7 +332,7 @@ def build_index() -> dict[str, Entry]:
                     continue
                 if not (inspect.isclass(v) or inspect.isfunction(v)):
                     continue
-                if not getattr(v, "__module__", "").startswith("f3dasm"):
+                if not getattr(v, "__module__", "").startswith(package):
                     continue
                 path = f"{name}.{attr}"
                 cur = public.get(id(v))
@@ -340,7 +355,7 @@ def build_index() -> dict[str, Entry]:
                 if key in index:
                     continue
                 doc = inspect.getdoc(v) or ""
-                where, patched = _where(v)
+                where, patched = _where(v, package)
                 index[key] = Entry(
                     key=key,
                     kind="class" if inspect.isclass(v) else "function",
@@ -353,7 +368,7 @@ def build_index() -> dict[str, Entry]:
                     patched_by=patched,
                 )
                 if inspect.isclass(v):
-                    _add_methods(index, v, key, pub is None)
+                    _add_methods(index, v, key, pub is None, package)
     return index
 
 
@@ -398,7 +413,8 @@ _KEPT_DUNDERS = frozenset({
 
 
 def _add_methods(
-    index: dict[str, Entry], cls, cls_key: str, private: bool
+    index: dict[str, Entry], cls, cls_key: str, private: bool,
+    package: str = "f3dasm",
 ) -> None:
     """Index a class's own public methods.
 
@@ -421,7 +437,7 @@ def _add_methods(
         if not (inspect.isfunction(fn) or inspect.ismethod(fn)):
             continue
         doc = inspect.getdoc(fn) or ""
-        where, patched = _where(fn)
+        where, patched = _where(fn, package)
         key = f"{cls_key}.{mn}"
         index[key] = Entry(
             key=key,
@@ -437,16 +453,34 @@ def _add_methods(
         )
 
 
-class F3dasmApi:
-    """Query the installed f3dasm's API. One entry point, three behaviours.
+class PackageApi:
+    """Query an installed package's API. One entry point, three behaviours.
 
     The shape follows how a person uses a reference: look something up, read
     the entry, and only then open the source. Each step costs more context than
     the last, so each is a separate request rather than one fat page.
+
+    ``package`` selects what is indexed. The ranker below is package-agnostic
+    on purpose: every prior it encodes -- a name beats a summary beats a body,
+    an exact name is unbeatable, a private symbol is answerable but must not
+    crowd a concept search -- is a fact about PYTHON PACKAGES, not about
+    f3dasm.
+
+    ``aliases`` is the one part that is NOT transferable, and it defaults to
+    empty for every package but f3dasm. The f3dasm map is 84 hand-written
+    English->f3dasm pairs, added after seeing which queries missed, which
+    makes it an answer fitted to its own test. Inheriting it by default would
+    carry that fit to a package it was never measured on and read as if the
+    ranker had simply generalised.
     """
 
-    def __init__(self) -> None:
-        self._index = build_index()
+    def __init__(self, package: str = "f3dasm",
+                 aliases: dict[str, tuple] | None = None) -> None:
+        self._package = package
+        self._aliases = (
+            _ALIASES if aliases is None and package == "f3dasm"
+            else (aliases or {}))
+        self._index = build_index(package)
 
     # -- retrieval ---------------------------------------------------------
 
@@ -483,7 +517,7 @@ class F3dasmApi:
         # Everyday English -> f3dasm's own word, at a discount (see _ALIASES).
         # Scored alongside the literal tokens rather than replacing them, so a
         # query that already speaks f3dasm is ranked exactly as before.
-        aliases = _expand(toks)
+        aliases = _expand(toks, self._aliases)
         scored: list[tuple[float, int, str]] = []
         for key, e in self._index.items():
             leaf = key.rsplit(".", 1)[-1].lower()
@@ -741,6 +775,13 @@ def _clip(text: str) -> str:
 
 #: Built once per process. Introspection walks 43 modules; an agent that
 #: consults twice in a turn should pay for that once.
+class F3dasmApi(PackageApi):
+    """``PackageApi`` bound to f3dasm, with f3dasm's alias map."""
+
+    def __init__(self) -> None:
+        super().__init__("f3dasm", _ALIASES)
+
+
 _API: F3dasmApi | None = None
 _API_FAILED = False
 
