@@ -74,6 +74,38 @@ jobs:
       - name: Build documentation
         run: |
           mkdocs build
+  check_promptmap:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        version: ["3.12"]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install '.[all]'
+      # internal/promptmap.html is a committed, generated artifact -- its
+      # whole value is that a reader can open it without running anything.
+      # Regenerate it with no flags (the committed copy carries no build
+      # stamp, so this is deterministic) and fail loudly if it drifted from
+      # what's checked in, instead of letting a stale map keep lying about
+      # the system.
+      - name: Regenerate the prompt map and diff against the committed copy
+        run: |
+          python internal/tools/promptmap.py -o /tmp/promptmap.html
+          if ! diff -q internal/promptmap.html /tmp/promptmap.html > /dev/null; then
+            echo "::error::internal/promptmap.html is stale. Run 'python internal/tools/promptmap.py' locally and commit the regenerated file."
+            diff internal/promptmap.html /tmp/promptmap.html || true
+            exit 1
+          fi
   check_pre-commit:
     strategy:
       matrix:

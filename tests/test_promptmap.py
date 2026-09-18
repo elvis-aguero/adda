@@ -36,7 +36,13 @@ def _load():
 @pytest.fixture(scope="module")
 def promptmap():
     if not _GEN.exists():  # pragma: no cover - the generator is checked in
-        pytest.skip("promptmap generator not present")
+        # internal/tools/promptmap.py is committed to this repo, not an
+        # optional dependency or a piece of local environment -- its absence
+        # means the checkout is broken, not that some external condition is
+        # unmet. A skip here would hide that behind a green-looking run.
+        pytest.fail("internal/tools/promptmap.py is missing from the "
+                    "checkout -- this is a repo defect, not an environment "
+                    "condition to skip past")
     return _load()
 
 

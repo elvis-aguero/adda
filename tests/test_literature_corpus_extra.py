@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 from adda._src.literature.http_client import _robust_get, _robust_post
@@ -459,3 +460,197 @@ def test_chunk_text_empty_string(tmp_path):
     corpus = _make_corpus(tmp_path)
     chunks = corpus._chunk_text("")
     assert chunks == []
+
+
+# ---------------------------------------------------------------------------
+# _load_all_embeddings partial coverage — one unembedded paper must not
+# disable dense retrieval for the whole corpus.
+#
+# VERIFIED BUG: on the frozen litcorpus fixture, 1 of 132 papers (724 of
+# 12,919 chunks = 5.60%) has chunks in chunks.jsonl but no chunks.npy
+# (hussein2015_thesis_curved_beams_multistable_microrobots). The old
+# _load_all_embeddings() aborted the WHOLE matrix (returned (chunks, None))
+# the moment it hit that one paper's missing embeddings — discarding dense
+# ranking for the other 131 papers (94.4%) that DID have embeddings, and
+# silently downgrading retrieval_mode="auto" to BM25-only.
+# ---------------------------------------------------------------------------
+
+
+def _inject_paper_with_embedding(corpus, paper_id, title, text, vectors):
+    """Like _inject_paper, but also writes a real chunks.npy.
+
+    *vectors* must have one row per chunk _chunk_text(text) produces for
+    *text* (use short text — under 150 words — for exactly one chunk).
+    """
+    _inject_paper(corpus, paper_id, title=title, text=text)
+    paper_dir = corpus._paper_dir(paper_id)
+    np.save(str(paper_dir / "chunks.npy"), np.asarray(vectors, dtype=np.float32))
+
+
+class _FakeEmbedder:
+    """Stub for LiteratureCorpus._get_embedding_model(): a fixed query vector,
+    independent of the input text — search() only ever calls .embed([query])."""
+
+    def __init__(self, query_vec):
+        self._query_vec = list(query_vec)
+
+    def embed(self, texts):
+        return [self._query_vec]
+
+
+def test_load_all_embeddings_partial_coverage_returns_matrix_not_none(tmp_path):
+    """(a) one paper of several lacking chunks.npy still yields a matrix.
+
+    FAILS on today's code: the per-chunk loop in _load_all_embeddings hits
+    paper_no_emb (no chunks.npy) and returns (chunks, None) unconditionally,
+    discarding paper_a's and paper_c's embeddings too.
+    """
+    corpus = _make_corpus(tmp_path)
+    _inject_paper_with_embedding(
+        corpus, "paper_a", "Paper A", "alpha content words here",
+        [[1.0, 0.0, 0.0, 0.0]],
+    )
+    _inject_paper(
+        corpus, "paper_no_emb", title="Paper NoEmb",
+        text="beta content with no embedding file at all",
+    )
+    _inject_paper_with_embedding(
+        corpus, "paper_c", "Paper C", "gamma content words here",
+        [[0.0, 0.0, 1.0, 0.0]],
+    )
+
+    chunks, matrix, has_embedding = corpus._load_all_embeddings()
+
+    assert matrix is not None, (
+        "one paper lacking chunks.npy must not abort the WHOLE embedding "
+        "matrix — dense ranking must still run over the papers that DO "
+        "have embeddings"
+    )
+    assert len(chunks) == 3
+    assert len(matrix) == 3
+    assert has_embedding is not None
+    assert list(has_embedding) == [True, False, True]
+    # Alignment: each embedded paper's row must be ITS OWN vector, not
+    # shifted by the unembedded paper sitting between them in chunk order.
+    np.testing.assert_allclose(matrix[0], [1.0, 0.0, 0.0, 0.0])
+    np.testing.assert_allclose(matrix[2], [0.0, 0.0, 1.0, 0.0])
+
+
+def test_load_all_embeddings_fewer_rows_than_chunks_partial_coverage(tmp_path):
+    """(b) a paper re-chunked without a re-embed (fewer .npy rows than
+    chunks) loses dense coverage for only ITS excess chunk(s), not the
+    whole corpus.
+
+    FAILS on today's code: the second-instance guard
+    (`idx >= len(paper_embs[pid])`) also returns (chunks, None)
+    unconditionally.
+    """
+    corpus = _make_corpus(tmp_path)
+    words = " ".join(f"word{i}" for i in range(200))  # -> 2 chunks
+    text = "<!-- page 1 -->\n" + words + "\n"
+    _inject_paper(corpus, "paper_rechunked", title="Rechunked", text=text)
+    paper_dir = corpus._paper_dir("paper_rechunked")
+    # Stale embeddings: only 1 row though _chunk_text now produces 2 chunks.
+    np.save(str(paper_dir / "chunks.npy"),
+            np.array([[1.0, 0.0]], dtype=np.float32))
+    _inject_paper_with_embedding(
+        corpus, "paper_ok", "OK", "other short content here",
+        [[0.0, 1.0]],
+    )
+
+    chunks, matrix, has_embedding = corpus._load_all_embeddings()
+
+    assert matrix is not None, (
+        "a paper with fewer embedding rows than chunks must not abort the "
+        "WHOLE embedding matrix"
+    )
+    rechunked_positions = [
+        i for i, c in enumerate(chunks) if c["paper_id"] == "paper_rechunked"
+    ]
+    assert len(rechunked_positions) == 2
+    assert has_embedding[rechunked_positions[0]] == True  # noqa: E712
+    assert has_embedding[rechunked_positions[1]] == False  # noqa: E712
+    ok_positions = [i for i, c in enumerate(chunks) if c["paper_id"] == "paper_ok"]
+    assert has_embedding[ok_positions[0]] == True  # noqa: E712
+
+
+def test_load_all_embeddings_no_papers_embedded_still_returns_none(tmp_path):
+    """Zero coverage (no paper has any embedding at all) is still None —
+    the corpus-wide fallback to BM25/substring must be preserved when there
+    is genuinely nothing to rank densely."""
+    corpus = _make_corpus(tmp_path)
+    _inject_paper(corpus, "paper_1", title="One", text="one content words")
+    _inject_paper(corpus, "paper_2", title="Two", text="two content words")
+
+    chunks, matrix, has_embedding = corpus._load_all_embeddings()
+
+    assert matrix is None
+    assert has_embedding is None
+
+
+def test_search_hybrid_partial_coverage_stays_hybrid_and_reports_coverage(tmp_path):
+    """(c) partial dense coverage is VISIBLE, not silent, and hybrid mode
+    still actually runs (resolved_mode == 'hybrid', not silently 'bm25')
+    when only some papers have embeddings.
+
+    FAILS on today's code: _load_all_embeddings returns None because of
+    paper_no_emb, so dense_ranks stays empty and resolved_mode becomes
+    'bm25' even though retrieval_mode='hybrid' was requested and an
+    embedder IS available — exactly the mislabelled-condition failure mode
+    the module docstring calls out.
+    """
+    from adda._src.runtime import settings
+
+    corpus = _make_corpus(tmp_path)
+    _inject_paper_with_embedding(
+        corpus, "paper_dense_hit", "Dense Hit Paper",
+        "zzzznomatch zzzznomatch content words",
+        [[1.0, 0.0]],
+    )
+    _inject_paper(
+        corpus, "paper_no_emb", title="No Embedding Paper",
+        text="completely unrelated filler content with no embedding file",
+    )
+
+    query_vec = [1.0, 0.0]  # cosine-aligned with paper_dense_hit's vector
+    corpus._get_embedding_model = lambda: _FakeEmbedder(query_vec)
+
+    try:
+        settings.configure({"retrieval_mode": "hybrid"})
+        result = corpus.search("zzzznomatch", top_k=5)
+        assert corpus.resolved_mode == "hybrid", (
+            f"requested retrieval_mode='hybrid' but resolved_mode="
+            f"{corpus.resolved_mode!r} — a run labelled hybrid silently "
+            "ran as bm25 because one paper's missing embedding poisoned "
+            "the whole matrix"
+        )
+        assert "Dense Hit Paper" in result
+        # The partial-coverage signal must be observable, not silent.
+        assert corpus.dense_coverage is not None
+        assert 0.0 < corpus.dense_coverage < 1.0
+    finally:
+        settings.configure(None)
+
+
+def test_search_full_coverage_reports_dense_coverage_one(tmp_path):
+    """When every full-text paper has embeddings, dense_coverage == 1.0."""
+    from adda._src.runtime import settings
+
+    corpus = _make_corpus(tmp_path)
+    _inject_paper_with_embedding(
+        corpus, "paper_a", "Paper A", "alpha content words here",
+        [[1.0, 0.0]],
+    )
+    _inject_paper_with_embedding(
+        corpus, "paper_b", "Paper B", "beta content words here",
+        [[0.0, 1.0]],
+    )
+    corpus._get_embedding_model = lambda: _FakeEmbedder([1.0, 0.0])
+
+    try:
+        settings.configure({"retrieval_mode": "hybrid"})
+        corpus.search("alpha", top_k=5)
+        assert corpus.resolved_mode == "hybrid"
+        assert corpus.dense_coverage == 1.0
+    finally:
+        settings.configure(None)

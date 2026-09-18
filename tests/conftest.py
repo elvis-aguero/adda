@@ -2,6 +2,7 @@
 # https://doc.pytest.org/en/latest/example/markers.html#custom-marker-and-command-line-option-to-control-test-runs
 
 import logging
+import re
 
 import pytest
 
@@ -33,3 +34,105 @@ def pytest_runtest_setup(item):
 @pytest.fixture(scope="session", autouse=True)
 def setup_logging():
     logging.getLogger("tensorflow").setLevel(logging.WARNING)
+
+
+# ---------------------------------------------------------------------------
+# An unexpected skip must fail the build.
+#
+# pyproject.toml already states the principle, in its comment on the
+# playwright dependency: "without this it SKIPS, and a skipped test protects
+# nothing." A skip nobody is watching for is a hole in the suite that looks
+# green. So every skip reason produced in a session must be pre-approved
+# here as a genuinely ENVIRONMENTAL condition -- a live external server, a
+# licensed corpus that cannot ship, an optional package truly absent from
+# THIS machine -- or the session fails. This is a contract about what may
+# legitimately be untestable in a given environment, not a place to file
+# away a skip that is actually a defect (an in-repo file that should always
+# exist, a test guard that no longer applies) -- those get fixed or made to
+# fail loudly instead, at their own call site.
+# ---------------------------------------------------------------------------
+
+_SKIP_ALLOWLIST: tuple[tuple["re.Pattern[str]", str], ...] = (
+    # Browser-driven viewer tests (tests/test_viewer_browser.py): playwright
+    # is a declared test dependency, but not every dev checkout has run
+    # `pip install`/`playwright install chromium` -- CI does both explicitly.
+    (re.compile(r"^playwright is not installed"),
+     "optional browser-automation package not installed in this environment"),
+    (re.compile(r"^no chromium binary"),
+     "playwright is installed but no Chromium binary was downloaded here"),
+    # tests/test_ollama_adapter.py: needs a real local Ollama server: not
+    # part of this repo, not spun up by the suite, and marked `ollama` so CI
+    # runs with `-m "not ... and not ollama"`.
+    (re.compile(r"^Ollama server not running at localhost:11434$"),
+     "requires a live local Ollama server, not part of CI or most dev setups"),
+    # tests/test_abaqus_docs.py: the happy path needs a corpus built from
+    # licensed Abaqus documentation, which cannot be committed or downloaded
+    # by the suite (see that module's own docstring).
+    (re.compile(r"^needs a locally built Abaqus corpus$"),
+     "the corpus is licensed Abaqus documentation and cannot ship with adda"),
+    # tests/test_literature_wet.py, tests/test_literature_sources_wet.py,
+    # tests/test_literature_guardrails.py: `semanticscholar` is a hard
+    # `dependencies` entry, but build_semantic_scholar_closures() still
+    # guards the import with its own try/except (a defensive fallback for
+    # an environment where it failed to install), so its absence is
+    # legitimately environmental even though it should be rare.
+    (re.compile(r"^semanticscholar not installed$"),
+     "guards an import that can fail even though the package is a hard dep"),
+    # tests/test_literature_corpus.py, tests/test_literature_guardrails.py:
+    # same shape as semanticscholar above, for pymupdf's `fitz` import.
+    (re.compile(r"^fitz not available$"),
+     "guards a pymupdf import that can fail on some platforms"),
+    # tests/test_literature_agent.py: CorpusRank depends on rank-bm25, again
+    # a hard dependency guarded defensively at its call site.
+    (re.compile(r"^CorpusRank not injected \(rank_bm25 or other dep missing\)$"),
+     "guards an optional ranking dependency"),
+    # tests/test_embed_worker.py: shells out to the `uv` CLI itself, which a
+    # dev machine or CI image is not guaranteed to have on PATH.
+    (re.compile(r"^uv not found on PATH$"),
+     "test shells out to the uv CLI, not guaranteed to be on PATH"),
+    # tests/test_docs_tutorials_wet.py: a wet, `integration`-marked smoke
+    # test that needs a real OpenRouter key; deliberately unset by default.
+    (re.compile(r"^OPENROUTER_API_KEY not set"),
+     "wet docs-tutorial test needs a live API key, unset by default"),
+)
+
+_unallowed_skips: list[str] = []
+
+
+def _record_if_unallowed(longrepr) -> None:
+    if not (isinstance(longrepr, tuple) and len(longrepr) == 3):
+        return  # not the (file, line, reason) shape a skip produces
+    path, line, reason = longrepr
+    text = reason[len("Skipped: "):] if reason.startswith("Skipped: ") else reason
+    if not any(pattern.search(text) for pattern, _why in _SKIP_ALLOWLIST):
+        _unallowed_skips.append(f"{path}:{line}: {text}")
+
+
+def pytest_runtest_logreport(report):
+    """Catches pytest.skip()/skipif() raised while a test runs."""
+    if report.skipped:
+        _record_if_unallowed(report.longrepr)
+
+
+def pytest_collectreport(report):
+    """Catches pytest.importorskip() and module-level skips raised at
+    collection time (e.g. test_viewer_browser.py's playwright import)."""
+    if report.skipped:
+        _record_if_unallowed(report.longrepr)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _unallowed_skips:
+        return
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_sep(
+            "=", "SKIPS NOT ON THE ENVIRONMENTAL ALLOWLIST", red=True, bold=True)
+        for line in _unallowed_skips:
+            reporter.write_line(line)
+        reporter.write_line(
+            "A skipped test protects nothing. Either the condition is a "
+            "real defect to fix (make the test run, or fail loudly instead "
+            "of skipping), or it is genuinely environmental and belongs in "
+            "_SKIP_ALLOWLIST in tests/conftest.py, with a comment saying why.")
+    session.exitstatus = 1
