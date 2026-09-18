@@ -1,0 +1,53 @@
+% adda --- working draft.
+%
+% VENUE-AGNOSTIC BY DECISION. No NeurIPS style file is committed here: the
+% venue is undecided, style files are venue- and year-specific, and a draft
+% that will not compile without a file we do not have is worse than one that
+% compiles anywhere. Switch by editing \pagebudget below and dropping the
+% official .sty next to this file.
+%
+% There is NO LATEX TOOLCHAIN in the development container, so this document
+% has never been compiled. tests/test_paper.py checks what can be checked
+% without one: that every \input resolves, that every \cite key exists in
+% refs.bib, and that the house-style markers are honoured.
+
+\documentclass[11pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalise]{cleveref}
+
+\input{macros}
+
+% The page budget, as a switch. 9 = NeurIPS main track; 8 = a typical
+% workshop; 0 = unlimited, which is the working mode: the method register is
+% written to grow past any limit on purpose and is cut at submission.
+\newcommand{\pagebudget}{0}
+
+\title{adda: epistemic scaffolding for autonomous data-driven design}
+\author{Elvis Aguero \and Miguel A. Bessa}
+\date{Draft --- \today}
+
+\begin{document}
+\maketitle
+
+\input{sections/abstract}
+\input{sections/01-introduction}
+\input{sections/02-related}
+\input{sections/03-method}
+\input{sections/04-implementation}
+\input{sections/05-evaluation}
+\input{sections/06-threats}
+\input{sections/07-limitations}
+\input{sections/08-reproducibility}
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}

@@ -1,0 +1,60 @@
+\section{Related work}
+\label{sec:related}
+
+A work is cited here only if it was read in full. Four have been. This is
+enough to position against and nowhere near a survey; \cref{sec:limitations}
+records that as the largest known gap rather than disguising it.
+
+\paragraph{Both FEA-agent neighbours route around the documentation problem,
+and both say so.}
+AbaqusAgent~\cite{abaqusagent2026} does not ingest the Abaqus documentation at
+all. It curates 104 worked cases --- 71 from the benchmark manual, 33
+textbook-style --- embedded into a single vector store, with a whole case as
+the retrieval unit and an explicit prompt instruction that a retrieved case is
+a template for structure, not physics. The authors give the reason plainly:
+the documentation of a closed-source commercial package is not readily
+available, and curating it is a significant challenge under limited resources.
+PDE-Agents~\cite{pdeagents2026} likewise holds material properties, failure
+patterns and run lineage in its knowledge graph rather than manuals.
+
+\paragraph{The measured benefit of retrieval in this neighbourhood is
+efficiency, not accuracy.}
+AbaqusAgent's ablation (20 cases, one model, temperature 0) reports 90\%
+success with retrieval against 80\% without, and 634{,}690 tokens against
+2{,}203{,}778 --- $3.5\times$ fewer tokens and $2.2\times$ less time for
+$+10$pp, an accuracy delta they do not claim is significant at that $n$. This
+directly shapes our endpoint choice (\cref{sec:evaluation}). Two cautions
+carry over. Their evaluation set of 50 draws 40 cases from the 104-case
+retrieval library, which inflates any retrieval-on condition. And the same
+table run on a different model moves from 90\%/90\% to 65\%/45\% at fixed
+architecture: \textbf{model choice moved the result more than the ablated
+feature did}, which is why every arm here pins and names its model.
+
+\paragraph{Integration pattern beats index choice --- two independent groups.}
+PDE-Agents states it outright: integration pattern, rather than knowledge
+content, decides whether graph-augmented retrieval helps or hinders.
+\cite{grepallyouneed2026} finds grep beating vector retrieval in its first
+experiment, but its own conclusion is that the harness and tool-calling style
+dominate the retrieval strategy. If that holds, ablating \emph{how} a
+capability is wired into the loop is more informative than ablating
+\emph{which} retriever is used --- which is the shape our evaluation already
+has.
+
+\paragraph{What does not transfer, recorded because it was nearly over-read.}
+\cite{grepallyouneed2026} benchmarks on LongMemEval, conversational memory
+where answers are often licensed by a small set of distinctive strings: the
+best possible case for lexical matching and a poor analogy for technical
+documentation. \cite{chunking2026} reports no measurable benefit from chunk
+overlap, for a configuration (open-domain Wikipedia QA, a sparse-learned
+retriever, a small generator) that shares none of our parameters. Both findings
+are real and neither bears on our setting.
+
+\paragraph{The opening, stated carefully.}
+Nobody in this neighbourhood has made a full documentation corpus traversable;
+both neighbours hand-curate a small structured knowledge base instead. Two
+risks before claiming that gap. It is adjacent to graph-augmented retrieval,
+which PDE-Agents has already applied in this exact domain, so the difference
+must be principled --- a hierarchy \emph{derived} from document structure
+versus a \emph{curated} graph of facts. And given the integration-beats-index
+finding, a traversable tree without a traversal policy would likely
+underperform its own promise.

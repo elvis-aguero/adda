@@ -164,8 +164,13 @@ def test_a_miss_says_what_it_searched(api):
     """A bare 'no results' invites the agent to conclude the thing does not
     exist, when it may simply live elsewhere."""
     out = api.consult("abaqus contact stabilisation")
-    assert "No f3dasm symbol" in out
-    assert "INSTALLED f3dasm only" in out
+    assert "abaqus contact stabilisation" in out, "it must echo what it searched"
+    assert "INSTALLED f3dasm only" in out, "it must say the search was scoped"
+    assert "not that it does not exist" in out, (
+        "the whole point: a miss is about THIS index, not about reality")
+    # and it must offer a real name to try, not a hardcoded one that can rot
+    assert any(k.rsplit(".", 1)[-1] in out for k in api._index), (
+        "the recovery advice names no symbol this index actually holds")
 
 
 # --- output discipline ------------------------------------------------------

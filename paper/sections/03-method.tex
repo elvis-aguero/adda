@@ -1,0 +1,194 @@
+\section{Method}
+\label{sec:method}
+
+This section is a \emph{register}, not a narrative. One entry per mechanism,
+each owing the reader the same three things: what it does, what it is instead
+of, and what it costs. The shape is enforced by a macro, so an entry that
+omits its cost is a visible hole rather than a stylistic choice.
+
+It is written to grow past any page limit on purpose and is cut at submission.
+A design decision taken and not recorded here is lost; a decision recorded and
+later cut costs nothing.
+
+\subsection{The graph and the open loop}
+
+\decision{Hub-and-spoke topology}
+{A strategizer holds outgoing edges to a literature reviewer, a data
+generator, an implementer and a critic. Behaviour follows topology rather than
+role: any node with an outgoing edge orchestrates, whatever it is called, so a
+two- or three-node study runs without a separate code path.}
+{a fixed pipeline of stages, or a fully connected team. The hub keeps one agent
+accountable for the run's scientific direction while letting specialists be
+swapped or removed.}
+{the hub is a bottleneck and carries the longest context. Removing a specialist
+is a graph edit --- which is what makes the evaluation's leave-one-out arms
+cheap.}
+
+\subsection{The epistemic layer}
+
+Four mechanisms, deliberately separable so each can be ablated alone.
+
+\decision{Hypothesis ledger}
+{An append-only record of falsifiable hypotheses and their verdicts (OPEN,
+SUPPORTED, FALSIFIED, INCONCLUSIVE), mutated only through tools and never
+edited directly. Every delegation cites the hypothesis it tests.}
+{letting the agent keep its claims in its context window. The ledger survives
+context compaction, is auditable afterwards, and makes ``what did this run
+actually claim'' a file rather than a reading exercise.}
+{prompt surface and tool calls; and because delegations must cite a hypothesis,
+it shapes how work is decomposed --- a benefit or a constraint depending on the
+problem.}
+
+\decision{Falsification charter}
+{One binding text defining how a hypothesis may be tested and labelled ---
+severity of the attempt, verdict follows the result, no goalpost-moving ---
+spliced into both the strategizer's and the critic's prompts so both cite the
+same standard.}
+{per-agent instructions that drift apart. A shared constant is the cheapest way
+to make two agents answerable to one rule.}
+{a fixed block of prompt in two roles, and a rule the agent can be held to only
+as well as the referee below enforces it.}
+
+\decision{Live verdict referee}
+{When a hypothesis is closed, an independent judge checks \emph{at the moment
+of assertion} that the verdict obeys the charter, and is fed its own prior
+rulings on the same hypothesis so a borderline verdict cannot silently flip. It
+runs on the critic's model, not the strategizer's, and is advisory: on timeout
+or failure the verdict stands.}
+{checking only at the end, when the run has already been built on the claim.}
+{an extra model call per verdict, budgeted tight --- a hung call once froze a
+run for roughly 89 minutes, which is why the timeout exists. Activation
+\measured{8.7\% of runs}{studies/run\_ledger.csv}, which makes it descriptive
+rather than inferential in any ablation.}
+
+\decision{Drift monitor}
+{Background rules bracketing the evaluation ledger from both directions ---
+evaluations reported but never written, and rows written with no attributable
+owner --- escalating repeated drift to the critic.}
+{trusting the agent's account of what it evaluated.}
+{activation \measured{19.6\%}{studies/run\_ledger.csv}; also descriptive rather
+than inferential.}
+
+\subsection{The deliverable and the reproduction gate}
+
+\decision{Reproduce before close}
+{The run closes on a notebook that has been executed and reproduced
+\emph{before} the close is allowed. A deliverable that fails to reproduce after
+a bounded number of sighted attempts closes the run FAILED --- loudly, and
+distinctly from a conclusion that was merely never validated.}
+{a report plus a promise. This converts ``the agent says it found $X$'' into
+``here is a notebook that re-derives $X$ from the recorded data'', and is the
+mechanism most likely to be the headline for a mechanics audience.}
+{it constrains what the agent may produce, and the gate is a real failure mode:
+reproduction bounces in \measured{13.0\% of runs}{studies/run\_ledger.csv}.}
+
+\subsection{Anti-drift: generated, not typed}
+\label{sec:antidrift}
+
+\decision{The prompt is derived from the live system}
+{The tool catalogue is rendered from the live closure dictionary at every
+invocation; the run diagram is generated from the live graph; a feature owns
+its knob, its tools and its prompt section as one unit; and the documented
+run-knob table is checked against the source, so a knob read but undocumented,
+documented but unread, or documented with the wrong default fails the build.}
+{documentation and prompts maintained in parallel with the code. The failure
+this prevents is specific and was observed repeatedly: a flag that appears to
+disable a feature while the agent is still instructed to use it.}
+{generation makes the assembled prompt harder to read as one artifact, which is
+why a provenance map exists citing every prompt fragment back to its source
+line. And the guarantee is only as good as its contract tests: one such test
+was silently reduced to checking one of seven feature defaults by a refactor
+that moved defaults into the feature registry, and reported as passing skips
+throughout.}
+
+\subsection{Provenance: recorded, not reconstructed}
+
+\decision{Terminal state is a value, not a grep}
+{The run records rather than re-derives its outcome, \emph{how} it terminated,
+\emph{whether anything reviewed it}, the resolved configuration it actually ran
+with after precedence, and per-call telemetry by role, phase and model.}
+{inferring these afterwards from artifacts.}
+{a schema to maintain, and a migration for historical rows which cannot be
+back-filled honestly and are left blank. The argument for paying it is
+empirical and is the strongest single piece of evidence here for the whole
+provenance stance: when the outcome \emph{was} inferred --- grepped from the
+run's own final report --- backstop kills and critic-less runs both recorded as
+validated successes, and those rows are still in the ledger.}
+
+\subsection{Resource governance}
+
+\decision{One hard boundary, soft budgets everywhere else}
+{A memory cap for host safety is hard. Everything else is soft: the evaluation
+budget nudges rather than stops, and wall-clock and cost act as resumable
+backstops rather than crashes.}
+{hard limits on the science. A budget that kills a run mid-conclusion destroys
+the run's value, so backstops checkpoint and halt resumably.}
+{a resumable halt is a state the analysis must handle, and it is the source of
+the censoring problem in \cref{sec:evaluation}.}
+
+\subsection{Knowledge the agent cannot hold in context}
+\label{sec:knowledge}
+
+Three bodies of reference material are indexed rather than injected. The design
+of each is dictated by the form the material takes, and the differences between
+them are the interesting part.
+
+\decision{f3dasm: runtime introspection}
+{The installed f3dasm is imported and introspected at run time --- 243 symbols,
+roughly 117{,}000 characters of docstring --- and exposed as a single lookup
+tool to the two agents that write f3dasm code. Each entry leads with the
+\emph{canonical public import path}, resolved by walking the public
+namespaces.}
+{parsing a source checkout. On a cluster the checkout may be a different
+version or absent, so an index built from the live import describes the exact
+code the run will execute against and cannot go stale. The public-path
+resolution is not a refinement but the point: \texttt{\_\_module\_\_} reports
+the private definition site for every public f3dasm symbol, and an index that
+handed that to an agent would produce fragile private imports --- worse than no
+tool.}
+{importing the package, with its side effects. Only 47 of 125 defined symbols
+are publicly reachable; the other 78 are answerable but marked ``do not import
+this'', so a lookup cannot be mistaken for an endorsement.}
+
+\decision{Abaqus: offline extraction, BM25 over structure}
+{Licensed documentation HTML is parsed once into a page database and searched
+with BM25~\cite{robertson2009bm25} over weighted title, abstract and body
+fields. The builder ships; the corpus does not.}
+{flattening pages to text. A survey of 1{,}200 pages found 99\% carry tables,
+52\% MathML and 37\% preformatted blocks, with parameter documentation in
+definition lists --- exactly the content a reference lookup needs, and exactly
+what flattening destroys. BM25 rather than the f3dasm ranker because this
+corpus is large and wildly non-uniform: document-length normalisation and
+inverse document frequency both matter here and neither is available from a
+few hundred uniform symbol entries.}
+{the corpus cannot be redistributed, so the feature is opt-in and unmeasured
+until a user supplies one. Exact-token search also needs a spelling bridge,
+since every Abaqus keyword begins with a character the tokeniser discards.}
+
+\decision{adda: the same introspection, a different unit mix}
+{adda indexes itself for \emph{other people's} agents, exposed as
+\texttt{adda-docs}. Four unit kinds are indexed: symbols, module docstrings,
+declared module-level constants (each carrying its module's docstring), and the
+knowledge-base markdown shipped inside the package.}
+{indexing symbols alone, which is what f3dasm needs. Measured on 128 labelled
+queries, symbols alone \emph{lose} to \texttt{ripgrep}; all four together beat
+it. The same four units measured on f3dasm make it worse. The unit mix is a
+property of where a package keeps its knowledge, not a global setting: 23\% of
+adda's docstring mass is in module docstrings, and its rules live in markdown.}
+{a fourth index to maintain, and a known weakness --- there is no minimum-score
+floor, so the tool almost never reports that it does not know, and a
+confidently wrong answer costs an agent more than a miss.}
+
+\subsection{What this section still owes}
+
+\begin{enumerate}
+  \item \textbf{The alternatives in the author's voice.} Most ``instead of''
+    lines are reconstructed from code comments. The real abandoned
+    alternatives are in commit messages and the backlog, and are more
+    convincing than a retrospective rationalisation.
+  \item \textbf{A worked example.} One run end to end with its actual
+    artifacts: problem statement in, hypotheses proposed, a delegation, a
+    verdict and its referee ruling, the gate firing, the notebook out.
+  \item \textbf{Quantified costs.} Several costs asserted qualitatively above
+    are measurable from telemetry and should be numbers.
+\end{enumerate}

@@ -102,6 +102,12 @@ viewer = [
   "jinja2>=3.1"
 ]
 
+[project.scripts]
+# The agent-facing surface: `adda-docs "<question>"`. A console script
+# rather than an MCP server because it needs no configuration -- any coding
+# agent with a shell can call it on the first try.
+adda-docs = "adda.explain:main"
+
 [project.urls]
 Documentation = "https://elvis-aguero.github.io/adda/"
 Repository = "https://github.com/elvis-aguero/adda"
