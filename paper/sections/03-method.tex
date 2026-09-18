@@ -24,6 +24,19 @@ swapped or removed.}
 is a graph edit --- which is what makes the evaluation's leave-one-out arms
 cheap.}
 
+\decision{Delegation is asynchronous, and harvesting is one call}
+{Work is dispatched without blocking, and a bare \texttt{Wait()} returns
+whichever delegation finishes first, so $N$ in flight are drained by $N$ calls.
+It refuses rather than hanging when every open delegation is parked on a
+question or has died without reporting.}
+{a single-target wait, which left polling as the only way to collect a fan-out
+--- and polling is discouraged elsewhere in the prompt, so the two rules
+quietly opposed each other.}
+{concurrency is a behaviour, not a guarantee. Across 39 cluster runs, reliance
+on the single-target wait predicted serial execution ($r=-0.54$ against mean
+concurrent delegations, controlling for duration) at a measured mean
+concurrency of 1.21 on a median of 15 delegations per run.}
+
 \subsection{The epistemic layer}
 
 Four mechanisms, deliberately separable so each can be ablated alone.
@@ -38,6 +51,21 @@ actually claim'' a file rather than a reading exercise.}
 {prompt surface and tool calls; and because delegations must cite a hypothesis,
 it shapes how work is decomposed --- a benefit or a constraint depending on the
 problem.}
+
+The record is strict, and the strictness is the mechanism: a claim with no
+falsification criterion cannot be written down at all.
+
+\begin{verbatim}
+{"id": "H1",
+ "statement": "Optimal t/L is near 0.08 - thin walls maximise buckling",
+ "falsification_criterion": "a point with t/L in [0.10,0.14] beats
+                             buckling_load_norm 1.47",
+ "prediction": "best at t/L ~ 0.08 +/- 0.02",
+ "prior": 0.55, "posterior": 0.78,
+ "status_log": [{"status": "OPEN",      "delegation": null},
+                {"status": "SUPPORTED", "delegation": "D006",
+                 "numbers": {"buckling_load_norm": 1.62}}]}
+\end{verbatim}
 
 \decision{Falsification charter}
 {One binding text defining how a hypothesis may be tested and labelled ---
@@ -69,6 +97,29 @@ owner --- escalating repeated drift to the critic.}
 {activation \measured{19.6\%}{studies/run\_ledger.csv}; also descriptive rather
 than inferential.}
 
+\decision{Process milestones}
+{A small backlog --- assess the literature, get the oracle ready --- that gates
+delegation to the implementer until the strategizer resolves each one, by
+completing it or skipping it with a reason.}
+{trusting that an agent will orient itself before spending real evaluations. The
+gate is on the ONE node that consumes budget, so exploration stays free.}
+{it fires in \measured{93.5\% of runs}{studies/run\_ledger.csv}, so it is the
+highest-dose mechanism here and the one most likely to be shaping behaviour in
+ways not attributed to it. Skipping is soft, which means a determined agent can
+clear the backlog without doing the work.}
+
+\decision{Pre-registration reaches the experimenter}
+{The registered prediction and its falsification criterion are injected into the
+worker's brief, so the agent running the experiment can read the claim it is
+testing.}
+{registering a prediction where only the strategizer can see it. A criterion the
+experimenter never reads cannot discipline the experiment; it can only be
+checked against afterwards, when the work is already done.}
+{it couples two prompts, and it lets a worker optimise toward the criterion
+rather than toward the truth --- which is the same hazard pre-registration
+carries in human science, and is why the referee above judges the verdict
+rather than the result.}
+
 \subsection{The deliverable and the reproduction gate}
 
 \decision{Reproduce before close}
@@ -81,6 +132,46 @@ distinctly from a conclusion that was merely never validated.}
 mechanism most likely to be the headline for a mechanics audience.}
 {it constrains what the agent may produce, and the gate is a real failure mode:
 reproduction bounces in \measured{13.0\% of runs}{studies/run\_ledger.csv}.}
+
+\subsection{Ground truth and the ledger}
+\label{sec:oracle}
+
+\decision{One metered door to the oracle}
+{Every ground-truth evaluation goes through \texttt{get\_evaluator()}, which
+wraps the registered generator so that each call is written to the canonical
+\texttt{ExperimentData} store with its provenance, under a file lock. The
+wrapper is not exported: an agent cannot construct a store-redirected
+evaluator.}
+{letting an agent call the objective function and report what it found. The
+ledger is then the run's evidence, and a claim is checkable against rows rather
+than against the agent's account of them --- which is what makes the
+reproduction gate above possible at all.}
+{one door is a bottleneck by design, and everything cheap that is NOT an
+evaluation (surrogate predictions, analysis) has to be explicitly off-ledger or
+the meter stops meaning anything.}
+
+\decision{Design namespaces: several oracles in one run}
+{A run may carry more than one oracle, one per design parametrization the agent
+invents, each with its own isolated store. \texttt{Delegate(..., namespace=…)}
+scopes a worker to one, injected through the environment so the agent's call
+site stays a bare \texttt{get\_evaluator()}.}
+{one fixed design space per run. Open design-space discovery means the agent
+proposes a parametrization the study did not anticipate, and it needs somewhere
+to evaluate it that cannot contaminate the baseline.}
+{additive by construction --- \texttt{namespace=None} is byte-for-byte the
+single-study path --- but it means ``the ledger'' is $N$ ledgers, and the
+single-store load idiom silently reads only the default. That is a live trap,
+which is why the deliverable spec names the multi-store call.}
+
+\decision{Counts are derived from the ledger, not remembered}
+{A report-time tool reads per-experiment and per-delegation evaluation counts
+live from the stores, and prints budget spent against remaining.}
+{letting the agent quote a number from its plan. Both failure modes are
+observed, not hypothetical: one run hardcoded 70 evaluations where the ledger
+held 90, and another asserted 200 remaining with 200 spent. Both closed
+UNGATED.}
+{another tool in the catalogue, and a discipline the prompt has to insist on
+--- the agent must call it rather than recall.}
 
 \subsection{Anti-drift: generated, not typed}
 \label{sec:antidrift}
@@ -115,6 +206,40 @@ provenance stance: when the outcome \emph{was} inferred --- grepped from the
 run's own final report --- backstop kills and critic-less runs both recorded as
 validated successes, and those rows are still in the ledger.}
 
+\decision{One git repository per run workspace}
+{The run's delegation workspace is a git repository of its own, with one commit
+per delegation --- succeeded and failed alike --- and the resulting sha stamped
+onto that delegation's record.}
+{taking a delegation's word for which files it changed. The reproduction gate
+proves the notebook runs; it cannot prove a worker's account of its own edits is
+faithful.}
+{the agents get no git tool and never see the repository: the harness commits on
+their behalf, because an agent that can rewrite the history recording its work
+defeats the purpose. Never fatal --- no git, or a failed commit, records a null
+sha and the run proceeds.}
+
+\subsection{Watching and steering a run in flight}
+
+\decision{A read-only live viewer}
+{A local web UI serves the agent graph with a live status per node and, on
+click, that node's running transcript. Read-only, and a separate process from
+the run.}
+{reading a log after the fact. A multi-hour autonomous run that has gone wrong
+in the first ten minutes is the expensive failure, and nothing in a transcript
+tells you that while it is still cheap to stop.}
+{it is a second consumer of the run's on-disk state, so anything it displays is
+a format the run is now committed to writing.}
+
+\decision{The operator channel is the file system}
+{A human can answer a worker's question, queue a note for the entry node, or
+address a note at a specific running delegation --- all as small JSON files in
+the run's own debug directory.}
+{a socket or an RPC. The run and the viewer are separate processes, so the file
+system is the simplest channel that works --- and it makes the whole exchange
+part of the run record rather than terminal scrollback.}
+{it introduces a watch heartbeat, because a run must be able to tell
+waiting-for-an-answer apart from stalling on a question nobody can see.}
+
 \subsection{Resource governance}
 
 \decision{One hard boundary, soft budgets everywhere else}
@@ -126,10 +251,35 @@ the run's value, so backstops checkpoint and halt resumably.}
 {a resumable halt is a state the analysis must handle, and it is the source of
 the censoring problem in \cref{sec:evaluation}.}
 
+\decision{A wall-clock watchdog outside the run}
+{A hard timer at twice the run's time budget force-exits a stalled run and
+recursively kills every process tree it spawned, including detached ones a
+process-group kill would miss. It leaves a labelled post-mortem.}
+{trusting the run's own backstops. Those are inside the process that may be the
+thing that is stuck.}
+{it is an EXTERNAL cutoff, not an error condition, and it is the source of the
+censoring problem in \cref{sec:evaluation}: killed runs carry no token or cost
+data, and at least one had already reached a passing critic verdict. It is
+never pooled with failure.}
+
+\decision{Compaction rather than trimming, when the window fills}
+{When a conversation outgrows the served context window, the middle is replaced
+by a generated summary that keeps numerical results and the delegation each came
+from, decisions and their reasons, and what was tried and failed. The first user
+turn is never evicted.}
+{dropping the oldest messages, which is free and deterministic and also blind:
+the message it evicts may be the delegation report the whole run turns on, and
+nothing downstream can tell that it went.}
+{a summary is model output, so it can be wrong in ways a dropped message cannot
+--- it can quietly restate a number. So it is fenced and labelled in the
+transcript, the full transcript still lands on disk, and the run records which
+policy it used so an analysis can condition on it. A failure to summarise falls
+back to trimming rather than failing the turn.}
+
 \subsection{Knowledge the agent cannot hold in context}
 \label{sec:knowledge}
 
-Three bodies of reference material are indexed rather than injected. The design
+Five bodies of reference material are indexed rather than injected. The design
 of each is dictated by the form the material takes, and the differences between
 them are the interesting part.
 
@@ -178,6 +328,45 @@ adda's docstring mass is in module docstrings, and its rules live in markdown.}
 {a fourth index to maintain, and a known weakness --- there is no minimum-score
 floor, so the tool almost never reports that it does not know, and a
 confidently wrong answer costs an agent more than a miss.}
+
+\decision{Basilisk: the source tree, at the granularity it is authored in}
+{The Basilisk CFD source is indexed as solver headers and worked cases, with
+each header's entry naming what it is VERIFIED WITH and what it is NEVER
+STACKED WITH --- derived from what 213 compiling cases actually include
+together.}
+{an abstract-syntax index. Measured on the real tree: a C grammar encodes
+operator precedence as depth, so 59k lines becomes roughly two million nodes at
+depth 100 with three-quarters carrying no information; Basilisk C is a DSL, so
+a C parser emits error nodes on exactly the constructs carrying the physics and
+discards as comments the literate prose that is 16\% of every solver file; and
+the headers do not parse standalone even with Basilisk's own parser.}
+{the compatibility signal is an ABSENCE, and absences lie. Raw co-occurrence
+called two headers incompatible when one reaches the other transitively, which
+would invent a constraint the physics does not have --- worse than a miss. The
+fix excludes each header's transitive closure and ignores any header too thinly
+used for its absence to mean anything.}
+
+\decision{Literature: a study-scoped corpus of primary sources}
+{Papers the literature reviewer acquires are chunked, embedded and searched, and
+the corpus persists across runs of a study.}
+{re-acquiring and re-embedding per run, which is waste.}
+{it is a contamination channel: a run can answer using papers an earlier run
+fetched, so any arm that ablates the literature stack needs a cold corpus or an
+explicit note. Recorded in \cref{sec:threats} as accepted rather than fixed.}
+
+\decision{One contract across all five, and deliberately not one mechanism}
+{Every provider answers \texttt{consult(query, limit)}: a key returns its
+entry, a phrase returns a menu, a miss says the miss is about THIS index rather
+than about reality, the reply is capped, and an unconfigured provider returns no
+tool at all rather than one that errors.}
+{five providers converging by imitation, which is what had happened. Imitation
+does not fail when somebody drifts, and two providers had shipped with no reply
+cap at all --- defeating the one thing the tools exist for.}
+{the MECHANISMS stay different, on evidence: f3dasm gets worse with adda's unit
+mix ($\mathrm{r@}1$ $0.77 \to 0.62$) and adda loses to \texttt{ripgrep}
+without it, while Abaqus needs length normalisation that f3dasm's uniform
+entries neither have nor need. Forcing one ranker would make three providers
+worse to make a table look tidy.}
 
 \subsection{What this section still owes}
 
