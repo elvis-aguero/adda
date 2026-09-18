@@ -31,8 +31,8 @@ What does not is the method register, the empirical record, the evaluation
 design and the threats — which is what this tree contains.
 
 **The method section is a living register, not prose.** One entry per
-mechanism, each owing the reader the same three things: what it does, what it
-is instead of, and what it costs. The `\decision` macro enforces that shape, so
+mechanism, each owing the reader the same three things: what it does, how it
+is done, and why. The `\decision` macro enforces that shape, so
 an entry missing its cost is a visible hole rather than a stylistic choice. It
 is written to grow past any page limit on purpose and is cut at submission — a
 decision recorded and later cut costs nothing; a decision taken and never
