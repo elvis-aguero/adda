@@ -89,13 +89,49 @@ def test_runtime_block_is_documented_for_study_authors(key):
 
 
 def _defaults_in_source() -> dict[str, str]:
+    """Every knob's real default, from BOTH places one can be declared.
+
+    Call sites (``get_bool("debug", False)``) were the only place when this
+    was written. The Feature registry then moved every ablation knob's
+    default into its ``Feature(...)`` declaration, so the call site reads
+    ``get_bool(f.key, f.default)`` and this scraper found no literal --
+    reporting six of the seven feature knobs as SKIPPED rather than failing.
+
+    Skips are the dangerous outcome: a suite that is green while checking
+    nothing looks exactly like a suite that is green because everything is
+    right. ``test_no_feature_knob_is_silently_unchecked`` below now makes
+    that state impossible to reach again.
+    """
+    from adda._src.runtime import features
+
     out: dict[str, str] = {}
     for path in _SRC.rglob("*.py"):
         if path.name == "settings.py":
             continue
         for key, default in _CALL.findall(path.read_text(encoding="utf-8")):
             out[key] = default.strip()
+    for feature in features.FEATURES:
+        out[feature.key] = str(feature.default)
     return out
+
+
+def test_no_feature_knob_is_silently_unchecked():
+    """The guard on the guard.
+
+    ``test_documented_default_matches_the_source`` SKIPS a knob whose default
+    it cannot find, and a skip is not a failure -- so the refactor that moved
+    feature defaults into the registry turned six real checks into green
+    no-ops and nothing said a word. Seven of this table's defaults were wrong
+    when it was first written; that is the failure mode the parametrised test
+    exists to catch, and for a while it could not have caught it.
+    """
+    found = _defaults_in_source()
+    from adda._src.runtime import features
+
+    missing = sorted(f.key for f in features.FEATURES if f.key not in found)
+    assert not missing, (
+        f"these feature knobs have no discoverable default, so their "
+        f"documented value is unchecked: {missing}")
 
 
 @pytest.mark.parametrize("key", sorted(settings.KNOWN_KEYS))

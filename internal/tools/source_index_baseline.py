@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import math
 import pathlib
 import re
 import subprocess
@@ -67,7 +68,13 @@ def _rank(query: str, k: int = 5, *, per_kb: bool) -> list[str]:
         if per_kb:
             hits = hits * 1000 / max(pathlib.Path(path).stat().st_size, 1)
         scores[path] = scores.get(path, 0) + hits
-    return [p for p, _ in sorted(scores.items(), key=lambda kv: -kv[1])[:k]]
+    # Tie-break on the PATH, not on ripgrep's emission order. Python's sort is
+    # stable, so without this two files with equal counts keep whatever order
+    # rg happened to print -- and rg walks the tree in parallel, so that order
+    # is not contractually stable. It has been identical across every run
+    # here, which is exactly what makes it the kind of nondeterminism that
+    # surfaces once, in someone else's checkout, and discredits the number.
+    return [p for p, _ in sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))[:k]]
 
 
 def score(rows, label: str, *, per_kb: bool, show_misses: bool = False):
@@ -100,12 +107,11 @@ def score(rows, label: str, *, per_kb: bool, show_misses: bool = False):
     return hit1 / n, mrr / n
 
 
-def _score_index(rows, units) -> tuple[float, float, float, dict]:
-    """The adda index, scored exactly as the ripgrep control is.
+def _index_ranker(units):
+    """The adda index as a ``query -> [file, ...]`` function.
 
-    Entries are ranked, then collapsed to their FILE, because the query set's
-    gold labels are files -- a module entry and a function entry in the same
-    file are one answer, not two.
+    Shared by the table and the significance test so the two can never be
+    measuring different things.
     """
     root = pathlib.Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(root / "src"))
@@ -126,6 +132,17 @@ def _score_index(rows, units) -> tuple[float, float, float, dict]:
             if len(out) >= k:
                 break
         return out
+    return rank
+
+
+def _score_index(rows, units) -> tuple[float, float, float, dict]:
+    """The adda index, scored exactly as the ripgrep control is.
+
+    Entries are ranked, then collapsed to their FILE, because the query set's
+    gold labels are files -- a module entry and a function entry in the same
+    file are one answer, not two.
+    """
+    rank = _index_ranker(units)
 
     hit1 = hit5 = 0
     mrr = 0.0
@@ -143,6 +160,48 @@ def _score_index(rows, units) -> tuple[float, float, float, dict]:
         per[tier][2] += 1
     n = len(rows) or 1
     return hit1 / n, hit5 / n, mrr / n, {t: v[0] / v[2] for t, v in per.items()}
+
+
+def _mcnemar(rows, rank_a, rank_b) -> str:
+    """Exact McNemar on rank-1 correctness, plus a Wilson interval on r@1.
+
+    The two systems answer the SAME queries, so they are paired and an
+    unpaired two-proportion test is the wrong instrument -- it throws away the
+    pairing and loses power. What matters is the DISCORDANT pairs: queries one
+    system gets and the other misses.
+
+    This is printed because a query set this small cannot support a "beats the
+    baseline" claim on its own, and the honest thing is to publish the p-value
+    next to the point estimate rather than leave the reader to assume.
+    """
+    b = c = 0
+    for _tier, _qid, query, gold in rows:
+        g = set(gold)
+        a_ok = (rank_a(query)[:1] or [None])[0] in g
+        b_ok = (rank_b(query)[:1] or [None])[0] in g
+        if a_ok and not b_ok:
+            b += 1
+        elif b_ok and not a_ok:
+            c += 1
+    d = b + c
+    if d == 0:
+        return "no discordant pairs; the two are indistinguishable here"
+    p = min(1.0, 2 * sum(math.comb(d, i) for i in range(min(b, c) + 1)) / 2 ** d)
+    verdict = "SIGNIFICANT" if p < 0.05 else "NOT significant at alpha=0.05"
+    return (f"discordant pairs {d} (baseline-only {b}, index-only {c}); "
+            f"exact McNemar two-sided p = {p:.3f} -- {verdict}")
+
+
+def _wilson(hits: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """95% Wilson interval. Normal-approximation intervals are useless at
+    n=34 with p near 0.3 -- they run past 0 and 1."""
+    if n == 0:
+        return 0.0, 0.0
+    phat = hits / n
+    denom = 1 + z * z / n
+    centre = (phat + z * z / (2 * n)) / denom
+    half = z * math.sqrt(phat * (1 - phat) / n + z * z / (4 * n * n)) / denom
+    return max(0.0, centre - half), min(1.0, centre + half)
 
 
 def main() -> int:
@@ -165,13 +224,23 @@ def main() -> int:
 
     if args.index:
         print("\n=== PackageApi('adda'), by what it indexes ===")
+        n = len(rows)
         for units in (("symbol",), ("symbol", "module"), ("symbol", "constant"),
                       ("symbol", "module", "constant"),
                       ("symbol", "module", "constant", "markdown")):
             r1, r5, mrr, per = _score_index(rows, units)
+            lo, hi = _wilson(round(r1 * n), n)
             tiers = "  ".join(f"{t[:4]} {v:.2f}" for t, v in sorted(per.items()))
-            print(f"{'+'.join(units):30s} r@1 {r1:.2f}  r@5 {r5:.2f}  "
-                  f"MRR {mrr:.2f}   {tiers}")
+            print(f"{'+'.join(units):30s} r@1 {r1:.2f} [{lo:.2f},{hi:.2f}]  "
+                  f"r@5 {r5:.2f}  MRR {mrr:.2f}   {tiers}")
+
+        lo, hi = _wilson(round(a[0] * n), n)
+        print(f"\nbaseline r@1 95% CI [{lo:.2f},{hi:.2f}]  (n={n})")
+        print(_mcnemar(rows,
+                       lambda q: _rank(q, per_kb=False),
+                       _index_ranker(("symbol", "module", "constant", "markdown"))))
+        print("Per-tier figures rest on 5-10 queries each and are indicative "
+              "only; do not quote a tier as a result.")
     return 0
 
 
