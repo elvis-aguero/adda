@@ -94,6 +94,27 @@ _SKIP_ALLOWLIST: tuple[tuple["re.Pattern[str]", str], ...] = (
     # test that needs a real OpenRouter key; deliberately unset by default.
     (re.compile(r"^OPENROUTER_API_KEY not set"),
      "wet docs-tutorial test needs a live API key, unset by default"),
+    # tests/test_knowledge_protocol.py::test_an_unconfigured_provider_returns
+    # _nothing_at_all is parametrized over every registered provider (see
+    # knowledge/protocol.py::providers()) to check what each one does when
+    # its corpus is NOT configured. adda, f3dasm, and literature all register
+    # with env=None -- none of them gate on an env var at all -- so that
+    # "unconfigured" state never applies to any of the three, and the skip
+    # fires in every environment, not just this one. (The CI failure this
+    # allowlisting fixes named only adda/f3dasm; running the full suite here
+    # surfaced literature's identical case too -- same test, same line, same
+    # env=None mechanism, so it belongs in the same entry rather than being
+    # left to fail the next run.) This is honestly a parametrization artifact
+    # (the test generates a case that cannot occur for these three), not an
+    # environmental gap in the sense every other entry above is -- allowlisted
+    # anyway because it is not a missing dependency, a licensed corpus, or a
+    # live server either; it is inherent to how the test is parametrized, not
+    # a defect in adda.
+    (re.compile(r"^(adda|f3dasm|literature) needs no corpus, "
+                r"so it is always configured$"),
+     "parametrization artifact: these providers need no corpus (env=None in "
+     "the registry), so the 'unconfigured' state this test checks never "
+     "applies to them"),
 )
 
 _unallowed_skips: list[str] = []

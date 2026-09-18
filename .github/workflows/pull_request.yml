@@ -91,13 +91,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install '.[all]'
+          python -m pip install --editable '.[all]'
       # internal/promptmap.html is a committed, generated artifact -- its
       # whole value is that a reader can open it without running anything.
       # Regenerate it with no flags (the committed copy carries no build
       # stamp, so this is deterministic) and fail loudly if it drifted from
       # what's checked in, instead of letting a stale map keep lying about
       # the system.
+      #
+      # --editable matters here, not just style: promptmap.py resolves each
+      # role's module file via `type(agent).__module__`, and locates it with
+      # Path.relative_to(REPO). A non-editable install puts adda's package
+      # under site-packages, outside REPO, which raised ValueError here --
+      # matches build-docs' own --editable install above.
       - name: Regenerate the prompt map and diff against the committed copy
         run: |
           python internal/tools/promptmap.py -o /tmp/promptmap.html
