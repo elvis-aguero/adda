@@ -129,11 +129,11 @@ def test_claude_catalog_names_match_sdk_registration():
         _qualify_closure_names,
     )
 
-    closures = {"arxiv_search_papers": lambda q: q, "CorpusSearch": lambda q: q}
+    closures = {"arxiv_search_papers": lambda q: q, "ConsultLiterature": lambda q: q}
     qualified = _qualify_closure_names(closures)
     assert set(qualified) == {
         "mcp__f3dasm_agent_tools__arxiv_search_papers",
-        "mcp__f3dasm_agent_tools__CorpusSearch",
+        "mcp__f3dasm_agent_tools__ConsultLiterature",
     }
 
     # The catalog the Claude backend assembles advertises the qualified names...
@@ -142,7 +142,7 @@ def test_claude_catalog_names_match_sdk_registration():
         assert f"### {qn}" in catalog
     # ...and never the bare name as a callable header (the lit-bug #2 trap).
     assert "### arxiv_search_papers" not in catalog
-    assert "### CorpusSearch" not in catalog
+    assert "### ConsultLiterature" not in catalog
 
     # The names in that catalog are EXACTLY the names allowed_tools grants the
     # model — same qualification helper, so registration and prompt can't drift.

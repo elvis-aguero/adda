@@ -168,14 +168,14 @@ def basilisk_closures(tmp_path_factory, monkeypatch_session=None):
 
 
 def test_basilisk_registers_its_declared_tool(basilisk_closures):
-    assert "ConsultBasiliskDocs" in basilisk_closures
+    assert "ConsultBasilisk" in basilisk_closures
 
 
 def test_basilisk_caps_its_reply(basilisk_closures):
     """It shipped uncapped. A solver header with its full literate
     documentation and a source dump is exactly the unbounded page the cap
     exists to prevent."""
-    fn = basilisk_closures["ConsultBasiliskDocs"]
+    fn = basilisk_closures["ConsultBasilisk"]
     for query in ("a", "solver", "flow", "navier-stokes/centered.h"):
         assert len(fn(query)) <= MAX_REPLY_CHARS + 200, query
     assert len(fn("navier-stokes/centered.h", source=True)) <= MAX_REPLY_CHARS + 200
@@ -183,11 +183,65 @@ def test_basilisk_caps_its_reply(basilisk_closures):
 
 def test_basilisk_dispatches_a_key_to_an_entry_and_a_phrase_to_a_menu(
         basilisk_closures):
-    fn = basilisk_closures["ConsultBasiliskDocs"]
+    fn = basilisk_closures["ConsultBasilisk"]
     assert fn("two-phase.h").startswith("two-phase.h")
     assert "match(es)" in fn("rising bubble")
 
 
 def test_basilisk_says_a_miss_is_about_this_index(basilisk_closures):
-    out = basilisk_closures["ConsultBasiliskDocs"]("zzqx wqjm vbrt")
+    out = basilisk_closures["ConsultBasilisk"]("zzqx wqjm vbrt")
     assert "zzqx" in out
+
+
+# --- the reason the rename was worth doing ----------------------------------
+
+def test_no_prompt_names_a_tool_that_does_not_exist():
+    """A tool name written by hand into prompt text can desync from the tool.
+
+    This is the defect the rename was really about. ``ConsultHandbook``
+    appears in 46 places across prompts, code and tests; ``CorpusSearch``
+    appeared in 44. Nothing compared them to the live tool set, so a prompt
+    could instruct an agent to call something that no longer existed and the
+    only symptom would be the agent trying, failing, and recording an
+    ERROR_RETURN -- the one KPI whose target is zero.
+
+    Scanned from the promptmap's own data, which is generated from the live
+    Graph and Agent objects, so this asserts what the model is ACTUALLY sent
+    rather than what any source file happens to contain.
+    """
+    import json
+    import pathlib
+    import re
+
+    html = pathlib.Path(__file__).resolve().parents[1] / "internal" / "promptmap.html"
+    if not html.exists():
+        pytest.skip("promptmap.html not generated; run `make promptmap`")
+    blob = re.search(r"const DATA = (\{.*?\});\n", html.read_text(), re.S)
+    assert blob, "promptmap.html carries no DATA block"
+    data = json.loads(blob.group(1))
+
+    live = {t for role in data["roles"] for t in role["tools"]}
+    live |= {spec["tool"] for spec in _PROVIDERS.values()}
+
+    named: set[str] = set()
+    for role in data["roles"]:
+        for layer in role["layers"]:
+            for section in layer.get("sections", []):
+                named |= set(re.findall(r"\b(Consult[A-Z]\w+)",
+                                        section.get("text") or ""))
+
+    ghosts = sorted(named - live)
+    assert not ghosts, (
+        f"prompt text names these tools, which no agent is given: {ghosts}. "
+        f"Either the tool was renamed and the prompt was not, or the prompt "
+        f"is instructing the agent to call something that does not exist.")
+
+
+def test_every_knowledge_tool_follows_the_naming_scheme():
+    """``Consult<Corpus>``. Not cosmetic: an agent handed five references
+    should be able to guess the fifth from the four it has seen."""
+    import re
+
+    for name, spec in _PROVIDERS.items():
+        assert re.fullmatch(r"Consult[A-Z]\w+", spec["tool"]), (
+            f"{name} registers {spec['tool']!r}, which is off-scheme")

@@ -31,7 +31,7 @@ def test_core_idioms_execute_against_installed_f3dasm():
     # Composition: the >> operator, .loop() and the declarative Pipeline form.
     # These are ARCHITECTURAL facts an agent cannot retrieve by lexical search
     # — `>>` is a dunder and so is not in the API index at all — which is why
-    # they are taught here rather than deferred to ConsultF3dasmDocs.
+    # they are taught here rather than deferred to ConsultF3dasm.
     assert type(ns["chained"]).__name__ == "ChainedBlock"
     assert len(ns["chain_data"]) == 8, "4 samples from each chained sampler"
     assert type(ns["repeated"]).__name__ == "LoopBlock"

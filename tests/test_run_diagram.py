@@ -119,14 +119,14 @@ def test_declared_tools_appear_for_every_node_no_truncation():
 
 def test_literature_reviewer_shows_its_real_runtime_injected_tools(tmp_path):
     """literature_reviewer's declared .tools is only {Read, Grep, Glob,
-    ReadProblemStatement} — its actual capabilities (CorpusSearch, arXiv/
+    ReadProblemStatement} — its actual capabilities (ConsultLiterature, arXiv/
     OpenAlex/Semantic Scholar search, ...) are injected at runtime by
     build_closure_tools(). Passing study_dir must surface those for real,
     not just the 4 statically-declared tools."""
     (tmp_path / "PROBLEM_STATEMENT.md").write_text("test")
     graph = _default_graph()
     svg = render_architecture_svg(graph, study_dir=tmp_path)
-    assert "CorpusSearch" in svg
+    assert "ConsultLiterature" in svg
     assert "CorpusAdd" in svg
 
 
@@ -136,7 +136,7 @@ def test_without_study_dir_only_declared_tools_shown(tmp_path):
     pretense of completeness."""
     graph = _default_graph()
     svg = render_architecture_svg(graph)  # no study_dir
-    assert "CorpusSearch" not in svg
+    assert "ConsultLiterature" not in svg
 
 
 def test_no_header_or_legend_banner():

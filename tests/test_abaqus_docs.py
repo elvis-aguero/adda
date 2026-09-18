@@ -38,7 +38,7 @@ def test_an_agent_without_a_corpus_matches_its_base_class(monkeypatch, tmp_path)
 
 
 def test_unreadable_corpus_degrades_without_raising(tmp_path):
-    tool = build_abaqus_docs_closures(tmp_path / "nope")["ConsultAbaqusDocs"]
+    tool = build_abaqus_docs_closures(tmp_path / "nope")["ConsultAbaqus"]
     out = tool("*FREQUENCY")
     assert "unavailable" in out
     assert "NOT that the keyword is undocumented" in out
@@ -54,7 +54,7 @@ def test_env_var_is_honoured(monkeypatch, tmp_path):
 @pytest.mark.skipif(not os.environ.get(ENV_VAR),
                     reason="needs a locally built Abaqus corpus")
 def test_search_and_page_fetch_round_trip():
-    tool = build_abaqus_docs_closures()["ConsultAbaqusDocs"]
+    tool = build_abaqus_docs_closures()["ConsultAbaqus"]
     hits = tool("*FREQUENCY")
     assert "page_id:" in hits
     page = tool("simakey-r-frequency")
@@ -139,7 +139,7 @@ def test_the_build_path_runs_at_all(corpus):
 
 
 def test_a_keyword_search_finds_its_page(corpus):
-    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqusDocs"]
+    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqus"]
     out = tool("*FREQUENCY")
     assert "simakey-r-frequency" in out
 
@@ -147,7 +147,7 @@ def test_a_keyword_search_finds_its_page(corpus):
 def test_a_page_id_returns_the_whole_page(corpus):
     """The second of the tool's two behaviours: search hands back a page_id,
     and passing it returns the document rather than another hit list."""
-    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqusDocs"]
+    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqus"]
     page = tool("simakey-r-frequency")
     assert "EIGENSOLVER=LANCZOS" in page, page[:300]
 
@@ -157,7 +157,7 @@ def test_a_wrong_keyword_is_corrected_rather_than_refused(corpus):
     that had no test: 8 of 24 consultations in the measured run named a
     keyword that does not exist, and every one came back with a usable
     correction."""
-    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqusDocs"]
+    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqus"]
     out = tool("*FREQ")
     assert "*FREQUENCY" in out, out[:300]
 
@@ -165,6 +165,6 @@ def test_a_wrong_keyword_is_corrected_rather_than_refused(corpus):
 def test_structure_survives_extraction(corpus):
     """Flattening a page to text is what the extractor exists to avoid: a
     parameter table becomes word soup and a syntax block gets shredded."""
-    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqusDocs"]
+    tool = build_abaqus_docs_closures(corpus)["ConsultAbaqus"]
     assert "cross-section library name" in tool("simakey-r-beamsection")
     assert "solid circular section" in tool("simaelm-c-beamcrosssectlib")

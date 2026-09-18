@@ -31,7 +31,7 @@ __all__ = [
 # broken/partial install (possibly colliding with the fastembed-gpu variant,
 # which provides the same top-level namespace) in that one throwaway
 # environment; two other delegations in the SAME run had working
-# CorpusSearch calls, so this looks environment-specific, not deterministic.
+# ConsultLiterature calls, so this looks environment-specific, not deterministic.
 # This upper bound doesn't necessarily fix that particular transient failure
 # (unverified — Oscar is read-only, so it can't be reproduced/confirmed
 # there), but it's the same cheap, low-risk insurance against a FUTURE real

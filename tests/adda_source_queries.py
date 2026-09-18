@@ -53,7 +53,7 @@ NAME = [
     ("n04", "HypothesisLedger", [S + "epistemics/hypothesis_ledger.py"]),
     ("n05", "ScienceMonitor rules", [S + "epistemics/science_monitor.py"]),
     ("n06", "build_graph", [S + "runtime/graph_builder.py"]),
-    ("n07", "ConsultF3dasmDocs", [S + "knowledge/f3dasm_api.py"]),
+    ("n07", "ConsultF3dasm", [S + "knowledge/f3dasm_api.py"]),
     ("n08", "Telemetry", [S + "infra/telemetry.py"]),
 ]
 

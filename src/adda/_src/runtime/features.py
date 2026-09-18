@@ -123,7 +123,7 @@ FEATURES: tuple[Feature, ...] = (
     Feature(
         key="f3dasm_api",
         default=True,
-        tools=frozenset({"ConsultF3dasmDocs"}),
+        tools=frozenset({"ConsultF3dasm"}),
         sections=("f3dasm_api_lookup",),
         # The tag is f3dasm_api_LOOKUP, not f3dasm_api: <f3dasm_api> is the
         # fixed excerpt — the canonical imports, the Domain surface and

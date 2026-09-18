@@ -48,7 +48,7 @@ def test_literature_agent_has_system_prompt():
 
 
 def test_build_closure_tools_returns_corpus_tools(tmp_path):
-    """build_closure_tools returns CorpusAdd, CorpusSearch, etc."""
+    """build_closure_tools returns CorpusAdd, ConsultLiterature, etc."""
     agent = _make_agent()
     tools = agent.build_closure_tools(
         study_dir=tmp_path,
@@ -56,27 +56,27 @@ def test_build_closure_tools_returns_corpus_tools(tmp_path):
     )
 
     assert "CorpusAdd" in tools
-    assert "CorpusSearch" in tools
+    assert "ConsultLiterature" in tools
     assert "CorpusGetPaper" in tools
     assert "CorpusList" in tools
 
 
 def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
-    """CorpusAdd/CorpusSearch/CorpusGetPaper must carry explicit type
+    """CorpusAdd/ConsultLiterature/CorpusGetPaper must carry explicit type
     annotations on every parameter, or StructuredTool.from_function (what
     the OpenAI-compatible backends -- Ollama/vLLM/OpenRouter -- use to build
     each tool's JSON schema) silently omits the "type" key for that
     parameter. Claude's own native adapter never goes through this
     schema-inference path, so a missing annotation is invisible there --
     confirmed for real: a local model (Qwen3.8:27b via Ollama) calling
-    CorpusSearch failed exactly here."""
+    ConsultLiterature failed exactly here."""
     from langchain_core.tools import StructuredTool
 
     agent = _make_agent()
     tools = agent.build_closure_tools(
         study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit",
     )
-    for name in ("CorpusAdd", "CorpusSearch", "CorpusGetPaper"):
+    for name in ("CorpusAdd", "ConsultLiterature", "CorpusGetPaper"):
         tool = StructuredTool.from_function(tools[name], name=name)
         for param_name, schema in tool.args.items():
             assert "type" in schema, (
@@ -99,7 +99,7 @@ def test_async_wrapped_discovery_tools_produce_typed_json_schema(tmp_path):
     pydantic's `type_hints[name]` lookup raised a bare KeyError for the
     first param name on EVERY async-wrapped tool. This aborted the entire
     OpenAI-compatible (Ollama/vLLM) tool-build loop before any tool
-    (including CorpusSearch/CorpusAdd, BACKLOG #32) could be reached at
+    (including ConsultLiterature/CorpusAdd, BACKLOG #32) could be reached at
     all -- confirmed for real via a literature_reviewer delegation on a
     local Ollama model."""
     from langchain_core.tools import StructuredTool
@@ -162,7 +162,7 @@ def test_corpus_list_closure_works(tmp_path):
 
 
 def test_corpus_search_closure_on_empty_corpus(tmp_path):
-    """CorpusSearch returns an informative response on empty corpus."""
+    """ConsultLiterature returns an informative response on empty corpus."""
     agent = _make_agent()
     lit_dir = tmp_path / "lit"
     tools = agent.build_closure_tools(
@@ -170,7 +170,7 @@ def test_corpus_search_closure_on_empty_corpus(tmp_path):
         lit_reviewer_notes_dir=lit_dir,
     )
 
-    result = tools["CorpusSearch"]("neural networks")
+    result = tools["ConsultLiterature"]("neural networks")
     # Empty corpus has no full-text papers → ERROR guidance or no results
     assert "No results found." in result or "ERROR" in result
 

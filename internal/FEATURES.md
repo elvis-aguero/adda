@@ -273,7 +273,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   `runtime/agent_runtime.py`'s `_make_adapter`. **Status:** core.
 
 ### Universal read-only corpus lookup
-- **What:** EVERY agent (not just the literature_reviewer) gets `CorpusSearch`
+- **What:** EVERY agent (not just the literature_reviewer) gets `ConsultLiterature`
   / `CorpusList` / `CorpusGetPaper` for free — read-only lookup against the
   study's persistent literature corpus, injected via
   `Agent.build_closure_tools`'s own default. Same rationale as `QueryStore`

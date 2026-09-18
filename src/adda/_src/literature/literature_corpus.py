@@ -342,7 +342,7 @@ class LiteratureCorpus:
                 if not _subprocess_embedder_warned:
                     log.warning(
                         "fastembed unavailable in-process and embed"
-                        " worker probe failed — CorpusSearch falls"
+                        " worker probe failed — ConsultLiterature falls"
                         " back to BM25-only"
                     )
                     _subprocess_embedder_warned = True
@@ -395,7 +395,7 @@ class LiteratureCorpus:
     def consult(self, query: str, limit: int = 10) -> str:
         """The canonical name from ``knowledge.protocol``.
 
-        ``search`` remains and is what the CorpusSearch tool calls: the name
+        ``search`` remains and is what the ConsultLiterature tool calls: the name
         is written into the literature reviewer's prompt, so renaming it is a
         prompt change rather than a refactor, and there is no measurement
         saying the new name works better.
@@ -549,7 +549,7 @@ class LiteratureCorpus:
                     # model.embed() may return a LIST (not a generator); next()
                     # on a list raises "'list' object is not an iterator".
                     # iter() makes next() work for both forms (audit: this crashed
-                    # CorpusSearch dense ranking in the bb3d wet run 20260621).
+                    # ConsultLiterature dense ranking in the bb3d wet run 20260621).
                     next(iter(model.embed([query]))), dtype=_np.float32
                 )
                 q_norm = q_emb / (_np.linalg.norm(q_emb) + 1e-9)

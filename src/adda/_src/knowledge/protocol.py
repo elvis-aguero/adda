@@ -24,13 +24,26 @@ WHAT IS UNIFORM, AND WHAT DELIBERATELY IS NOT
     three providers worse to make a table look tidy. Sisters in contract,
     cousins in mechanism, and that is the correct shape.
 
-    ALSO NOT UNIFORM: the agent-facing TOOL NAMES. ``CorpusSearch`` and
-    ``ConsultHandbook`` do not match ``Consult<X>Docs``, and renaming them
-    would be a prompt change, not a refactor -- both are named in the
-    strategizer's, the implementer's and the literature reviewer's prompt
-    text. Changing what an agent is told, with no measurement that the new
-    name works better, is the kind of unmeasured behaviour change this
-    project has spent its effort learning not to make.
+    UNIFORM AFTER ALL: the agent-facing TOOL NAMES, ``Consult<Corpus>``.
+    These were left alone at first because they are hardcoded in prompt text
+    and renaming them is therefore a prompt change. That reasoning had it
+    backwards: a tool name repeated by hand in 46 places across prompts, code
+    and tests is not a constraint to route around, it is the defect. The
+    prompt and the registry can disagree and nothing fails, which is how a
+    prompt ends up naming a tool that no longer exists.
+
+    ``Consult<Corpus>`` rather than ``Consult<Corpus>Docs``: it avoids
+    ``ConsultHandbookDocs``, and it left the largest and most
+    prompt-embedded surface -- ``ConsultHandbook``, 46 occurrences -- already
+    conforming and untouched.
+
+    ``ConsultLiterature`` was ``CorpusSearch`` and keeps company with
+    ``CorpusAdd`` / ``CorpusList`` / ``CorpusGetPaper``, which do NOT get the
+    prefix. That is the line: those three mutate, enumerate and fetch by id;
+    only this one is a reference lookup, so only this one owes the contract.
+
+    ``test_no_prompt_names_a_tool_that_does_not_exist`` is what keeps this
+    true, and is the part that matters more than the naming.
 
 THE CONTRACT
     1. ``consult(query, limit=8)`` is the canonical method. A provider may
@@ -103,27 +116,27 @@ def providers() -> dict[str, dict]:
     return {
         "f3dasm": {
             "build": build_f3dasm_api_closures,
-            "tool": "ConsultF3dasmDocs",
+            "tool": "ConsultF3dasm",
             "env": None,          # a declared dependency; always available
         },
         "adda": {
             "build": _build_adda_closures,
-            "tool": "ConsultAddaDocs",
+            "tool": "ConsultAdda",
             "env": None,
         },
         "abaqus": {
             "build": build_abaqus_docs_closures,
-            "tool": "ConsultAbaqusDocs",
+            "tool": "ConsultAbaqus",
             "env": ABAQUS_ENV,
         },
         "basilisk": {
             "build": build_basilisk_docs_closures,
-            "tool": "ConsultBasiliskDocs",
+            "tool": "ConsultBasilisk",
             "env": BASILISK_ENV,
         },
         "literature": {
             "build": build_corpus_closures,
-            "tool": "CorpusSearch",   # legacy name, kept: it is prompt text
+            "tool": "ConsultLiterature",
             "env": None,
             "needs_args": True,
         },
@@ -142,7 +155,7 @@ def _build_adda_closures() -> dict:
 
     api = AddaApi()
 
-    def ConsultAddaDocs(query: str, limit: int = 8, source: bool = False):
+    def ConsultAdda(query: str, limit: int = 8, source: bool = False):
         """Look up adda itself — its API, its concepts and its rules.
 
         Introspected from the installed package, so it cannot be out of date.
@@ -155,4 +168,4 @@ def _build_adda_closures() -> dict:
         """
         return api.consult(query, limit=limit, source=source)
 
-    return {"ConsultAddaDocs": ConsultAddaDocs}
+    return {"ConsultAdda": ConsultAdda}

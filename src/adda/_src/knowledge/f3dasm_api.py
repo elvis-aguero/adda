@@ -981,7 +981,7 @@ def build_f3dasm_api_closures() -> dict:
     # A named function, not a lambda: the runtime renders this docstring into
     # the generated <tools> catalog, which is the agent's only documentation
     # for it.
-    def ConsultF3dasmDocs(query: str, limit: int = 8, source: bool = False):
+    def ConsultF3dasm(query: str, limit: int = 8, source: bool = False):
         """Look up the INSTALLED f3dasm's API — signature, docstring, source.
 
         Introspected from the package this run executes against, so it cannot
@@ -990,9 +990,9 @@ def build_f3dasm_api_closures() -> dict:
         Two steps, like a reference. A DESCRIPTION returns a menu: one line per
         matching symbol, up to `limit`. A NAME from that menu returns its entry:
         the import line to write, the full signature, and the docstring.
-          ConsultF3dasmDocs("sample the design space")   # menu
-          ConsultF3dasmDocs("f3dasm.create_sampler")     # entry
-          ConsultF3dasmDocs("f3dasm.create_sampler", source=True)
+          ConsultF3dasm("sample the design space")   # menu
+          ConsultF3dasm("f3dasm.create_sampler")     # entry
+          ConsultF3dasm("f3dasm.create_sampler", source=True)
         Add source=True only when the docstring does not settle the question.
 
         Search is LEXICAL — your words against symbol names (weighted heavily)
@@ -1015,4 +1015,4 @@ def build_f3dasm_api_closures() -> dict:
         """
         return api.consult(query, limit=int(limit), source=bool(source))
 
-    return {"ConsultF3dasmDocs": ConsultF3dasmDocs}
+    return {"ConsultF3dasm": ConsultF3dasm}

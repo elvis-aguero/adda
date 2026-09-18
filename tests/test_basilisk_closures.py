@@ -22,12 +22,12 @@ def test_a_configured_but_unreadable_corpus_also_withholds(tmp_path):
 
 @corpus
 def test_configured_exposes_exactly_one_tool():
-    assert list(build_basilisk_docs_closures(SRC)) == ["ConsultBasiliskDocs"]
+    assert list(build_basilisk_docs_closures(SRC)) == ["ConsultBasilisk"]
 
 
 @corpus
 def test_the_tool_answers_a_name_and_a_description():
-    tool = build_basilisk_docs_closures(SRC)["ConsultBasiliskDocs"]
+    tool = build_basilisk_docs_closures(SRC)["ConsultBasilisk"]
     assert "Two-phase" in tool("two-phase.h")
     assert "tension.h" in tool("add surface tension between two fluids")
 
@@ -35,6 +35,6 @@ def test_the_tool_answers_a_name_and_a_description():
 @corpus
 def test_the_docstring_is_the_agents_only_documentation():
     """The runtime renders this into the generated <tools> catalog."""
-    tool = build_basilisk_docs_closures(SRC)["ConsultBasiliskDocs"]
+    tool = build_basilisk_docs_closures(SRC)["ConsultBasilisk"]
     assert tool.__doc__ and len(tool.__doc__) > 400
     assert "NEVER STACKED" in tool.__doc__ or "never" in tool.__doc__.lower()

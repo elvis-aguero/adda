@@ -51,14 +51,14 @@ It is SHARED across every run of this study, not wiped per run — a prior
 run may already have added papers relevant to your question. CorpusAdd is
 idempotent (re-adding an already-present paper is a safe no-op, reported as
 "Already in corpus"), but check the corpus's existing contents via the
-CorpusList and CorpusSearch tools before re-searching the databases for
+CorpusList and ConsultLiterature tools before re-searching the databases for
 something a prior run may have already found and added — it saves you the
 redundant download/embedding work.
 </tools_note>
 
 <workflow>
 0. CHECK THE CORPUS FIRST: list the corpus and search it for this specific
-   question using the CorpusList and CorpusSearch tools (exact call names in
+   question using the CorpusList and ConsultLiterature tools (exact call names in
    the <tools> catalog) — the corpus persists across runs of this study, so a
    prior run may have already added exactly what you need.
 1. Expand the question into 3-5 domain keywords and SEARCH all three literature

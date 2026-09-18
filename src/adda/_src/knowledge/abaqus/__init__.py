@@ -37,8 +37,8 @@ def corpus_dir() -> Path | None:
 def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
     """One tool, two behaviours -- the way a person uses a manual.
 
-        ConsultAbaqusDocs("*FREQUENCY")          -> table-of-contents style hits
-        ConsultAbaqusDocs("simakey-r-frequency") -> that whole page
+        ConsultAbaqus("*FREQUENCY")          -> table-of-contents style hits
+        ConsultAbaqus("simakey-r-frequency") -> that whole page
 
     The switch is "is this argument a known page_id", which is unambiguous:
     page ids are distinctive and search hands the exact string back.
@@ -62,7 +62,7 @@ def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
     if root is None:
         return {}
 
-    def ConsultAbaqusDocs(query: str, limit: int = 8) -> str:
+    def ConsultAbaqus(query: str, limit: int = 8) -> str:
         """Look up Abaqus reference documentation.
 
         Pass a keyword (``*FREQUENCY``), a phrase, or a page_id returned by an
@@ -75,4 +75,4 @@ def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
             return (f"Abaqus docs unavailable ({exc!s}). This means the corpus "
                     "could not be read, NOT that the keyword is undocumented.")
 
-    return {"ConsultAbaqusDocs": ConsultAbaqusDocs}
+    return {"ConsultAbaqus": ConsultAbaqus}

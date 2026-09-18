@@ -25,8 +25,8 @@ def build_basilisk_docs_closures(corpus: str | Path | None = None) -> dict:
 
     One tool, two behaviours -- the way a person uses a reference:
 
-        ConsultBasiliskDocs("rising bubble")   -> menu of matching entries
-        ConsultBasiliskDocs("two-phase.h")     -> that entry
+        ConsultBasilisk("rising bubble")   -> menu of matching entries
+        ConsultBasilisk("two-phase.h")     -> that entry
 
     UNCONFIGURED RETURNS NOTHING AT ALL, not a tool that explains itself.
     Leaving a dead tool registered does not produce an agent without the
@@ -44,7 +44,7 @@ def build_basilisk_docs_closures(corpus: str | Path | None = None) -> dict:
 
     # A named function, not a lambda: the runtime renders this docstring into
     # the generated <tools> catalog, which is the agent's only documentation.
-    def ConsultBasiliskDocs(query: str, limit: int = 8, source: bool = False):
+    def ConsultBasilisk(query: str, limit: int = 8, source: bool = False):
         """Look up the Basilisk CFD source tree -- solvers and worked cases.
 
         Read from the checkout this run executes against, so it cannot be out
@@ -52,9 +52,9 @@ def build_basilisk_docs_closures(corpus: str | Path | None = None) -> dict:
 
         Two steps, like a reference. A DESCRIPTION returns a menu: one line per
         match, up to `limit`. A KEY from that menu returns its entry.
-          ConsultBasiliskDocs("rising bubble")        # menu
-          ConsultBasiliskDocs("two-phase.h")          # entry
-          ConsultBasiliskDocs("two-phase.h", source=True)
+          ConsultBasilisk("rising bubble")        # menu
+          ConsultBasilisk("two-phase.h")          # entry
+          ConsultBasilisk("two-phase.h", source=True)
         Add source=True only when the entry does not settle the question.
 
         Search is LEXICAL -- your words against keys, titles, and the literate
@@ -81,4 +81,4 @@ def build_basilisk_docs_closures(corpus: str | Path | None = None) -> dict:
         """
         return index.consult(query, limit=int(limit), source=bool(source))
 
-    return {"ConsultBasiliskDocs": ConsultBasiliskDocs}
+    return {"ConsultBasilisk": ConsultBasilisk}

@@ -232,7 +232,7 @@ class Agent:
         them in Agent.tools.
 
         The default gives EVERY agent read-only lookup against the study's
-        persistent literature corpus (CorpusSearch/CorpusList/CorpusGetPaper) —
+        persistent literature corpus (ConsultLiterature/CorpusList/CorpusGetPaper) —
         the corpus is shared, queryable infrastructure (see LiteratureCorpus),
         the same way QueryStore lets every node read the canonical evaluation
         ledger without delegating to the data generator. ACQUIRING a new paper
@@ -240,7 +240,7 @@ class Agent:
         and vetting a new paper needs judgment a raw tool call can't supply,
         so it stays gated behind an actual delegation — see
         LiteratureReviewAgent.build_closure_tools, which overrides this
-        method entirely (its own CorpusSearch/List/GetPaper + CorpusAdd) and
+        method entirely (its own ConsultLiterature/List/GetPaper + CorpusAdd) and
         does not call super().
 
         Override in a subclass to replace this default entirely.
@@ -258,7 +258,7 @@ class Agent:
         )
         corpus = LiteratureCorpus(corpus_dir)
 
-        def CorpusSearch(query: str, top_k: int = 10):
+        def ConsultLiterature(query: str, top_k: int = 10):
             """Passage search across the FULL-TEXT papers already in this
             study's persistent literature corpus (shared across every run of
             the study). Returns an ERROR string if no full-text papers have
@@ -279,7 +279,7 @@ class Agent:
             return corpus.get_paper(paper_id)
 
         return {
-            "CorpusSearch": CorpusSearch,
+            "ConsultLiterature": ConsultLiterature,
             "CorpusList": CorpusList,
             "CorpusGetPaper": CorpusGetPaper,
         }

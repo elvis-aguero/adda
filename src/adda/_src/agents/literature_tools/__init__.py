@@ -48,7 +48,7 @@ def build_literature_tools(study_dir, lit_reviewer_notes_dir=None) -> dict:
     corpus_tools = build_corpus_closures(corpus, cache_dir)
     tools = {
         k: corpus_tools[k]
-        for k in ("CorpusAdd", "CorpusSearch", "CorpusGetPaper", "CorpusList")
+        for k in ("CorpusAdd", "ConsultLiterature", "CorpusGetPaper", "CorpusList")
     }
     tools.update(build_semantic_scholar_closures())
     tools.update(build_openalex_closures(cache_dir))

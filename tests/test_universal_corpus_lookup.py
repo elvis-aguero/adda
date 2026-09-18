@@ -1,5 +1,5 @@
 """Tests for Agent.build_closure_tools()'s default: every agent gets read-only
-literature-corpus lookup (CorpusSearch/CorpusList/CorpusGetPaper) without
+literature-corpus lookup (ConsultLiterature/CorpusList/CorpusGetPaper) without
 needing its own override — the same way QueryStore lets every node read the
 canonical evaluation ledger without delegating to the data generator.
 Acquisition (CorpusAdd, external search) stays literature_reviewer-only,
@@ -23,13 +23,13 @@ _NON_LITERATURE_AGENTS = (
 
 def test_every_non_literature_agent_gets_read_only_corpus_lookup(tmp_path):
     """None of these agents override build_closure_tools — they inherit the
-    base default, which must give each of them CorpusSearch/CorpusList/
+    base default, which must give each of them ConsultLiterature/CorpusList/
     CorpusGetPaper (read-only), but never CorpusAdd (acquisition stays
     literature_reviewer-only)."""
     for Ag in _NON_LITERATURE_AGENTS:
         agent = Ag()
         tools = agent.build_closure_tools(study_dir=tmp_path)
-        assert "CorpusSearch" in tools, f"{Ag.__name__} missing CorpusSearch"
+        assert "ConsultLiterature" in tools, f"{Ag.__name__} missing ConsultLiterature"
         assert "CorpusList" in tools, f"{Ag.__name__} missing CorpusList"
         assert "CorpusGetPaper" in tools, f"{Ag.__name__} missing CorpusGetPaper"
         assert "CorpusAdd" not in tools, (
@@ -51,7 +51,7 @@ def test_non_literature_agent_sees_papers_added_by_literature_reviewer(tmp_path)
     """Regression: the corpus is SHARED, study-scoped storage (see
     agent_runtime.py's _make_adapter and literature_corpus.py) — a paper the
     literature_reviewer adds during its own delegation must show up for any
-    other agent's CorpusSearch/CorpusList, since both resolve the identical
+    other agent's ConsultLiterature/CorpusList, since both resolve the identical
     default path (study_dir/runs/lit_reviewer_notes) when
     lit_reviewer_notes_dir is not explicitly overridden."""
     md_file = tmp_path / "paper.md"
@@ -73,19 +73,19 @@ def test_non_literature_agent_sees_papers_added_by_literature_reviewer(tmp_path)
     listing = other_tools["CorpusList"]()
     assert "Tensegrity Paper" in listing
 
-    result = other_tools["CorpusSearch"]("tensegrity metamaterials")
+    result = other_tools["ConsultLiterature"]("tensegrity metamaterials")
     assert "tensegrity" in result.lower() or "Tensegrity" in result
 
 
 def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
-    """CorpusSearch/CorpusGetPaper must carry explicit type annotations on
+    """ConsultLiterature/CorpusGetPaper must carry explicit type annotations on
     every parameter, or LangChain's StructuredTool.from_function (what the
     OpenAI-compatible backends -- Ollama/vLLM/OpenRouter -- use to build
     each tool's JSON schema for the model) silently omits the "type" key
     from that parameter's schema entry. Claude's own native adapter never
     goes through this schema-inference path, so a missing annotation is
     invisible there -- confirmed for real: a local model (Qwen3.8:27b via
-    Ollama) calling CorpusSearch failed exactly here. Direct Python
+    Ollama) calling ConsultLiterature failed exactly here. Direct Python
     invocation of the closure (bypassing schema generation) does NOT
     reproduce this -- the bug only shows up in the generated schema, so
     this test checks that, not just that the tool builds/runs."""
@@ -95,7 +95,7 @@ def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
 
     agent = StrategizerAgent()
     tools = agent.build_closure_tools(study_dir=tmp_path)
-    for name in ("CorpusSearch", "CorpusGetPaper"):
+    for name in ("ConsultLiterature", "CorpusGetPaper"):
         tool = StructuredTool.from_function(tools[name], name=name)
         for param_name, schema in tool.args.items():
             assert "type" in schema, (
@@ -113,7 +113,7 @@ def test_literature_reviewer_still_gets_corpus_add(tmp_path):
     agent = LiteratureReviewAgent()
     tools = agent.build_closure_tools(study_dir=tmp_path)
     assert "CorpusAdd" in tools
-    assert "CorpusSearch" in tools
+    assert "ConsultLiterature" in tools
     assert "CorpusList" in tools
     assert "CorpusGetPaper" in tools
 

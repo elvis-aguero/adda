@@ -194,7 +194,7 @@ def test_turning_off_the_lookup_keeps_the_verified_excerpt():
     assert "<f3dasm_api_lookup>" not in out
     assert "<f3dasm_api>" in out
     assert F3DASM_CORE_IDIOMS.strip() in out
-    assert "ConsultF3dasmDocs" in features.disabled_tool_names()
+    assert "ConsultF3dasm" in features.disabled_tool_names()
 
 
 def test_the_oracle_contract_is_not_ablatable():

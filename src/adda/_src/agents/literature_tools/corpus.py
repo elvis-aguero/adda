@@ -31,7 +31,7 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
             arxiv_id=arxiv_id, venue=venue, abstract=abstract,
             citation_count=int(citation_count or 0))
 
-    def CorpusSearch(query: str, top_k: int = 10):
+    def ConsultLiterature(query: str, top_k: int = 10):
         """Passage search across the FULL-TEXT papers in the corpus only.
         Returns an ERROR string if no full-text papers have been added yet —
         add papers first via the search → download → CorpusAdd chain."""
@@ -52,7 +52,7 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
     def CorpusRank(passages: str, question: str) -> str:
         """Re-rank corpus passages by BM25 relevance to question.
 
-        Pass the raw output of CorpusSearch as ``passages``.
+        Pass the raw output of ConsultLiterature as ``passages``.
         Returns passages reordered from most to least relevant.
         """
         if not passages or passages == "No results found.":
@@ -140,7 +140,7 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
         return str(dest)
 
     return {
-        "CorpusAdd": CorpusAdd, "CorpusSearch": CorpusSearch,
+        "CorpusAdd": CorpusAdd, "ConsultLiterature": ConsultLiterature,
         "CorpusGetPaper": CorpusGetPaper, "CorpusList": CorpusList,
         "CorpusRank": CorpusRank, "DownloadPdf": DownloadPdf,
     }

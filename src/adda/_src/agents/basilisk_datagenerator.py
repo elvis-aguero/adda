@@ -54,7 +54,7 @@ class BasiliskDataGeneratorAgent(DataGeneratorAgent):
         delegation_id=None,
         lit_reviewer_notes_dir=None,
     ) -> dict:
-        """Inherited tools plus ConsultBasiliskDocs.
+        """Inherited tools plus ConsultBasilisk.
 
         super() IS called, so the literature-corpus tools and the f3dasm API
         lookup survive: this agent wants papers for methodology, the f3dasm
