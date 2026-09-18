@@ -129,6 +129,13 @@ class LiteratureCorpus:
     #: assumed, so an arm labelled 'hybrid' can be verified as one.
     resolved_mode: str | None = None
 
+    #: Fraction of the last search()'s full-text chunks that carried a
+    #: usable embedding: 1.0 at full coverage, <1.0 when one or more
+    #: papers lacked chunks.npy (or had fewer embedding rows than
+    #: chunks), None when dense ranking had no embeddings to work with at
+    #: all. Recorded, not assumed — see `_load_all_embeddings`.
+    dense_coverage: float | None = None
+
     def __init__(self, corpus_dir: Path) -> None:
         self._corpus_dir = Path(corpus_dir)
         self._papers_dir = self._corpus_dir / "papers"
@@ -356,15 +363,45 @@ class LiteratureCorpus:
         self._embedding_model = None
         return self._embedding_model
 
-    def _load_all_embeddings(self) -> tuple[list[dict], object]:
-        """Load all chunks and embeddings.
+    def _load_all_embeddings(self) -> tuple[list[dict], object, object]:
+        """Load all chunks and whatever embeddings are actually on disk.
 
-        Returns (chunks, embeddings_matrix) or (chunks, None).
+        Returns ``(chunks, embeddings_matrix, has_embedding)``:
+
+        - *embeddings_matrix* is aligned 1:1, POSITIONALLY, with *chunks* —
+          same contract callers already relied on (``search()`` slices both
+          by the same ``full_idx`` list). Row *i* is chunk *i*'s embedding
+          when one exists, and an all-zero placeholder row otherwise.
+        - *has_embedding* is a boolean array, same length, ``True`` at every
+          row that carries a REAL embedding. A paper missing
+          ``chunks.npy`` entirely, or one with fewer embedding rows than
+          chunks (re-chunked without a re-embed), gets ``False`` at just
+          ITS affected rows — it drops out of DENSE ranking only, and
+          keeps participating in BM25 like any other chunk (see
+          ``search()``).
+        - Both are ``None`` only when NOT ONE chunk anywhere in the corpus
+          has a usable embedding — that is the one condition that
+          legitimately disables dense ranking corpus-wide.
+
+        A prior version aborted the WHOLE matrix — returned
+        ``(chunks, None)`` — the instant ANY single paper's embeddings were
+        missing or short, which silently discarded dense ranking for every
+        OTHER paper too. Confirmed on the frozen litcorpus fixture: 1 of
+        132 papers (5.60% of chunks) had no ``chunks.npy``, which disabled
+        dense ranking for the other 131 papers (94.4%) that DID have one,
+        and silently downgraded ``retrieval_mode="auto"`` to BM25-only.
+        Keeping the matrix full-length and positionally aligned (rather
+        than building a smaller subset matrix with a separate index map)
+        means every existing positional-slicing caller — ``search()``'s
+        ``full_idx`` filter chief among them — needs no index remapping at
+        all: a wrong remap would point dense ranks at the wrong chunks,
+        which is worse than no dense ranking, so this sidesteps that risk
+        entirely rather than accepting it.
         """
         import numpy as _np
         chunks = self._load_chunks()
         if not chunks:
-            return chunks, None
+            return chunks, None, None
 
         # Group chunks by paper_id to load matching .npy files
         paper_embs: dict = {}
@@ -374,23 +411,37 @@ class LiteratureCorpus:
                 paper_embs[paper_id] = _np.load(str(npy_path))
 
         if not paper_embs:
-            return chunks, None
+            return chunks, None, None
 
-        # Build aligned embedding matrix (rows match chunks order)
+        dim = next(iter(paper_embs.values())).shape[1]
+
+        # Build the aligned embedding matrix (rows match chunks order) and
+        # a parallel has_embedding mask — a paper with no chunks.npy, or
+        # fewer embedding rows than chunks, gets a zero placeholder row and
+        # False in the mask for just the affected chunk(s), instead of
+        # aborting the whole corpus.
         paper_chunk_idx: dict = {}
         rows = []
+        has_embedding = []
         for chunk in chunks:
             pid = chunk["paper_id"]
-            if pid not in paper_embs:
-                # missing embeddings for at least one paper → fallback
-                return chunks, None
+            embs = paper_embs.get(pid)
             idx = paper_chunk_idx.get(pid, 0)
-            if idx >= len(paper_embs[pid]):
-                return chunks, None
-            rows.append(paper_embs[pid][idx])
+            if embs is not None and idx < len(embs):
+                rows.append(embs[idx])
+                has_embedding.append(True)
+            else:
+                rows.append(_np.zeros(dim, dtype=_np.float32))
+                has_embedding.append(False)
             paper_chunk_idx[pid] = idx + 1
 
-        return chunks, _np.array(rows, dtype=_np.float32)
+        has_embedding = _np.array(has_embedding, dtype=bool)
+        if not has_embedding.any():
+            # Every paper is missing/short — corpus-wide fallback is the
+            # correct behaviour, not a bug (nothing to rank densely).
+            return chunks, None, None
+
+        return chunks, _np.array(rows, dtype=_np.float32), has_embedding
 
     def consult(self, query: str, limit: int = 10) -> str:
         """The canonical name from ``knowledge.protocol``.
@@ -458,7 +509,7 @@ class LiteratureCorpus:
                 " then CorpusAdd it."
             )
 
-        all_chunks, emb_matrix_all = self._load_all_embeddings()
+        all_chunks, emb_matrix_all, has_emb_all = self._load_all_embeddings()
         if not all_chunks:
             return "No results found."
 
@@ -476,8 +527,22 @@ class LiteratureCorpus:
                 [emb_matrix_all[i] for i in full_idx],
                 dtype=_np.float32,
             )
+            has_emb = has_emb_all[full_idx]
         else:
             emb_matrix = None
+            has_emb = None
+
+        # Partial dense coverage is a first-class, VISIBLE fact — not
+        # silent. `dense_coverage` records the fraction of full-text
+        # chunks that carried a usable embedding on the last search(),
+        # same recorded-not-assumed pattern as `resolved_mode`: None when
+        # dense ranking had nothing to run on at all, 1.0 at full
+        # coverage, otherwise the partial fraction. See
+        # `_load_all_embeddings`'s docstring for what "missing" means.
+        self.dense_coverage = (
+            float(has_emb.sum()) / len(has_emb)
+            if has_emb is not None and len(has_emb) else None
+        )
 
         citation_counts = {
             r["paper_id"]: int(r.get("citation_count") or 0)
@@ -558,9 +623,31 @@ class LiteratureCorpus:
                 )
                 emb_n = emb_matrix / (norms + 1e-9)
                 cos_scores = emb_n @ q_norm
-                dense_order = _np.argsort(cos_scores)[::-1].tolist()
-                for rank, idx in enumerate(dense_order):
-                    dense_ranks[idx] = rank
+                # Rank only over chunks that carry a REAL embedding — the
+                # placeholder zero-rows _load_all_embeddings() fills in for
+                # unembedded chunks must never enter dense_ranks, or a
+                # missing paper would get a fabricated (and wrong) dense
+                # rank instead of simply not participating.
+                valid_idx = (
+                    _np.nonzero(has_emb)[0] if has_emb is not None
+                    else _np.arange(len(chunks))
+                )
+                if len(valid_idx):
+                    order = _np.argsort(cos_scores[valid_idx])[::-1]
+                    dense_order = valid_idx[order].tolist()
+                    for rank, idx in enumerate(dense_order):
+                        dense_ranks[idx] = rank
+                if has_emb is not None and not has_emb.all():
+                    missing = int(len(has_emb) - has_emb.sum())
+                    log.warning(
+                        "dense retrieval: %d/%d full-text chunks (%.1f%%)"
+                        " have no usable embedding (missing chunks.npy, or"
+                        " fewer embedding rows than chunks) and are"
+                        " excluded from DENSE ranking only — still"
+                        " searched via BM25. self.dense_coverage=%.3f",
+                        missing, len(has_emb),
+                        100.0 * missing / len(has_emb), self.dense_coverage,
+                    )
 
         if _mode == "hybrid" and not dense_ranks:
             return (
