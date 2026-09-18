@@ -166,7 +166,8 @@ def main() -> int:
     if args.index:
         print("\n=== PackageApi('adda'), by what it indexes ===")
         for units in (("symbol",), ("symbol", "module"), ("symbol", "constant"),
-                      ("symbol", "module", "constant")):
+                      ("symbol", "module", "constant"),
+                      ("symbol", "module", "constant", "markdown")):
             r1, r5, mrr, per = _score_index(rows, units)
             tiers = "  ".join(f"{t[:4]} {v:.2f}" for t, v in sorted(per.items()))
             print(f"{'+'.join(units):30s} r@1 {r1:.2f}  r@5 {r5:.2f}  "

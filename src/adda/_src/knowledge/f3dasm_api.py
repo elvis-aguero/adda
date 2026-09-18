@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import pathlib
 import pkgutil
 import warnings
 from dataclasses import dataclass, field
@@ -190,7 +191,7 @@ class Entry:
 
     #: dotted name used as the lookup key — the public path when there is one
     key: str
-    kind: str                      # class | function | method | module | constant
+    kind: str                      # class | function | method | module | constant | markdown
     #: ``from X import Y`` line, or None when the symbol is private
     import_line: str | None
     signature: str
@@ -356,6 +357,37 @@ def _constant_entries(mods: dict, package: str, index: dict) -> None:
             )
 
 
+def _markdown_entries(package: str, index: dict) -> None:
+    """One entry per markdown file SHIPPED INSIDE the package.
+
+    The invariant tier was the one the symbol, module and constant units all
+    left at 0.20. "Can I call the objective directly instead of
+    get_evaluator" is answered by ``knowledge/entries/0001-*.md``, which is
+    not Python, so no walk over module attributes can reach it however it is
+    weighted. That was a missing unit, not a ranking problem.
+
+    Package-shipped markdown only -- files under the installed package root.
+    Repository docs are not indexed: they are not installed, so an index
+    built from the running package could not find them on a cluster, which is
+    the same never-stale argument that made this whole module introspective.
+    """
+    root = _package_root(package)
+    if not root:
+        return
+    for path in sorted(pathlib.Path(root).rglob("*.md")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        rel = str(path)[len(root):].lstrip("/")
+        key = f"{package}:{rel}"
+        index[key] = Entry(
+            key=key, kind="markdown", import_line=None, signature="",
+            summary=_summary(text), doc=text,
+            where=f"{package}/{rel}:1", private=False,
+        )
+
+
 def build_index(package: str = "f3dasm", *, units: tuple[str, ...] = ("symbol",)
                 ) -> dict[str, Entry]:
     """Introspect an INSTALLED package. Returns ``{key: Entry}``.
@@ -444,6 +476,8 @@ def build_index(package: str = "f3dasm", *, units: tuple[str, ...] = ("symbol",)
             _module_entries(mods, package, index)
         if "constant" in units:
             _constant_entries(mods, package, index)
+        if "markdown" in units:
+            _markdown_entries(package, index)
     return index
 
 
