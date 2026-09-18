@@ -19,11 +19,14 @@ from adda._src.knowledge.basilisk.index import BasiliskIndex
 
 from .basilisk_source_queries import DEVELOPMENT, TIERS
 
-SRC = Path(os.environ.get(
-    "ADDA_BASILISK_SRC",
-    "/oscar/data/dharri15/eaguerov/basilisk-2025-04")) / "src"
+_ROOT = os.environ.get("ADDA_BASILISK_SRC", "")
+#: Guarded on the ENV VAR, never on whether a path happens to exist. An empty
+#: default made ``Path("") / "src"`` resolve to this repository's own src/,
+#: which exists -- so the suite silently stopped skipping and scored the index
+#: against adda's Python instead of a Basilisk checkout.
+SRC = Path(_ROOT) / "src" if _ROOT else None
 
-pytestmark = pytest.mark.skipif(not SRC.is_dir(), reason="no Basilisk corpus")
+pytestmark = pytest.mark.corpus
 _WORD = re.compile(r"[A-Za-z0-9_.-]+")
 
 

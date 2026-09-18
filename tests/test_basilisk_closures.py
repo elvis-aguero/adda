@@ -5,10 +5,9 @@ import pytest
 
 from adda._src.knowledge.basilisk import build_basilisk_docs_closures
 
-SRC = Path(os.environ.get(
-    "ADDA_BASILISK_SRC",
-    "/oscar/data/dharri15/eaguerov/basilisk-2025-04"))
-corpus = pytest.mark.skipif(not SRC.is_dir(), reason="no Basilisk corpus")
+_ROOT = os.environ.get("ADDA_BASILISK_SRC", "")
+SRC = Path(_ROOT) if _ROOT else None
+corpus = pytest.mark.corpus
 
 
 def test_unconfigured_returns_no_tool_at_all(monkeypatch):

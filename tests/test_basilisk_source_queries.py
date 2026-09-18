@@ -9,16 +9,24 @@ import pytest
 from .basilisk_source_queries import (ALL, DEVELOPMENT, HELD_OUT,
                                       HELD_OUT_IDS, TIERS)
 
-SRC = Path(os.environ.get(
-    "ADDA_BASILISK_SRC",
-    "/oscar/data/dharri15/eaguerov/basilisk-2025-04")) / "src"
+_ROOT = os.environ.get("ADDA_BASILISK_SRC", "")
+#: Guarded on the ENV VAR, never on whether a path happens to exist. An empty
+#: default made ``Path("") / "src"`` resolve to this repository's own src/,
+#: which exists -- so the suite silently stopped skipping and scored the index
+#: against adda's Python instead of a Basilisk checkout.
+SRC = Path(_ROOT) / "src" if _ROOT else None
 
 
+@pytest.mark.corpus
 @pytest.mark.parametrize("qid,query,gold", ALL)
 def test_every_gold_target_still_exists(qid, query, gold):
-    """A rename upstream must break this set loudly, not silently pass."""
-    if not SRC.is_dir():
-        pytest.skip("Basilisk corpus not available")
+    """A rename upstream must break this set loudly, not silently pass.
+
+    The ONLY test in this file needing a corpus. Everything else asserts the
+    query set against itself -- ids unique, splits stratified, held-out frozen
+    -- and those must run on every push, because a set that rots into nonsense
+    is not a corpus problem.
+    """
     for path in gold:
         assert (SRC / path).exists(), f"{qid}: missing gold {path}"
 

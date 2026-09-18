@@ -52,7 +52,7 @@ class BasiliskIndex:
     _avglen: float = 0.0
 
     @classmethod
-    def build(cls, src: Path) -> "BasiliskIndex":
+    def build(cls, src: Path) -> BasiliskIndex:
         headers = header_index(src)
         examples = example_index(src)
         pairs, singles = co_occurrence(examples)

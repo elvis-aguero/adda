@@ -21,7 +21,7 @@ jobs:
             cp -r ${{ github.workspace }}/tests ./tests
             cp ${{ github.workspace }}/pyproject.toml ./pyproject.toml
             uv sync --extra tests --extra all --no-install-project --inexact
-            uv run --no-sync pytest -m "not integration and not ollama"
+            uv run --no-sync pytest -m "not integration and not ollama and not corpus"
           pypi-token: ${{ secrets.pypi_api_token }}
           github-user: bessagroup
           github-token: ${{ github.token }}
