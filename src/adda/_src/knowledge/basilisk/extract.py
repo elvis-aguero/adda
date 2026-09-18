@@ -76,3 +76,90 @@ def co_occurrence(index: dict[str, dict]
         for a, b in itertools.combinations(sorted(hs), 2):
             pairs[frozenset({a, b})] += 1
     return dict(pairs), dict(singles)
+
+
+#: Fields the header declares for itself: `scalar p[];`, `vector u[], g[];`
+#: Anchored at column 0, which is what makes this the header's INTERFACE
+#: rather than its internals: Basilisk declares file-scope fields flush left
+#: and function-local temporaries indented, so allowing leading whitespace
+#: here silently reports scratch variables (`alphav`, `du`, a loop's `s`) as
+#: though the header provided them.
+_DECLARES = re.compile(
+    r'^(?:face |symmetric )?(?:scalar|vector|tensor) ([^;]+);', re.M)
+#: Fields the USER overrides. `(const)` is Basilisk's OWN marker for
+#: "user-supplied, here is the default", which is what makes this contract
+#: mechanical rather than a reading of the English prose beside it.
+_REQUIRES = re.compile(
+    r'^\(const\) (?:face )?(?:scalar|vector|tensor) ([^;]+);', re.M)
+_EVENT = re.compile(r'^event\s+(\w+)\s*\(', re.M)
+_DOCBLOCK = re.compile(r'/\*\*(.*?)\*/', re.S)
+
+
+def _names(clause: str) -> dict[str, str]:
+    """`mu = zerof, a = zerof` -> {'mu': 'zerof', 'a': 'zerof'}."""
+    out: dict[str, str] = {}
+    for part in clause.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        name, _, default = part.partition("=")
+        name = name.strip().removesuffix("[]").strip()
+        if name.isidentifier():
+            out[name] = default.strip()
+    return out
+
+
+def card(path: Path, rel: str) -> dict:
+    """One Basilisk header as an agent needs to see it: interface, no bodies.
+
+    Declaration-level rather than function-level deliberately. In controlled
+    comparison, chunking code at function granularity is the WORST of the
+    common strategies and declaration granularity among the best -- a function
+    body torn from its surrounding declarations is not self-contained, whereas
+    an interface is.
+    """
+    text = path.read_text(errors="ignore")
+    blocks = _DOCBLOCK.findall(text)
+    doc = blocks[0].strip() if blocks else ""
+    summary = _title(doc) or next(
+        (ln.strip() for ln in doc.splitlines() if ln.strip()), "")
+
+    provides: dict[str, str] = {}
+    for clause in _DECLARES.findall(text):
+        provides.update(_names(clause))
+    requires: dict[str, str] = {}
+    for clause in _REQUIRES.findall(text):
+        requires.update(_names(clause))
+    # A `(const)` declaration also matches _DECLARES; the user-supplied
+    # reading is the informative one, so it wins.
+    for name in requires:
+        provides.pop(name, None)
+
+    return {
+        "key": rel,
+        "kind": "header",
+        "summary": summary,
+        "doc": doc,
+        "provides": sorted(provides),
+        "requires": requires,
+        "events": _EVENT.findall(text),
+        "includes": sorted(includes(path)),
+        "where": rel,
+    }
+
+
+def header_index(src: Path) -> dict[str, dict]:
+    """Every solver header, excluding the compiler's own generated parser.
+
+    `ast/` is Basilisk's yacc-generated C parser -- 28k lines of machine output
+    with no fluid dynamics in it, and the single largest dense artifact in the
+    tree. Indexing it as though it were domain code is most of what made a
+    naive whole-repo index unusable.
+    """
+    out: dict[str, dict] = {}
+    for path in sorted(src.rglob("*.h")):
+        rel = str(path.relative_to(src))
+        if rel.startswith(("ast/", "darcsit/")):
+            continue
+        out[rel] = card(path, rel)
+    return out

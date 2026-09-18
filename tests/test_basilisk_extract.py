@@ -51,3 +51,54 @@ def test_alternative_momentum_solvers_never_co_occur():
     for other in ("layered/hydro.h", "layered/nh.h", "green-naghdi.h"):
         key = frozenset({"navier-stokes/centered.h", other})
         assert pairs.get(key, 0) == 0, f"unexpected co-occurrence with {other}"
+
+
+from adda._src.knowledge.basilisk.extract import card, header_index  # noqa: E402
+
+
+@corpus
+def test_card_reads_the_centered_solver_contract():
+    c = card(SRC / "navier-stokes/centered.h", "navier-stokes/centered.h")
+    assert "Navier" in c["summary"]
+    # fields the header DECLARES for you
+    assert {"p", "u", "g", "pf", "uf"} <= set(c["provides"])
+    # fields the USER must supply -- Basilisk marks these with (const)
+    assert {"mu", "a", "alpha", "rho"} <= set(c["requires"])
+    # extension points
+    assert "projection" in c["events"]
+    assert "acceleration" in c["events"]
+    assert len(c["events"]) == 15
+
+
+@corpus
+def test_card_records_defaults_for_required_fields():
+    c = card(SRC / "navier-stokes/centered.h", "navier-stokes/centered.h")
+    assert c["requires"]["mu"] == "zerof"
+    assert c["requires"]["alpha"] == "unityf"
+
+
+@corpus
+def test_a_required_field_is_not_also_reported_as_provided():
+    c = card(SRC / "navier-stokes/centered.h", "navier-stokes/centered.h")
+    assert not (set(c["provides"]) & set(c["requires"]))
+
+
+@corpus
+def test_header_index_covers_the_solver_library_and_skips_the_parser():
+    idx = header_index(SRC)
+    assert len(idx) > 250
+    assert "two-phase.h" in idx
+    assert not any(k.startswith("ast/") for k in idx)
+
+
+@corpus
+def test_provides_is_the_interface_not_the_internals():
+    """Basilisk declares file-scope fields flush left and function-local
+    temporaries indented. `alphav`, `du` and a loop's `s` are scratch
+    variables inside events in centered.h; reporting them as fields the header
+    PROVIDES would invite an agent to use names that do not exist at file
+    scope."""
+    c = card(SRC / "navier-stokes/centered.h", "navier-stokes/centered.h")
+    assert set(c["provides"]) == {"p", "u", "g", "pf", "uf"}
+    for scratch in ("alphav", "du", "s", "af", "gf"):
+        assert scratch not in c["provides"]
