@@ -57,12 +57,26 @@ def rg_rank1(query: str) -> str | None:
 
 
 def index_rank1(idx: BasiliskIndex, query: str) -> str | None:
+    """The key the index would have the agent open first.
+
+    A menu announces itself on its first line and lists candidates indented;
+    an ENTRY names its key on the first line and may contain arbitrary
+    indented documentation below it. Scanning for "any indented line" confuses
+    the two, and picks an indented LaTeX line out of a solver's derivation
+    instead of the key the tool actually returned.
+    """
     out = idx.consult(query, limit=1)
-    for line in out.splitlines():
-        if line.startswith("  "):
-            return line.strip().split(" -- ")[0]
-    head = out.splitlines()[0] if out else ""
-    return head.split(" -- ")[0].strip() if head else None
+    lines = out.splitlines()
+    if not lines:
+        return None
+    if lines[0].startswith("No Basilisk entry"):
+        return None
+    if "match(es) for" in lines[0]:
+        for line in lines[1:]:
+            if line.startswith("  "):
+                return line.strip().split(" -- ")[0].strip()
+        return None
+    return lines[0].split(" -- ")[0].strip()
 
 
 @pytest.fixture(scope="module")
