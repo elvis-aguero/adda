@@ -5,6 +5,7 @@ making agents ADAS-searchable via inspect.getsource().
 """
 
 from ._graphs import _default_graph
+from .abaqus_datagenerator import AbaqusDataGeneratorAgent
 from .critic import AdversarialCritiqueAgent
 from .datagenerator import DataGeneratorAgent
 from .debugger import DebuggerAgent
@@ -19,6 +20,7 @@ from .strategizer import StrategizerAgent
 
 __all__ = [
     "AdversarialCritiqueAgent",
+    "AbaqusDataGeneratorAgent",
     "DataGeneratorAgent",
     "F3dasmImplementerAgent",
     "StrategizerAgent",
