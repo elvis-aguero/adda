@@ -988,8 +988,10 @@ class TestGetOpenAlexCitations:
         _reset_rate_state("api.openalex.org")
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_citations" not in tools:
-            pytest.skip("get_openalex_citations not in tools")
+        # get_openalex_citations is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_citations" in tools
 
         resp_body = json.dumps({"results": [_work_payload()]})
         mock_resp = _mock_resp(200, resp_body)
@@ -1019,8 +1021,10 @@ class TestGetOpenAlexCitations:
         _reset_rate_state("api.openalex.org")
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_citations" not in tools:
-            pytest.skip("get_openalex_citations not in tools")
+        # get_openalex_citations is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_citations" in tools
 
         resp_body = json.dumps({"results": [_work_payload()]})
         mock_resp = _mock_resp(200, resp_body)
@@ -1050,8 +1054,10 @@ class TestGetOpenAlexCitations:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_citations" not in tools:
-            pytest.skip("get_openalex_citations not in tools")
+        # get_openalex_citations is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_citations" in tools
 
         # Force the circuit breaker into cooldown for openalex
         _reset_rate_state("api.openalex.org")
@@ -1084,8 +1090,10 @@ class TestGetOpenAlexReferences:
         _reset_rate_state("api.openalex.org")
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_references" not in tools:
-            pytest.skip("get_openalex_references not in tools")
+        # get_openalex_references is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_references" in tools
 
         work_body = json.dumps({
             "id": "https://openalex.org/W42",
@@ -1135,8 +1143,10 @@ class TestGetOpenAlexReferences:
         _reset_rate_state("api.openalex.org")
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_references" not in tools:
-            pytest.skip("get_openalex_references not in tools")
+        # get_openalex_references is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_references" in tools
 
         work_body = json.dumps({
             "id": "https://openalex.org/W42",
@@ -1174,8 +1184,10 @@ class TestGetOpenAlexReferences:
         _reset_rate_state("api.openalex.org")
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_references" not in tools:
-            pytest.skip("get_openalex_references not in tools")
+        # get_openalex_references is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_references" in tools
 
         work_body = json.dumps({
             "id": "https://openalex.org/W99",
@@ -1199,8 +1211,10 @@ class TestGetOpenAlexReferences:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
 
         tools = _make_tools(tmp_path)
-        if "get_openalex_references" not in tools:
-            pytest.skip("get_openalex_references not in tools")
+        # get_openalex_references is unconditional once the literature stack
+        # imports (build_openalex_closures gates on nothing else); the
+        # optional deps it would depend on are all hard `dependencies`.
+        assert "get_openalex_references" in tools
 
         # Force the circuit breaker into cooldown for openalex
         _reset_rate_state("api.openalex.org")

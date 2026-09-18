@@ -224,8 +224,12 @@ def test_search_openalex_returns_results_on_success(tmp_path):
         lit_reviewer_notes_dir=lit_dir,
     )
 
-    if "search_openalex" not in tools:
-        pytest.skip("search_openalex not in tools")
+    # search_openalex is unconditional once the literature stack imports
+    # (build_openalex_closures gates on nothing else) -- semanticscholar,
+    # pymupdf and rank-bm25 are all hard `dependencies`, not optionals, so
+    # this branch is latent, not live: assert it rather than let a real
+    # regression (the tool silently vanishing) pass as "environment".
+    assert "search_openalex" in tools
 
     oa_result = {
         "results": [
@@ -270,8 +274,12 @@ def test_search_openalex_returns_error_on_failure(tmp_path):
         lit_reviewer_notes_dir=lit_dir,
     )
 
-    if "search_openalex" not in tools:
-        pytest.skip("search_openalex not in tools")
+    # search_openalex is unconditional once the literature stack imports
+    # (build_openalex_closures gates on nothing else) -- semanticscholar,
+    # pymupdf and rank-bm25 are all hard `dependencies`, not optionals, so
+    # this branch is latent, not live: assert it rather than let a real
+    # regression (the tool silently vanishing) pass as "environment".
+    assert "search_openalex" in tools
 
     import requests as _requests
     with patch("requests.get", side_effect=_requests.RequestException("Connection failed")):
@@ -295,8 +303,12 @@ def test_get_ss_recommendations_returns_json(tmp_path):
         lit_reviewer_notes_dir=lit_dir,
     )
 
-    if "get_semantic_scholar_recommendations" not in tools:
-        pytest.skip("get_semantic_scholar_recommendations not available")
+    # get_semantic_scholar_recommendations comes from
+    # build_recommendations_closure(), which imports no optional client
+    # library (unlike build_semantic_scholar_closures) -- it is present
+    # whenever the literature stack imports at all, same reasoning as
+    # search_openalex above.
+    assert "get_semantic_scholar_recommendations" in tools
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -338,8 +350,12 @@ def test_get_ss_recommendations_returns_error_on_failure(tmp_path):
         lit_reviewer_notes_dir=lit_dir,
     )
 
-    if "get_semantic_scholar_recommendations" not in tools:
-        pytest.skip("get_semantic_scholar_recommendations not available")
+    # get_semantic_scholar_recommendations comes from
+    # build_recommendations_closure(), which imports no optional client
+    # library (unlike build_semantic_scholar_closures) -- it is present
+    # whenever the literature stack imports at all, same reasoning as
+    # search_openalex above.
+    assert "get_semantic_scholar_recommendations" in tools
 
     import requests as _requests
     with patch("requests.post", side_effect=_requests.RequestException("Network error")):
