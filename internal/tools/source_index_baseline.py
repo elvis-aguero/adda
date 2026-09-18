@@ -1,4 +1,5 @@
-"""The control an agent-facing source index has to beat: ripgrep.
+"""The control an agent-facing source index has to beat: ripgrep -- and the
+index, scored against it on the same queries.
 
 A coding agent with a shell already reads this repository. So the number a
 lookup tool must improve on is not zero — it is what ``rg`` scores on the
@@ -14,6 +15,10 @@ Whichever scores HIGHER is the bar.
 
 ``--held-out`` scores the frozen split. Do not pass it until the design is
 frozen; that is what makes the split worth having.
+
+``--index`` additionally scores ``PackageApi("adda")`` in four unit
+configurations. The comparison is the point: the unit set turned out to be
+package-dependent, and nothing but running both arms shows that.
 """
 from __future__ import annotations
 
@@ -95,11 +100,58 @@ def score(rows, label: str, *, per_kb: bool, show_misses: bool = False):
     return hit1 / n, mrr / n
 
 
+def _score_index(rows, units) -> tuple[float, float, float, dict]:
+    """The adda index, scored exactly as the ripgrep control is.
+
+    Entries are ranked, then collapsed to their FILE, because the query set's
+    gold labels are files -- a module entry and a function entry in the same
+    file are one answer, not two.
+    """
+    root = pathlib.Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(root / "src"))
+    from adda._src.knowledge.f3dasm_api import PackageApi
+
+    api = PackageApi("adda", units=units)
+
+    def rank(query: str, k: int = 5) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for entry in api._rank(query, 60):
+            where = (entry.where or "").rsplit(":", 1)[0]
+            path = "src/" + where if where.startswith("adda/") else where
+            if path == "?" or path in seen:
+                continue
+            seen.add(path)
+            out.append(path)
+            if len(out) >= k:
+                break
+        return out
+
+    hit1 = hit5 = 0
+    mrr = 0.0
+    per: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0, 0])
+    for tier, _qid, query, gold in rows:
+        got = rank(query)
+        r = next((i for i, p in enumerate(got, 1) if p in set(gold)), None)
+        if r == 1:
+            hit1 += 1
+            per[tier][0] += 1
+        if r:
+            hit5 += 1
+            per[tier][1] += 1
+            mrr += 1 / r
+        per[tier][2] += 1
+    n = len(rows) or 1
+    return hit1 / n, hit5 / n, mrr / n, {t: v[0] / v[2] for t, v in per.items()}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--held-out", action="store_true",
                     help="score the frozen split instead of DEVELOPMENT")
     ap.add_argument("--misses", action="store_true")
+    ap.add_argument("--index", action="store_true",
+                    help="also score the adda index, in four unit configurations")
     args = ap.parse_args()
 
     rows = Q.HELD_OUT if args.held_out else Q.DEVELOPMENT
@@ -110,6 +162,15 @@ def main() -> int:
     b = score(rows, "rg, matches per kilobyte", per_kb=True)
     print(f"\nthe bar to beat: r@1 {max(a[0], b[0]):.2f}, "
           f"MRR {max(a[1], b[1]):.2f}")
+
+    if args.index:
+        print("\n=== PackageApi('adda'), by what it indexes ===")
+        for units in (("symbol",), ("symbol", "module"), ("symbol", "constant"),
+                      ("symbol", "module", "constant")):
+            r1, r5, mrr, per = _score_index(rows, units)
+            tiers = "  ".join(f"{t[:4]} {v:.2f}" for t, v in sorted(per.items()))
+            print(f"{'+'.join(units):30s} r@1 {r1:.2f}  r@5 {r5:.2f}  "
+                  f"MRR {mrr:.2f}   {tiers}")
     return 0
 
 

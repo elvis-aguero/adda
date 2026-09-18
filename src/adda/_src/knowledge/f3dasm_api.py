@@ -190,7 +190,7 @@ class Entry:
 
     #: dotted name used as the lookup key — the public path when there is one
     key: str
-    kind: str                      # class | function | method
+    kind: str                      # class | function | method | module | constant
     #: ``from X import Y`` line, or None when the symbol is private
     import_line: str | None
     signature: str
@@ -287,7 +287,77 @@ def _pkg_of(path: str) -> str:
     return tail.split("/", 1)[0].removesuffix(".py")
 
 
-def build_index(package: str = "f3dasm") -> dict[str, Entry]:
+def _module_entries(mods: dict, package: str, index: dict) -> None:
+    """One entry per module, carrying its module docstring.
+
+    WHY THIS IS NOT FREE, AND WHY IT WAS ORIGINALLY LEFT OUT
+        The walk already imports every module -- the docstring is sitting on
+        the object the loop is holding. It was discarded rather than unvisited,
+        which is a design choice, not a limitation, and the choice was right
+        for f3dasm: its module docstrings are thin, and its knowledge really
+        does live in symbols.
+
+        adda is the opposite. 23% of its docstring mass (72,061 of 314,202
+        characters) is in module docstrings, because the house convention puts
+        the "WHY THIS EXISTS" argument at the top of the file rather than on
+        any one symbol. Indexing symbols only cannot reach it.
+
+    ``import_line`` is None and ``private`` is False on purpose. A module
+    under ``_src`` is not something to import -- the entry exists to point a
+    reader at a FILE -- but marking it private would apply the 0.15 crowding
+    penalty meant for private SYMBOLS, and sink exactly the text this was
+    added to surface.
+    """
+    for name, mod in mods.items():
+        doc = inspect.getdoc(mod) or ""
+        if not doc:
+            continue
+        f = getattr(mod, "__file__", None) or "?"
+        root = _package_root(package)
+        where = f"{package}{f[len(root):]}:1" if root and f.startswith(root) else f"{f}:1"
+        index[name] = Entry(
+            key=name, kind="module", import_line=None, signature="",
+            summary=_summary(doc), doc=doc, where=where, private=False,
+        )
+
+
+def _constant_entries(mods: dict, package: str, index: dict) -> None:
+    """One entry per module-level CONSTANT, carrying its value.
+
+    The value is the point. ``settings.KNOWN_KEYS`` is the entire declared
+    knob surface of this package and it is a frozenset, so a symbol-only walk
+    -- which indexes classes and functions -- cannot see it, and "where do I
+    set the context window" has nothing to match. Rendering the value into
+    the entry's text puts every knob name in the corpus exactly once.
+
+    UPPER_SNAKE only. Lower-case module globals are caches, locks, compiled
+    regexes and singletons -- state, not vocabulary -- and indexing them adds
+    noise with no question behind it.
+    """
+    root = _package_root(package)
+    for name, mod in mods.items():
+        f = getattr(mod, "__file__", None) or "?"
+        where = f"{package}{f[len(root):]}" if root and f.startswith(root) else f
+        for attr, v in vars(mod).items():
+            if not attr.isupper() or attr.startswith("_"):
+                continue
+            if inspect.isclass(v) or inspect.isfunction(v) or inspect.ismodule(v):
+                continue
+            key = f"{name}.{attr}"
+            if key in index:
+                continue
+            rendered = repr(v)
+            if len(rendered) > 600:
+                rendered = rendered[:600] + " …"
+            index[key] = Entry(
+                key=key, kind="constant", import_line=None, signature="",
+                summary=f"{attr} = {rendered[:200]}",
+                doc=f"{attr} = {rendered}", where=f"{where}:1", private=False,
+            )
+
+
+def build_index(package: str = "f3dasm", *, units: tuple[str, ...] = ("symbol",)
+                ) -> dict[str, Entry]:
     """Introspect an INSTALLED package. Returns ``{key: Entry}``.
 
     Raises ``ImportError`` when the package is absent — the caller decides
@@ -369,6 +439,11 @@ def build_index(package: str = "f3dasm") -> dict[str, Entry]:
                 )
                 if inspect.isclass(v):
                     _add_methods(index, v, key, pub is None, package)
+
+        if "module" in units:
+            _module_entries(mods, package, index)
+        if "constant" in units:
+            _constant_entries(mods, package, index)
     return index
 
 
@@ -475,12 +550,13 @@ class PackageApi:
     """
 
     def __init__(self, package: str = "f3dasm",
-                 aliases: dict[str, tuple] | None = None) -> None:
+                 aliases: dict[str, tuple] | None = None,
+                 units: tuple[str, ...] = ("symbol",)) -> None:
         self._package = package
         self._aliases = (
             _ALIASES if aliases is None and package == "f3dasm"
             else (aliases or {}))
-        self._index = build_index(package)
+        self._index = build_index(package, units=units)
 
     # -- retrieval ---------------------------------------------------------
 
