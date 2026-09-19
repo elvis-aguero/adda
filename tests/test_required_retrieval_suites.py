@@ -9,9 +9,10 @@ WHY THIS FILE EXISTS
     f3dasm and adda are different: f3dasm is a declared dependency and adda is
     the package under test, so both are always available and both MUST be
     measured on every push. The danger is that they stop being measured
-    quietly. ``tests/test_f3dasm_api.py`` opens with ``importorskip``, which
-    turns a missing dependency into a green skip; and a marker applied a
-    little too broadly would deselect the adda suite with no failure anywhere.
+    quietly. ``tests/test_f3dasm_api.py`` used to open with ``importorskip``,
+    which would have turned a missing dependency into a green skip instead of
+    a loud collection failure; and a marker applied a little too broadly
+    would deselect the adda suite with no failure anywhere.
 
     This session has already seen both failure modes for real: a contract test
     silently reduced to checking one of seven feature defaults and reporting
@@ -21,13 +22,12 @@ WHY THIS FILE EXISTS
 """
 from __future__ import annotations
 
-import pytest
-
 
 def test_f3dasm_is_importable_so_its_suite_cannot_skip():
-    """``importorskip`` in the f3dasm suites is a convenience for a developer
-    without the optional extra. In CI it must never fire."""
-    pytest.importorskip.__doc__  # noqa: B018 - documents the intent below
+    """f3dasm is a hard dependency (``pyproject.toml``'s
+    ``project.dependencies``), never an optional extra, so its suites must
+    import it plainly and let a missing install fail collection loudly
+    instead of skipping green."""
     import f3dasm  # noqa: F401
 
 

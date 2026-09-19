@@ -34,14 +34,14 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("f3dasm")
+import f3dasm  # noqa: F401 - importing here fails collection if the hard dep is missing
 
-from adda._src.knowledge.f3dasm_api import (  # noqa: E402
+from adda._src.knowledge.f3dasm_api import (
     _STOP,
     F3dasmApi,
 )
 
-from .f3dasm_query_set import (  # noqa: E402
+from .f3dasm_query_set import (
     QUERIES,
     evaluate,
     format_report,

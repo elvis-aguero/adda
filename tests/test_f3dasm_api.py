@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import pytest
 
-f3dasm = pytest.importorskip("f3dasm")
+import f3dasm
 
-from adda._src.knowledge.f3dasm_api import (  # noqa: E402
+from adda._src.knowledge.f3dasm_api import (
     F3dasmApi,
     build_index,
 )

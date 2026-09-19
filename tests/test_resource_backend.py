@@ -7,7 +7,7 @@ import subprocess
 import sys
 import time
 
-import pytest
+import psutil  # noqa: F401 - importing here fails collection if the hard dep is missing
 
 from adda._src.infra.resource_backend import (
     PsutilBackend,
@@ -24,12 +24,10 @@ def test_get_backend_is_cached_and_conforms():
 
 
 def test_psutil_available_so_psutil_backend_is_chosen():
-    pytest.importorskip("psutil")
     assert isinstance(get_resource_backend(), PsutilBackend)
 
 
 def test_read_rss_sees_a_child_and_kill_reaps_a_new_session_grandchild():
-    pytest.importorskip("psutil")
     b = PsutilBackend()
     # Parent spawns a NEW-SESSION grandchild (start_new_session=True) — exactly
     # the detached-campaign shape that escapes os.killpg. Both sleep.
@@ -67,7 +65,6 @@ def test_set_self_limit_is_noop_false():
 
 
 def test_proc_start_time_for_self_and_dead_pid():
-    pytest.importorskip("psutil")
     b = PsutilBackend()
     t = b.proc_start_time(__import__("os").getpid())
     assert isinstance(t, float) and t > 0      # our own process has a start time

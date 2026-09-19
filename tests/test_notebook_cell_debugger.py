@@ -3,10 +3,8 @@ the agent can see WHICH cell breaks reproduction (run 20260623T002417 burned ~10
 blind gate attempts because CheckDeliverable is binary pass/fail)."""
 from __future__ import annotations
 
-import pytest
-
-nbformat = pytest.importorskip("nbformat")
-pytest.importorskip("nbclient")
+import nbformat
+import nbclient  # noqa: F401 - importing here fails collection if the hard dep is missing
 
 from adda._src.evaluation.notebook_exec import diagnose_notebook
 

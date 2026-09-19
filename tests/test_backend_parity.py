@@ -28,6 +28,8 @@ import types
 
 import pytest
 
+import arxiv  # noqa: F401 - importing here fails collection if the hard dep is missing
+
 from adda._src.backends.registry import (
     available_backends,
     get_adapter_class,
@@ -285,7 +287,6 @@ def test_literature_agent_has_no_arxiv_mcp_server():
 
 
 def test_literature_agent_arxiv_tools_in_build_closure_tools(tmp_path):
-    pytest.importorskip("arxiv")  # skip if not installed
     from adda._src.agents.literature import LiteratureReviewAgent
     tools = LiteratureReviewAgent().build_closure_tools(tmp_path)
     expected = {

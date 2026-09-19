@@ -8,6 +8,8 @@ import subprocess
 import sys
 import time
 
+import psutil
+
 from adda._src.infra.watchdog_cleanup import (
     check_memory_and_kill,
     delegation_rss,
@@ -115,8 +117,6 @@ def test_memory_cap_actually_kills_a_real_over_cap_process(tmp_path):
     """End-to-end proof of the RSS-based hard cap: a real subprocess that holds
     ~300 MB resident, registered with its true start time, is killed by
     check_memory_and_kill under a 100 MB cap — via the real psutil backend."""
-    import pytest
-    psutil = pytest.importorskip("psutil")
     # Hold ~300 MB resident (bytearray is zero-filled → resident), then idle.
     child = subprocess.Popen([
         sys.executable, "-c",
