@@ -6,6 +6,13 @@
 % omits its cost a visible hole rather than a stylistic choice.
 
 % \decision{Name}{what it does}{what it is instead of}{what it costs}
+%
+% LANGUAGE: as non-technical as the subject allows (paper/README.md rule 0).
+% Say what the mechanism DOES, not what it is called. An identifier belongs
+% here only when the name is itself the decision, and must be wrapped in
+% \texttt{} when it appears -- tests/test_paper.py fails on unmarked ones.
+% You are writing for a researcher deciding whether to believe this, not for
+% somebody who will maintain it.
 \newcommand{\decision}[4]{%
   \paragraph{#1}#2
   \emph{Instead of:} #3

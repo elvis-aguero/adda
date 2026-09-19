@@ -43,6 +43,36 @@ is the whole point of the register.
 
 ## Rules
 
+0. **Write it as non-technically as the subject allows.** This is the rule that
+   governs the others, and it is the easiest one to lose. The reader deciding
+   whether to believe the design is a researcher, not a maintainer of this
+   codebase: they do not know our module names, our tool names or our
+   vocabulary, and every one we make them learn is a chance to put the paper
+   down.
+
+   Concretely:
+
+   - **Say what a thing does, not what it is called.** "Every evaluation is
+     written to one shared record" beats "`get_evaluator()` wraps the generator
+     with `InstrumentedDataGenerator`". Name the identifier only when the
+     identifier itself is the subject — when a reader would need it to find the
+     thing, or when the name IS the decision.
+   - **A code identifier in prose must be marked** `\texttt{...}`. Unmarked, it
+     reads as English and quietly raises the reading level of the sentence
+     around it. `tests/test_paper.py` fails on unmarked ones.
+   - **Prefer the concrete failure to the abstract mechanism.** "A run killed by
+     the time limit was recorded as a validated success" is understood by
+     everyone; "terminal state was recovered by grepping the report banner" is
+     understood by us.
+   - **Spell out an acronym at first use**, including the ones that feel
+     universal here.
+   - **A sentence a mechanics researcher cannot parse is a defect**, whatever
+     it is describing. That is the audience test — not "is this accurate", which
+     jargon usually is.
+
+   The method register is where this slips first, because each entry is
+   written straight after the code it describes and inherits its vocabulary.
+
 1. **Every number carries its source.** Use `\measured{value}{file}`. A figure
    we cannot recompute from the repository does not go in.
 2. **Separate what we measured from what we believe.** Design rationale is
