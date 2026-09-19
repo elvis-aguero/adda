@@ -479,6 +479,105 @@ class LiteratureCorpus:
         Returns up to *top_k* formatted passages with page citations,
         or ``"No results found."``.
         """
+        kind, payload = self._rank_chunks(query, top_k)
+        if kind != "ranked":
+            # "error" / "empty" / "substring" are all already the final
+            # text to hand back verbatim -- see `_rank_chunks`.
+            return payload
+
+        top_idx, rrf_scores, chunks, meta = payload
+        passages = []
+        for idx in top_idx:
+            if rrf_scores[idx] <= 0:
+                break
+            chunk = chunks[idx]
+            pid = chunk["paper_id"]
+            m = meta.get(pid, {})
+            title = m.get("title", pid)
+            year = m.get("year", "")
+            passages.append(
+                f"--- {title} ({year}), p.{chunk['page']} ---\n"
+                f"{chunk['text']}\n"
+            )
+
+        return "\n".join(passages) if passages else "No results found."
+
+    def search_chunk_scores(
+        self, query: str, top_k: int = 10
+    ) -> list[tuple[str, float]] | str:
+        """The numeric twin of :meth:`search`: ``(paper_id, score)`` per
+        ranked chunk, in rank order, NOT deduped or collapsed to one row
+        per paper.
+
+        ``search()`` answers a literature reviewer with formatted, citable
+        passages -- one paper can legitimately appear many times, and that
+        is correct for a reader. A caller that instead needs to rank
+        PAPERS (an evaluation harness scoring recall@k against paper-level
+        gold labels, e.g. ``internal/tools/literature_retrieval_baseline.py``)
+        cannot recover per-chunk magnitude by re-parsing that formatted
+        text -- only chunk ORDER survives the round trip, which silently
+        forces "first chunk wins" as the only representable aggregation.
+        This method exposes the same per-chunk ranking scores
+        :meth:`search` already computes (the fused RRF value, or the
+        RRF-transformed BM25-only value when no dense ranking ran) so a
+        caller can aggregate a paper's evidence across ALL its retrieved
+        chunks (sum / max / mean / first) instead of being limited to one.
+
+        Purely additive: :meth:`search`'s signature, return type, and
+        behaviour for every existing caller are unchanged by this method's
+        existence -- both share the same ranking core (`_rank_chunks`) so
+        there is exactly one code path computing scores, and this one only
+        reads it back numerically instead of formatting it to text.
+
+        ``retrieval_mode="substring"`` has no per-chunk score (a plain text
+        scan, not a ranking) -- an ERROR string is returned for it, same
+        style as :meth:`search`'s other ERROR strings. Records
+        ``self.resolved_mode`` / ``self.dense_coverage`` exactly as
+        :meth:`search` does.
+        """
+        kind, payload = self._rank_chunks(query, top_k)
+        if kind in ("error", "empty"):
+            return payload
+        if kind == "substring":
+            return (
+                "ERROR: search_chunk_scores does not support"
+                " retrieval_mode='substring' (a plain text scan has no"
+                " per-chunk score to aggregate) -- call search() for"
+                " substring output, or request retrieval_mode='bm25' /"
+                " 'hybrid'."
+            )
+        top_idx, rrf_scores, chunks, _meta = payload
+        out: list[tuple[str, float]] = []
+        for idx in top_idx:
+            score = rrf_scores[idx]
+            if score <= 0:
+                break
+            out.append((chunks[idx]["paper_id"], float(score)))
+        return out
+
+    def _rank_chunks(self, query: str, top_k: int):
+        """Ranking core shared by :meth:`search` and
+        :meth:`search_chunk_scores` -- the ONE place chunk scores are
+        computed, so the two callers can never drift apart.
+
+        Returns a ``(kind, payload)`` pair:
+
+        ``("error", <str>)``        an ERROR string -- return verbatim.
+        ``("empty", "No results found.")``
+        ``("substring", <str>)``    fully-formatted substring passages
+                                     (explicit ``retrieval_mode="substring"``,
+                                     or an ``"auto"`` degrade to it) -- no
+                                     per-chunk score exists for this branch.
+        ``("ranked", (top_idx, rrf_scores, chunks, meta))``
+                                     ``top_idx`` is chunk indices into
+                                     ``chunks``, already sorted by
+                                     ``rrf_scores`` descending and sliced to
+                                     *top_k*; ``meta`` is ``paper_id -> csv
+                                     row``.
+
+        ``self.resolved_mode`` / ``self.dense_coverage`` are recorded here,
+        exactly as the pre-refactor inline version of this logic did.
+        """
         import math as _math
 
         import numpy as _np
@@ -487,7 +586,7 @@ class LiteratureCorpus:
 
         _mode = get_str("retrieval_mode", "auto").strip().lower()
         if _mode not in _RETRIEVAL_MODES:
-            return (
+            return "error", (
                 f"ERROR: unknown retrieval_mode {_mode!r}."
                 f" Valid: {', '.join(sorted(_RETRIEVAL_MODES))}."
             )
@@ -501,7 +600,7 @@ class LiteratureCorpus:
 
         if not full_text_ids:
             n = len(csv_rows)
-            return (
+            return "error", (
                 f"ERROR: corpus contains no full-text papers"
                 f" ({n} abstract-only entr{'y' if n == 1 else 'ies'})."
                 " Quotes require full text — download the PDF or full"
@@ -511,7 +610,7 @@ class LiteratureCorpus:
 
         all_chunks, emb_matrix_all, has_emb_all = self._load_all_embeddings()
         if not all_chunks:
-            return "No results found."
+            return "empty", "No results found."
 
         # Filter to full-text chunks only
         full_idx = [
@@ -519,7 +618,7 @@ class LiteratureCorpus:
             if c["paper_id"] in full_text_ids
         ]
         if not full_idx:
-            return "No results found."
+            return "empty", "No results found."
 
         chunks = [all_chunks[i] for i in full_idx]
         if emb_matrix_all is not None:
@@ -554,7 +653,7 @@ class LiteratureCorpus:
 
         if _mode == "substring":
             self.resolved_mode = "substring"
-            return self._search_substring(
+            return "substring", self._search_substring(
                 query, top_k, full_text_ids=full_text_ids
             )
 
@@ -588,13 +687,13 @@ class LiteratureCorpus:
                 bm25_ranks[idx] = rank
         except ImportError:
             if _mode != "auto":
-                return (
+                return "error", (
                     f"ERROR: retrieval_mode={_mode!r} needs rank_bm25, which is"
                     " not installed. Install it, or set retrieval_mode to"
                     " 'substring' (or 'auto' to allow a fallback)."
                 )
             self.resolved_mode = "substring"
-            return self._search_substring(
+            return "substring", self._search_substring(
                 query, top_k, full_text_ids=full_text_ids
             )
 
@@ -603,7 +702,7 @@ class LiteratureCorpus:
         if _mode != "bm25" and emb_matrix is not None:
             model = self._get_embedding_model()
             if model is None and _mode == "hybrid":
-                return (
+                return "error", (
                     "ERROR: retrieval_mode='hybrid' needs a working embedder"
                     " (fastembed), which is unavailable. Install it, or set"
                     " retrieval_mode to 'bm25' (or 'auto' to allow a"
@@ -650,7 +749,7 @@ class LiteratureCorpus:
                     )
 
         if _mode == "hybrid" and not dense_ranks:
-            return (
+            return "error", (
                 "ERROR: retrieval_mode='hybrid' needs dense embeddings, and"
                 " this corpus has none. Embed it, or set retrieval_mode to"
                 " 'bm25' (or 'auto' to allow a fallback)."
@@ -678,21 +777,7 @@ class LiteratureCorpus:
             rrf_scores, key=lambda i: rrf_scores[i], reverse=True
         )[:top_k]
 
-        passages = []
-        for idx in top_idx:
-            if rrf_scores[idx] <= 0:
-                break
-            chunk = chunks[idx]
-            pid = chunk["paper_id"]
-            m = meta.get(pid, {})
-            title = m.get("title", pid)
-            year = m.get("year", "")
-            passages.append(
-                f"--- {title} ({year}), p.{chunk['page']} ---\n"
-                f"{chunk['text']}\n"
-            )
-
-        return "\n".join(passages) if passages else "No results found."
+        return "ranked", (top_idx, rrf_scores, chunks, meta)
 
     def _search_substring(
         self,

@@ -106,6 +106,7 @@ from __future__ import annotations
 import argparse
 import csv
 import importlib.util
+import json
 import math
 import random
 import re
@@ -132,6 +133,12 @@ STOP = frozenset(
     "into out up off no not has have if its".split())
 
 ARMS = ("rg", "substring", "bm25", "hybrid")
+
+#: Paper-level collapsing strategies for the internal (bm25/hybrid) arms --
+#: see `aggregate_chunk_scores`. "first" is the pre-existing behaviour
+#: (first-seen chunk wins, no pooling of a paper's other chunks) and is the
+#: baseline every other strategy is measured against.
+AGGREGATIONS = ("first", "sum", "max", "mean", "sum_norm")
 
 #: How many raw chunks to rank before collapsing to distinct paper_ids and
 #: slicing at 5/10/20 -- mirrors _score_index's k=60 in source_index_baseline.py.
@@ -431,6 +438,97 @@ def parse_search_output(text: str, title_to_pid: dict[str, str]) -> list[str]:
     return out
 
 
+def load_chunk_counts(corpus_dir: Path) -> dict[str, int]:
+    """paper_id -> total number of chunks in ``chunks.jsonl``.
+
+    This is the WHOLE-CORPUS chunk count for a paper (how many chunks it
+    was split into when added), not how many of its chunks a given query
+    happens to retrieve. It exists to test the length confound on the
+    ``sum`` aggregation: a paper split into many chunks has more chances
+    for a chunk to weakly match and enter the top ``raw_k`` window, which
+    can inflate a naive sum independently of relevance. ``sum_norm``
+    divides a paper's summed chunk score by this count.
+    """
+    counts: dict[str, int] = {}
+    path = corpus_dir / "chunks.jsonl"
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            pid = row.get("paper_id")
+            if pid:
+                counts[pid] = counts.get(pid, 0) + 1
+    return counts
+
+
+def aggregate_chunk_scores(
+    scored: list[tuple[str, str]], agg: str,
+    chunk_counts: dict[str, int] | None = None,
+) -> list[str]:
+    """Collapse ``(paper_id, score)`` chunk-level pairs -- already in rank
+    order, exactly as ``LiteratureCorpus.search_chunk_scores`` returns them
+    -- to a ranked list of DISTINCT paper_ids, under aggregation *agg*:
+
+    ``first``     first-seen chunk wins (the pre-existing behaviour of
+                  ``parse_search_output``, reimplemented here on top of
+                  real per-chunk scores instead of re-parsing formatted
+                  text -- a paper's score doesn't matter, only whether one
+                  of its chunks was the first of that paper_id seen).
+    ``sum``       sum a paper's retrieved chunk scores; ranked by the sum,
+                  descending. Rewards a paper with many weakly-matching
+                  chunks as much as one with fewer strong ones -- and is
+                  confounded by how many chunks a paper WAS SPLIT INTO in
+                  the first place (see ``sum_norm`` / ``load_chunk_counts``).
+    ``max``       a paper's single highest-scoring chunk; ranked
+                  descending. Rewards one strong hit; ignores corroborating
+                  evidence spread across the rest of the paper.
+    ``mean``      a paper's mean retrieved-chunk score; ranked descending.
+                  Normalizes by how many of THIS query's raw_k retrieved
+                  chunks belonged to the paper (not by the paper's total
+                  corpus-wide chunk count -- see ``sum_norm`` for that).
+    ``sum_norm``  ``sum`` divided by the paper's TOTAL chunk count in the
+                  whole corpus (*chunk_counts*, required for this mode) --
+                  the length-normalised control for the ``sum`` confound.
+
+    Ties are broken by first-seen rank (stable and deterministic) so two
+    runs of the same arm never reorder a tie differently.
+    """
+    if agg == "first":
+        seen_set: set[str] = set()
+        out: list[str] = []
+        for pid, _score in scored:
+            if pid not in seen_set:
+                seen_set.add(pid)
+                out.append(pid)
+        return out
+
+    per_paper: dict[str, list[float]] = {}
+    first_rank: dict[str, int] = {}
+    for rank, (pid, score) in enumerate(scored):
+        per_paper.setdefault(pid, []).append(score)
+        first_rank.setdefault(pid, rank)
+
+    if agg == "sum":
+        agg_score = {pid: sum(vals) for pid, vals in per_paper.items()}
+    elif agg == "max":
+        agg_score = {pid: max(vals) for pid, vals in per_paper.items()}
+    elif agg == "mean":
+        agg_score = {pid: statistics.fmean(vals) for pid, vals in per_paper.items()}
+    elif agg == "sum_norm":
+        if chunk_counts is None:
+            raise ValueError("agg='sum_norm' requires chunk_counts")
+        agg_score = {
+            pid: sum(vals) / max(chunk_counts.get(pid, len(vals)), 1)
+            for pid, vals in per_paper.items()
+        }
+    else:
+        raise ValueError(f"unknown aggregation {agg!r}; valid: {AGGREGATIONS}")
+
+    return sorted(per_paper, key=lambda pid: (-agg_score[pid], first_rank[pid]))
+
+
 def assert_resolved(corpus, expected: str, qid: str) -> None:
     """The whole point of ``resolved_mode``: catch a mislabelled arm loudly.
 
@@ -541,6 +639,39 @@ def run_internal_arm(corpus, mode: str, queries: list[Query],
             )
         assert_resolved(corpus, mode, q.qid)
         ranked = parse_search_output(text, title_to_pid)
+        result.per_query.append(PerQuery(q.qid, ranked, wall))
+    return result
+
+
+def run_internal_arm_scored(
+    corpus, mode: str, queries: list[Query], raw_k: int, agg: str,
+    chunk_counts: dict[str, int] | None = None,
+) -> ArmResult:
+    """Like ``run_internal_arm``, but collapses to paper_ids via
+    ``LiteratureCorpus.search_chunk_scores`` + ``aggregate_chunk_scores``
+    instead of re-parsing ``search()``'s formatted text -- the only way to
+    run any *agg* other than "first" (sum/max/mean/sum_norm need real
+    per-chunk scores, which do not survive the round trip through text).
+
+    Not valid for ``mode="substring"`` -- that arm has no per-chunk score
+    (see ``search_chunk_scores``'s docstring); use ``run_internal_arm`` for
+    it, unconditionally, regardless of *agg*.
+    """
+    from adda._src.runtime import settings as _settings
+
+    result = ArmResult(name=f"{mode}:{agg}")
+    _settings.configure({"retrieval_mode": mode})
+    for q in queries:
+        t0 = time.perf_counter()
+        scored = corpus.search_chunk_scores(q.text, top_k=raw_k)
+        wall = time.perf_counter() - t0
+        if isinstance(scored, str):
+            raise RuntimeError(
+                f"retrieval_mode={mode!r} search_chunk_scores errored on "
+                f"query {q.qid!r}: {scored}"
+            )
+        assert_resolved(corpus, mode, q.qid)
+        ranked = aggregate_chunk_scores(scored, agg, chunk_counts=chunk_counts)
         result.per_query.append(PerQuery(q.qid, ranked, wall))
     return result
 
@@ -687,6 +818,23 @@ def power_note(mcnemar: dict, n_total: int, *, power: float = 0.8,
             f"alpha={alpha} (closed-form approximation, not a simulation)")
 
 
+def _pearson(xs: list[float], ys: list[float]) -> float | None:
+    """Plain-stdlib Pearson correlation (no scipy/numpy -- not a declared
+    dependency of this harness, same discipline as exact_mcnemar/bootstrap_ci).
+    None when undefined (n<2 or a zero-variance series).
+    """
+    n = len(xs)
+    if n < 2 or len(ys) != n:
+        return None
+    mx, my = statistics.fmean(xs), statistics.fmean(ys)
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True))
+    denx = sum((x - mx) ** 2 for x in xs) ** 0.5
+    deny = sum((y - my) ** 2 for y in ys) ** 0.5
+    if denx == 0 or deny == 0:
+        return None
+    return num / (denx * deny)
+
+
 def report_pairwise_stats(hits_by_arm: dict[str, list[int]], k: int) -> None:
     names = list(hits_by_arm)
     for i in range(len(names)):
@@ -702,6 +850,145 @@ def report_pairwise_stats(hits_by_arm: dict[str, list[int]], k: int) -> None:
                   f"McNemar b={mc['b']} c={mc['c']} p={mc['p']:.4f}  "
                   f"diff={point:+.3f} 95%CI[{lo:+.3f},{hi:+.3f}]{marker}")
             print(f"    power note: {power_note(mc, n)}")
+
+
+# ---------------------------------------------------------------------------
+# --compare-agg: study mode for the paper-level aggregation strategies
+# ---------------------------------------------------------------------------
+
+def run_aggregation_comparison(
+    corpus, queries: list[Query], raw_k: int, corpus_dir: Path,
+) -> None:
+    """Run bm25 and hybrid under EVERY aggregation in ``AGGREGATIONS``,
+    report per-variant recall@k/MRR, full pairwise significance between the
+    variants (exact McNemar + bootstrap 95% CI + power note -- the same
+    functions every arm-vs-arm comparison uses, per this harness's own
+    STATISTICS contract), and the sum-vs-paper-length confound check.
+    """
+    chunk_counts = load_chunk_counts(corpus_dir)
+    by_qid_gold = {q.qid: q.gold for q in queries}
+
+    modes_to_compare = ["bm25"]
+    print("\n--- probing dense embedder for hybrid ---")
+    available, route = probe_dense_embedder(corpus)
+    if available:
+        print(f"  embedder route: {route}")
+        modes_to_compare.append("hybrid")
+    else:
+        print(f"  DENSE ARM UNAVAILABLE: {route} -- comparing bm25 only.")
+
+    variant_results: dict[str, ArmResult] = {}
+    variant_summaries: dict[str, dict] = {}
+    for mode in modes_to_compare:
+        for agg in AGGREGATIONS:
+            print(f"--- running {mode}:{agg} ---")
+            cc = chunk_counts if agg == "sum_norm" else None
+            result = run_internal_arm_scored(
+                corpus, mode, queries, raw_k, agg, chunk_counts=cc
+            )
+            name = f"{mode}:{agg}"
+            variant_results[name] = result
+            variant_summaries[name] = summarize(result, queries)
+
+    print("\n=== aggregation comparison: per-variant metrics"
+          f" (development split, n={len(queries)}) ===")
+    print(f"{'variant':16s} {'n':>4s} {'r@1':>6s} {'r@5':>7s} {'r@10':>7s} "
+          f"{'r@20':>7s} {'MRR':>6s} {'wall_s':>8s}")
+    for mode in modes_to_compare:
+        for agg in AGGREGATIONS:
+            s = variant_summaries[f"{mode}:{agg}"]
+            print(f"{mode + ':' + agg:16s} {s['n']:>4d} {s['r@1']:>6.2f} "
+                  f"{s['recall@5']:>7.2f} {s['recall@10']:>7.2f} "
+                  f"{s['recall@20']:>7.2f} {s['mrr']:>6.2f} "
+                  f"{s['wall_mean_s']:>8.4f}")
+
+    print("\n=== aggregation comparison: pairwise significance per arm"
+          " (exact McNemar + bootstrap 95% CI) ===")
+    for mode in modes_to_compare:
+        for k in (5, 10, 20):
+            print(f"\n-- {mode}, k={k} --")
+            hits_by_variant = {
+                agg: [
+                    hit_at_k(pq.ranked, by_qid_gold[pq.qid], k)
+                    for pq in variant_results[f"{mode}:{agg}"].per_query
+                ]
+                for agg in AGGREGATIONS
+            }
+            report_pairwise_stats(hits_by_variant, k)
+
+    # ---- sum-vs-length confound ----
+    print("\n=== sum-vs-length confound ===")
+    print(f"  corpus: {len(chunk_counts)} papers with chunks; per-paper "
+          f"chunk-count range [{min(chunk_counts.values())}, "
+          f"{max(chunk_counts.values())}], mean="
+          f"{statistics.fmean(chunk_counts.values()):.1f}, "
+          f"stdev={statistics.pstdev(chunk_counts.values()):.1f}")
+
+    from adda._src.runtime import settings as _settings
+    for mode in modes_to_compare:
+        s_sum = variant_summaries[f"{mode}:sum"]
+        s_norm = variant_summaries[f"{mode}:sum_norm"]
+        for k in (5, 10, 20):
+            print(f"  {mode}: sum r@{k}={s_sum[f'recall@{k}']:.3f}  vs "
+                  f"sum_norm (/corpus chunk count) r@{k}="
+                  f"{s_norm[f'recall@{k}']:.3f}")
+
+        # Top-1 disagreements between sum (has a length term) and max (no
+        # length term at all): when they disagree, whose pick has MORE
+        # total corpus chunks? A pattern skewed toward sum's pick being
+        # the longer paper is direct evidence sum is partly rewarding
+        # length rather than relevance.
+        by_qid_sum = {
+            pq.qid: pq.ranked for pq in variant_results[f"{mode}:sum"].per_query
+        }
+        by_qid_max = {
+            pq.qid: pq.ranked for pq in variant_results[f"{mode}:max"].per_query
+        }
+        agree = sum_longer = max_longer = tie = compared = 0
+        for q in queries:
+            top_sum = by_qid_sum.get(q.qid) or [None]
+            top_max = by_qid_max.get(q.qid) or [None]
+            top_sum, top_max = top_sum[0], top_max[0]
+            if top_sum is None or top_max is None:
+                continue
+            compared += 1
+            if top_sum == top_max:
+                agree += 1
+                continue
+            len_sum, len_max = chunk_counts.get(top_sum, 0), chunk_counts.get(top_max, 0)
+            if len_sum > len_max:
+                sum_longer += 1
+            elif len_max > len_sum:
+                max_longer += 1
+            else:
+                tie += 1
+        disagree = compared - agree
+        print(f"  {mode}: top-1 pick sum vs max -- agree {agree}/{compared}; "
+              f"of {disagree} disagreements, sum's pick has MORE total "
+              f"corpus chunks than max's in {sum_longer}, FEWER in "
+              f"{max_longer}, tied in {tie}")
+
+        # Pearson r(paper's total corpus chunk_count, that paper's summed
+        # chunk score) pooled over every (query, paper) pair the sum
+        # aggregation actually scored -- the direct test of whether `sum`
+        # tracks paper length.
+        _settings.configure({"retrieval_mode": mode})
+        xs: list[float] = []
+        ys: list[float] = []
+        for q in queries:
+            scored = corpus.search_chunk_scores(q.text, top_k=raw_k)
+            if isinstance(scored, str):
+                continue
+            per_paper: dict[str, float] = {}
+            for pid, sc in scored:
+                per_paper[pid] = per_paper.get(pid, 0.0) + sc
+            for pid, sc in per_paper.items():
+                xs.append(float(chunk_counts.get(pid, 0)))
+                ys.append(sc)
+        r = _pearson(xs, ys)
+        r_str = f"{r:+.3f}" if r is not None else "undefined (n<2 or zero variance)"
+        print(f"  {mode}: Pearson r(paper chunk_count, summed chunk score) "
+              f"over {len(xs)} (query,paper) pairs = {r_str}")
 
 
 # ---------------------------------------------------------------------------
@@ -727,6 +1014,18 @@ def main() -> int:
                      help="score the frozen HELD_OUT_IDS split instead of "
                           "DEVELOPMENT. Do not pass it until the design is "
                           "frozen; that is what makes the split worth having.")
+    ap.add_argument("--agg", choices=AGGREGATIONS, default="first",
+                     help="paper-level collapsing strategy for the bm25/"
+                          "hybrid arms (default 'first', the pre-existing "
+                          "behaviour). substring has no per-chunk score and "
+                          "always collapses by first-seen regardless of "
+                          "this flag. See aggregate_chunk_scores().")
+    ap.add_argument("--compare-agg", action="store_true",
+                     help="instead of the normal 4-arm report, run bm25 and "
+                          "hybrid under EVERY aggregation in AGGREGATIONS "
+                          "and report full pairwise stats between them, "
+                          "plus a sum-vs-paper-length confound check. "
+                          "Ignores --agg. Exits without the standard report.")
     args = ap.parse_args()
 
     corpus_src = args.corpus.resolve()
@@ -746,21 +1045,32 @@ def main() -> int:
         corpus = LiteratureCorpus(corpus_dir)
         title_to_pid = build_title_index(corpus_dir)
 
+        if args.compare_agg:
+            run_aggregation_comparison(corpus, queries, args.raw_k, corpus_dir)
+            return 0
+
         results: dict[str, ArmResult] = {}
 
         # --- Arm 1: rg (two variants; the metrics step below reports both) ---
         print("\n--- running rg (external floor: raw counts + per-kb) ---")
         results["rg"] = run_rg_arm(queries, corpus_src / "papers", args.raw_k)
 
-        # --- Arm 2: substring (internal floor) ---
+        # --- Arm 2: substring (internal floor) -- no per-chunk score exists
+        # for this mode (see search_chunk_scores docstring), so --agg never
+        # applies to it: it always collapses by first-seen.
         print("--- running substring ---")
         results["substring"] = run_internal_arm(
             corpus, "substring", queries, title_to_pid, args.raw_k)
 
         # --- Arm 3: bm25 (the control) ---
-        print("--- running bm25 ---")
-        results["bm25"] = run_internal_arm(
-            corpus, "bm25", queries, title_to_pid, args.raw_k)
+        print(f"--- running bm25 (agg={args.agg}) ---")
+        if args.agg == "first":
+            results["bm25"] = run_internal_arm(
+                corpus, "bm25", queries, title_to_pid, args.raw_k)
+        else:
+            cc = load_chunk_counts(corpus_dir) if args.agg == "sum_norm" else None
+            results["bm25"] = run_internal_arm_scored(
+                corpus, "bm25", queries, args.raw_k, args.agg, chunk_counts=cc)
 
         # --- Arm 4: hybrid (the arm under test) ---
         if args.no_hybrid:
@@ -774,9 +1084,15 @@ def main() -> int:
                       "-- reported plainly, per the design contract.")
             else:
                 print(f"  embedder route: {route}")
-                print("--- running hybrid ---")
-                results["hybrid"] = run_internal_arm(
-                    corpus, "hybrid", queries, title_to_pid, args.raw_k)
+                print(f"--- running hybrid (agg={args.agg}) ---")
+                if args.agg == "first":
+                    results["hybrid"] = run_internal_arm(
+                        corpus, "hybrid", queries, title_to_pid, args.raw_k)
+                else:
+                    cc = load_chunk_counts(corpus_dir) if args.agg == "sum_norm" else None
+                    results["hybrid"] = run_internal_arm_scored(
+                        corpus, "hybrid", queries, args.raw_k, args.agg,
+                        chunk_counts=cc)
 
     # ---------------- reporting ----------------
     print("\n=== per-arm metrics ===")
