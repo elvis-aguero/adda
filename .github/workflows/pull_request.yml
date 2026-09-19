@@ -35,6 +35,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Full history, not the default depth-1 shallow clone.
+          # test_paper_attestation.py checks that ATTESTATION.json's
+          # reviewed_through sha is a real commit here -- a dangling
+          # attestation is worse than none, because the hook then silently
+          # stops reporting drift. Under a shallow clone that sha is absent,
+          # so the test skipped and the guard was dark in the one place it
+          # most needs to run. Fetch everything so it actually runs.
+          fetch-depth: 0
       - name: Set up Python ${{ matrix.version }}
         uses: actions/setup-python@v5
         with:
