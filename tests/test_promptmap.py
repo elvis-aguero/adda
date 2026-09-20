@@ -469,3 +469,52 @@ def test_the_computed_resource_stanza_is_reachable(data):
     numbers are supplied per run -- so the wording IS editable from the page."""
     fields = {pc.get("field") for _r, _s, pc in _all_pieces(data)}
     assert "{resources}" in fields
+
+
+# --- the gap these tests had ------------------------------------------------
+
+def test_the_committed_map_matches_the_code(promptmap):
+    """Every test above builds the map FRESH and asserts against that, so a
+    stale ``internal/promptmap.html`` passed all of them.
+
+    It did. The committed map named a tool in the literature reviewer's
+    prompt that had been renamed three commits earlier, and the suite was
+    green throughout -- the map is the artifact a person reads to see what
+    the agents are told, so a stale one is a wrong answer delivered
+    confidently.
+
+    This is the arrow a script CAN check: code -> committed file. The other
+    arrow, committed file -> published artifact, goes through the Artifact
+    tool and cannot be reached from here; ``promptmap_sync.py`` reports that
+    one, and a scheduled session acts on it.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_promptmap_sync", _ROOT / "internal" / "tools" / "promptmap_sync.py")
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+
+    committed, live = sync.committed_data(), sync.live_data()
+    drift = sync.differences(committed, live)
+    assert sync.content_hash(committed) == sync.content_hash(live), (
+        "internal/promptmap.html is stale. Run `make promptmap` and commit it."
+        + ("\n  " + "\n  ".join(drift) if drift else
+           "\n  (no section-level drift: a citation moved, or the generator "
+           "changed shape)"))
+
+
+def test_the_publication_record_is_present_and_well_formed():
+    """``promptmap.published.json`` is how the repository remembers what is
+    on claude.ai, since it cannot ask. If it rots, the sync report starts
+    lying in the reassuring direction."""
+    import json
+
+    record = _ROOT / "internal" / "promptmap.published.json"
+    assert record.exists(), (
+        "internal/promptmap.published.json is missing -- without it nothing "
+        "knows whether the published artifact is current")
+    data = json.loads(record.read_text(encoding="utf-8"))
+    for field in ("url", "artifact_version", "content_hash", "published_at"):
+        assert data.get(field), f"the publication record has no {field!r}"
+    assert len(data["content_hash"]) == 64, "content_hash is not a sha256"

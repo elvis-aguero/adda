@@ -3,7 +3,7 @@
 PACKAGEDIR := dist
 COVERAGEREPORTDIR := coverage_html_report
 
-.PHONY: help test test-html build docs lint promptmap attest-paper decline-paper
+.PHONY: help test test-html build docs lint promptmap promptmap-status attest-paper decline-paper
 
 help:
 	@echo "Please use \`make <target>' where <target> is one of:"
@@ -13,6 +13,7 @@ help:
 	@echo "  docs        Build the documentation with mkdocs"
 	@echo "  lint        Lint the code with ruff"
 	@echo "  promptmap   Regenerate internal/promptmap.html (prompt + gate provenance)"
+	@echo "  promptmap-status  Is the map in sync with the code, and with what is published?"
 	@echo "  attest-paper   Sign that paper/ reflects the code as of HEAD"
 	@echo "  decline-paper  WHY='...' Sign, recording that no decision was taken"
 
@@ -34,6 +35,9 @@ lint:
 
 promptmap:
 	uv run python internal/tools/promptmap.py
+
+promptmap-status:
+	uv run python internal/tools/promptmap_sync.py
 
 attest-paper:
 	uv run python internal/tools/paper_attestation.py --attest
