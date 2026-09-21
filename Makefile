@@ -33,8 +33,13 @@ docs:
 lint:
 	ruff check
 
+# Pinned to 3.12: promptmap.py resolves citations via `ast`, whose line
+# attribution differs between 3.10/3.11 and 3.12/3.13 -- an unpinned run
+# regenerates byte-different output depending on whichever interpreter is
+# in .venv, and CI's raw-byte `check_promptmap` job is itself pinned to
+# 3.12, so this must match it exactly.
 promptmap:
-	uv run python internal/tools/promptmap.py
+	uv run --python 3.12 python internal/tools/promptmap.py
 
 promptmap-status:
 	uv run python internal/tools/promptmap_sync.py

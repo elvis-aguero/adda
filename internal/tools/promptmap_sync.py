@@ -62,10 +62,64 @@ def live_data() -> dict:
     return module.build()
 
 
+_LINE_NUMBER_FIELDS = {"line", "line_end", "doc_line", "doc_line_end"}
+
+
+def _scrub_citations(value):
+    """Strip fields that encode WHERE a line is, not WHAT the page says.
+
+    Python's ``ast`` module changed line attribution in 3.12 (decorators and
+    multi-line calls now number differently), so ``line``/``line_end``/
+    ``doc_line``/``doc_line_end`` -- and the ``key`` field some sections
+    derive from them, e.g. ``"delegation.py:116-131"`` -- differ across
+    interpreters even when the prompt text is byte-identical. ``differences()``
+    above already treats these as noise: it compares only section TEXT, never
+    a citation. This makes ``content_hash`` blind to the same fields, so a
+    provenance gate fails on what an agent is actually told, not on where the
+    compiler thinks a line begins.
+
+    ``key`` is dropped only when it sits beside a ``line`` sibling in the
+    same dict -- that is how every citation key is shaped here (see
+    ``promptmap.py``'s ``"{file}:{line}-{line_end}"`` builders). A bare
+    ``key`` with no ``line`` sibling is a different field entirely (e.g. the
+    ``config.yaml runtime:`` switch name in ``_switches()``) and must stay
+    hashed, since renaming a config key is a real, meaningful change.
+
+    ``why`` is prose, not a citation field, so it is kept -- but when a
+    definition is ambiguous it EMBEDS line numbers in the explanation itself
+    (e.g. "defined at delegation.py:116 and delegation.py:2186"). Dropping
+    `why` outright would hide a genuine change to the reasoning (a third
+    ambiguous definition appearing, or the explanation changing kind), which
+    nothing else in this hash covers. So its digit runs are normalised
+    instead of the field being dropped: still sensitive to real wording
+    changes, still blind to which line the AST attributed them to.
+    """
+    if isinstance(value, dict):
+        drop = set(_LINE_NUMBER_FIELDS)
+        if "key" in value and "line" in value:
+            drop.add("key")
+        out = {}
+        for k, v in value.items():
+            if k in drop:
+                continue
+            if k == "why" and isinstance(v, str):
+                out[k] = re.sub(r"\d+", "#", v)
+                continue
+            out[k] = _scrub_citations(v)
+        return out
+    if isinstance(value, list):
+        return [_scrub_citations(v) for v in value]
+    return value
+
+
 def content_hash(data: dict) -> str:
-    """Stable over what the page SHOWS, blind to how it is styled."""
+    """Stable over what the page SHOWS, blind to how it is styled, and blind
+    to which Python interpreter's AST line attribution produced a citation
+    (see ``_scrub_citations``) -- a citation moving is not the same as a
+    prompt changing."""
     return hashlib.sha256(
-        json.dumps(data, sort_keys=True, ensure_ascii=False).encode()
+        json.dumps(_scrub_citations(data), sort_keys=True,
+                   ensure_ascii=False).encode()
     ).hexdigest()
 
 

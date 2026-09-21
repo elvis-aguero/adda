@@ -18,6 +18,7 @@ objects and the AST.
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -502,6 +503,83 @@ def test_the_committed_map_matches_the_code(promptmap):
         + ("\n  " + "\n  ".join(drift) if drift else
            "\n  (no section-level drift: a citation moved, or the generator "
            "changed shape)"))
+
+
+@pytest.fixture(scope="module")
+def sync():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_promptmap_sync", _ROOT / "internal" / "tools" / "promptmap_sync.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_a_citation_only_shift_does_not_move_the_hash(sync, data):
+    """AST line attribution differs across Python versions (3.10/3.11 vs.
+    3.12/3.13); zero prompt text differs between them, only where the
+    compiler says a line begins. A provenance-map hash that fails on that is
+    failing the build for the wrong reason -- this is the regression test for
+    the CI flip that motivated ``_scrub_citations``."""
+    import copy
+
+    shifted = copy.deepcopy(data)
+
+    def walk(value):
+        if isinstance(value, dict):
+            for field in ("line", "line_end", "doc_line", "doc_line_end"):
+                if field in value:
+                    value[field] += 1
+            if "key" in value and "line" in value:
+                value["key"] = "{}:{}-{}".format(
+                    value.get("file", "x"), value["line"], value["line_end"])
+            if isinstance(value.get("why"), str):
+                value["why"] = re.sub(r"\d+", lambda m: str(int(m.group()) + 1),
+                                       value["why"])
+            for v in value.values():
+                walk(v)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v)
+
+    walk(shifted)
+    assert sync.content_hash(data) == sync.content_hash(shifted)
+
+
+def test_a_citation_key_beside_no_line_sibling_still_hashes(sync):
+    """The ``_switches()`` block uses ``key`` for a config-key NAME, not a
+    line citation -- it never sits beside a ``line`` field. Renaming one must
+    still move the hash, or the scrub is too broad."""
+    old = {"switches": [{"key": "eval_budget", "kind": "config.yaml runtime:"}]}
+    new = {"switches": [{"key": "budget", "kind": "config.yaml runtime:"}]}
+    assert sync.content_hash(old) != sync.content_hash(new)
+
+
+def test_prompt_text_drift_still_fails(sync, data):
+    """The anti-weakening check: real content changes -- section text, a
+    section's tag/label, a tool roster, or a gate -- must still move the
+    hash. Only citations may move for free."""
+    import copy
+
+    base_hash = sync.content_hash(data)
+
+    text_changed = copy.deepcopy(data)
+    text_changed["roles"][0]["layers"][0]["sections"][0]["text"] += " extra"
+    assert sync.content_hash(text_changed) != base_hash
+
+    tag_changed = copy.deepcopy(data)
+    tag_changed["roles"][0]["layers"][0]["sections"][0]["tag"] = "zzz-changed"
+    assert sync.content_hash(tag_changed) != base_hash
+
+    tools_changed = copy.deepcopy(data)
+    role = tools_changed["roles"][0]
+    role["tools"] = list(role["tools"]) + ["NotARealTool"]
+    assert sync.content_hash(tools_changed) != base_hash
+
+    gate_added = copy.deepcopy(data)
+    gate_added["gates"] = list(gate_added["gates"]) + [dict(gate_added["gates"][0])]
+    assert sync.content_hash(gate_added) != base_hash
 
 
 def test_the_publication_record_is_present_and_well_formed():

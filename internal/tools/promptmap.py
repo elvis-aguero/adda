@@ -34,6 +34,16 @@ Usage::
     python internal/tools/promptmap.py --stamp         # adds a build stamp
                                                          # (see note below)
 
+RUN THIS ON PYTHON 3.12, NOT WHATEVER IS DEFAULT. Every citation's
+``file:line`` is resolved via ``ast``, and 3.12 changed how the parser
+attributes line numbers (decorators, multi-line calls); 3.10/3.11 and
+3.12/3.13 each produce internally-consistent but MUTUALLY DIFFERENT byte
+output for identical prompt text. CI's byte-diff gate (``check_promptmap``)
+is pinned to 3.12, so a regeneration on any other interpreter will look
+wrong there even though nothing you wrote changed. ``make promptmap`` pins
+this already -- prefer it. Run this file directly only as
+``uv run --python 3.12 python internal/tools/promptmap.py``.
+
 The committed ``internal/promptmap.html`` is generated with NO flags. Its
 embedded data deliberately carries no ``generated_at``/``commit`` fields: an
 embedded commit hash can never be correct, because the hash of the commit
