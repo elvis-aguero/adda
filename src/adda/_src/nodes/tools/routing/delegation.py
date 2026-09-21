@@ -37,6 +37,7 @@ from ...parsing import (
     _stamped_eval_count,
 )
 from ._binding import with_doc
+from ._decoding import decode_list_arg
 
 # Roles whose delegations actually reach the ground-truth oracle and so are
 # subject to the eval-ledger guards (raw-oracle nudge, unledgered bounce,
@@ -2230,21 +2231,14 @@ def _stdin_is_tty() -> bool:
 def _parse_hypothesis_ids(hypothesis_ids: list | str | None) -> list[str]:
     """Decode the several shapes an LLM passes hypothesis ids in.
 
-    ``'["H1","H2"]'`` (JSON), ``'H1, H2'`` (joined), ``'H1'``, or a real list.
+    ``'["H1","H2"]'`` (JSON), ``"['H1','H2']"``/``"('H1','H2')"`` (Python
+    repr/tuple), ``'H1, H2'`` (joined), ``'H1'``, or a real list. Delegates
+    to :func:`decode_list_arg` in ``_decoding`` — the one decoder shared by
+    every list-valued tool argument, not just this one.
     """
     if not isinstance(hypothesis_ids, str):
         return [str(h) for h in (hypothesis_ids or [])]
-    raw = hypothesis_ids.strip()
-    if raw.startswith("["):
-        import json as _json
-        try:
-            decoded = _json.loads(raw)
-        except _json.JSONDecodeError:
-            return [raw]
-        return [str(h) for h in decoded] if isinstance(decoded, list) else [raw]
-    if "," in raw:
-        return [p.strip() for p in raw.split(",") if p.strip()]
-    return [raw]
+    return decode_list_arg(hypothesis_ids)
 
 
 def build_delegation_closures(node) -> dict:

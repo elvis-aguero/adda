@@ -1000,6 +1000,117 @@ def test_delegate_rejects_unknown_hypothesis_id(tmp_path):
     )
 
 
+def test_delegate_decodes_repr_encoded_hypothesis_ids_and_fires_worker(tmp_path):
+    """Regression for the cluster failure: a model that emits Python-repr
+    (single-quoted) hypothesis_ids — "['H1', 'H2']" — must still resolve to
+    the real ids and actually fire a worker, not get rejected as one bogus
+    unknown id built from the whole repr string.
+
+    Reproduced live: baseline arm, FAILED, 0 evals, 6.2h — Delegate rejected
+    the repr-encoded argument as an unknown hypothesis id and no worker ever
+    ran.
+    """
+    from adda._src.nodes import Node
+
+    captured = []
+
+    class ProposeAndDelegate(StubAdapter):
+        def invoke(self, messages):
+            self.closure_tools["HypothesisPropose"](
+                statement="Claim alpha below 1.0",
+                falsification_criterion="any counter",
+                prediction="none found",
+                prior=0.5,
+            )
+            self.closure_tools["HypothesisPropose"](
+                statement="Claim beta below 2.0",
+                falsification_criterion="any counter",
+                prediction="none found",
+                prior=0.5,
+            )
+            r = self.closure_tools["Delegate"](
+                target="implementer",
+                intent="test repr decoding",
+                expected_report="",
+                hypothesis_ids="['H1', 'H2']",
+            )
+            captured.append(r)
+            _time.sleep(0.3)
+            self.closure_tools["Done"](summary="done")
+            return "Done."
+
+    adapter = ProposeAndDelegate()
+    spec = _ledger_spec()
+    worker = StubAdapter()
+    node = Node(
+        adapter,
+        name="strategizer",
+        outgoing=["implementer"],
+        spec=spec,
+        worker_adapters={"implementer": worker},
+        notes_dir=tmp_path,
+    )
+    node(make_state())
+    assert captured, "No result captured from Delegate"
+    assert not captured[0].startswith("ERROR:"), (
+        f"repr-encoded hypothesis_ids wrongly rejected: {captured[0]!r}"
+    )
+    assert captured[0].startswith("Delegation started."), (
+        f"Worker was not fired: {captured[0]!r}"
+    )
+    reg_entry = list(node._registry.values())[0]
+    assert reg_entry["hypothesis_ids"] == ["H1", "H2"], (
+        f"hypothesis_ids mis-decoded: {reg_entry['hypothesis_ids']!r}"
+    )
+
+
+def test_delegate_rejects_unknown_hypothesis_id_even_repr_encoded(tmp_path):
+    """The unknown-id gate must still reject a genuinely unknown id when
+    it arrives repr-encoded — the decoding fix must not weaken this gate
+    into accepting anything."""
+    from adda._src.nodes import Node
+
+    captured = []
+
+    class ProposeAndBadDelegate(StubAdapter):
+        def invoke(self, messages):
+            self.closure_tools["HypothesisPropose"](
+                statement="Black-box is unimodal",
+                falsification_criterion="Any y<-1",
+                prediction="y>=-1 everywhere",
+                prior=0.5,
+            )
+            r = self.closure_tools["Delegate"](
+                target="implementer",
+                intent="task",
+                expected_report="",
+                hypothesis_ids="['H99']",
+            )
+            captured.append(r)
+            self.closure_tools["Done"](summary="done")
+            return "Done."
+
+    adapter = ProposeAndBadDelegate()
+    spec = _ledger_spec()
+    worker = StubAdapter()
+    node = Node(
+        adapter,
+        name="strategizer",
+        outgoing=["implementer"],
+        spec=spec,
+        worker_adapters={"implementer": worker},
+        notes_dir=tmp_path,
+    )
+    node(make_state())
+    assert captured, "No result captured"
+    assert captured[0].startswith("ERROR:"), (
+        f"Expected ERROR for genuinely unknown id, got: {captured[0]!r}"
+    )
+    assert "H1" in captured[0], (
+        f"Valid IDs not in error message: {captured[0]!r}"
+    )
+
+
 def test_delegate_records_falsification_flag(tmp_path):
     """Delegate with is_falsification_attempt=True records it in DelegationLog."""
     from adda._src.nodes import Node
@@ -2144,6 +2255,48 @@ def test_ask_for_feedback_respects_explicit_ids(tmp_path):
 
     rec = _json.loads(jsonl_path.read_text().strip().splitlines()[-1])
     assert rec["hypothesis_ids"] == ["H1"]
+
+
+def test_ask_for_feedback_decodes_repr_encoded_ids_without_exploding(tmp_path):
+    """AskForFeedback(hypothesis_ids="['H1', 'H2']") must decode to ['H1',
+    'H2'] — NOT explode into individual characters. Before the fix,
+    ``h_ids = list(hypothesis_ids)`` on a string turned any repr-encoded
+    argument into one character per list element (e.g. '[', "'", 'H', …)."""
+    from adda._src.infra.delegation_log import DelegationLog
+    from adda._src.nodes import Node
+    from adda._src.epistemics.hypothesis_ledger import HypothesisLedger
+
+    ledger = HypothesisLedger(tmp_path)
+    _kw = dict(
+        falsification_criterion="fc",
+        prediction="pred",
+        prior=0.5,
+        proposed_by="test",
+    )
+    ledger.propose(statement="Hypothesis one", **_kw)
+    ledger.propose(statement="Hypothesis two", **_kw)
+
+    jsonl_path = tmp_path / "delegation_log.jsonl"
+    delegation_log = DelegationLog(jsonl_path)
+    adapter = StubAdapter()
+    spec = _spec_with_critic()
+    node = Node(
+        adapter, name="strategizer",
+        outgoing=["implementer", "critic"],
+        spec=spec,
+        worker_adapters={"implementer": StubAdapter(), "critic": MockCriticAdapter()},
+        notes_dir=tmp_path,
+        delegation_log=delegation_log,
+    )
+    node._current_notes_dir = tmp_path
+
+    node.adapter.closure_tools["AskForFeedback"](
+        hypothesis_ids="['H1', 'H2']")
+
+    rec = _json.loads(jsonl_path.read_text().strip().splitlines()[-1])
+    assert rec["hypothesis_ids"] == ["H1", "H2"], (
+        f"hypothesis_ids exploded into characters: {rec['hypothesis_ids']!r}"
+    )
 
 
 def test_done_second_call_with_critic_pass():

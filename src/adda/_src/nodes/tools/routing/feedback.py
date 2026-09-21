@@ -24,6 +24,7 @@ from typing import Any
 from ....runtime import terminal
 from ...parsing import _parse_verdict
 from ._binding import with_doc
+from ._decoding import decode_list_arg
 
 # Post-Done exit interview for the strategizer. Asked as a SEPARATE turn only
 # after the critic accepted the conclusion — so the strategizer never carries
@@ -595,7 +596,11 @@ class FeedbackTools:
         # Resolve hypothesis IDs
         h_ids: list[str] = []
         if hypothesis_ids is not None:
-            h_ids = list(hypothesis_ids)
+            # A model can pass this as a real list OR a string encoding one
+            # (JSON, Python repr, comma-joined, …) — decode_list_arg handles
+            # every shape; plain list(...) on a string explodes it into
+            # individual characters.
+            h_ids = decode_list_arg(hypothesis_ids)
         elif node._ledger is not None:
             h_ids = [h["id"] for h in node._ledger.list_all()]
 

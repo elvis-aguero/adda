@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ._decoding import decode_list_arg
+
 # Returned verbatim by RecallStore and QueryStore alike; one string so the
 # two cannot drift into saying different things about the same condition.
 _EMPTY_STORE = (
@@ -71,25 +73,14 @@ def _select_best_index(values, n_best, minimize=True, sentinel_mag=_INFEASIBLE_S
 
 
 def _decode_str_list(raw) -> list | None:
-    """Decode a JSON-array string / comma-separated string / bare string /
-    list into a list[str], or None if raw is None. Same permissive decoding
-    QueryStore already uses for delegation_ids — an LLM caller passes any of
-    these shapes interchangeably."""
+    """Decode a JSON-array string / Python-repr string / comma-separated
+    string / bare string / list into a list[str], or None if raw is None.
+    Delegates to the one decoder every list-valued tool argument shares
+    (``decode_list_arg``) — an LLM caller passes any of these shapes
+    interchangeably, for ``delegation_ids``, ``columns``, and elsewhere."""
     if raw is None:
         return None
-    if isinstance(raw, list):
-        return [str(x) for x in raw]
-    s = str(raw).strip()
-    if s.startswith("["):
-        import json as _json
-        try:
-            decoded = _json.loads(s)
-            return [str(x) for x in decoded] if isinstance(decoded, list) else [s]
-        except _json.JSONDecodeError:
-            return [s]
-    if "," in s:
-        return [p.strip() for p in s.split(",") if p.strip()]
-    return [s]
+    return decode_list_arg(raw)
 
 
 def _select_columns(df, columns, *, always_keep=("_namespace",)):
