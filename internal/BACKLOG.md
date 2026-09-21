@@ -1,325 +1,84 @@
 # Agentic system — backlog
 
-Deferred ideas with enough context to resume cold. Not committed work; pick up
-when prioritized. Ordered by priority (highest first); item numbers are stable
-references, not a queue position — see the order above.
+**Open work only.** Resolved items keep their full write-up in
+[`BACKLOG_RESOLVED.md`](BACKLOG_RESOLVED.md) — the record survives, it just stops
+crowding out what still needs doing.
 
-> **Detailed, evidence-grounded specs** for every item live in
-> [`specs/`](specs/README.md) (primary-evidence citations, TDD test names, DRY
-> reuse, KPI done-when). The entries below are the short version.
+Item numbers are stable references, never queue positions. Detailed,
+evidence-grounded specs live in [`specs/`](specs/README.md); the entries here are
+the short version.
 
-## Status checklist
-Resolved items keep their write-up below for the record; `(commit)` is what fixed them.
+## How to read this
 
-- [x] **#27** `pipeline_deliverable: false` doesn't suppress the notebook-deliverable prompt injection — *RESOLVED (`744f38b`)*. `notebook_deliverable_spec()` (`notebook_exec.py:92`) was appended to the strategizer's system prompt unconditionally (no `pipeline_deliverable` check) and states "DELIVERABLE = pipeline.ipynb... this SUPERSEDES every... instruction above" — overriding even a `PROBLEM_STATEMENT.md` that explicitly says there is no pipeline deliverable. The knob only suppressed the `CRAFT_PIPELINE` milestone nudge (`nodes/strategizer.py:137`), a soft nudge, not this harder-worded injection. Found running `mathexpert_kinematic_matching_test` (run `20260903T130138`): the strategizer wrote `pipeline.ipynb` anyway and failed the reproduction gate. Fixed by gating the injection itself on `settings.get_bool("pipeline_deliverable", True)` (`agent_runtime.py`).
-- [x] **#28** `nbformat.write` crashes with `AttributeError: outputs` on a hand-authored notebook — *RESOLVED (`bf2c9f1`)*. `WriteDeliverable`'s `.ipynb` validation used only `nbformat.reads()`, which accepts a code cell missing `outputs` with no validation error (confirmed empirically — `normalize()` doesn't backfill it either); the malformed cell reached disk verbatim and crashed every later `nbformat.write` through that file (`split_lines` in nbformat's own `rwbase.py` unconditionally iterates `cell.outputs` for `cell_type=="code"`). Found in `mathexpert_kinematic_matching_test` run `20260903T130138` (cost $1.84, 0 evals, ended FAILED) — downstream of #27 (the strategizer authored `pipeline.ipynb` raw, bypassing `AddPipelineCell`, which never has this gap). Fixed with a shared `repair_code_cells()` helper (`notebook_exec.py`) called at every `nbformat.read`/`reads()` site that can observe an externally-authored notebook.
-- [x] **#29** Per-delegation Write-sandbox permanently stuck to the FIRST delegation, for every OpenAI-compatible-backend worker — *RESOLVED (`27e878f`)*. `OpenAICompatibleAdapter.copy()` deliberately returns `self` ("concurrent delegations share this adapter instance"), and `_invoke_once()` caches `self._agent` forever after the first build; `_build_tools()` baked whichever `closure_tools["Write"]` callable existed at that first build directly into a `StructuredTool`, so every later delegation's fresh `closure_tools["Write"]` reassignment (the per-delegation sandbox setup in `nodes/tools/routing.py`) was inert — the cached agent's tool list never re-read the dict. Confirmed via 3 real `_sandboxed_write` `ERROR_RETURN` diagnostics in `mathexpert_kinematic_matching_test` run `20260903T163807`, two of them attributing D002's and D004's writes to delegation D001's own sandbox folder. NOT specific to MathExpert — any repeatedly-delegated worker on Ollama/vLLM/OpenRouter had this. Fixed by dispatching through a live dict lookup instead of a baked-in callable.
-- [x] **#30** `pipeline_deliverable: false` still left the notebook-authoring TOOLS in the strategizer's toolset (and `_missing_deliverables()` still required `pipeline.ipynb` unconditionally) — *RESOLVED*. #27 gated only the injected `notebook_deliverable_spec()` preamble text; the strategizer still wrote `pipeline.ipynb` and hit `REPRO_GATE_BOUNCE` in `mathexpert_kinematic_matching_test` run `20260903T163807` despite that fix and despite `PROBLEM_STATEMENT.md` explicitly saying there is no pipeline deliverable, because (a) `StrategizerAgent.tools` unconditionally declared `WriteDeliverable`/`AddPipelineCell`/`AddPipelineMarkdownCell`/`EditPipelineCell`/`DeletePipelineCell`/`ShowNotebook`/`CheckDeliverable` regardless of the flag, and (b) `_missing_deliverables()` (`nodes/strategizer.py`) required `pipeline.ipynb` unconditionally too — a study with no ledger has nothing to lazily reproduce in the first place. Fixed both: `nodes/tools/routing.py` strips the notebook-authoring tool names (`Done` excluded — still needed to close a run) from the effective toolset when `pipeline_deliverable` is false, and `_missing_deliverables()` only requires `pipeline.ipynb` when the flag is on (`state['required_deliverables']` is still honoured regardless).
-- [x] **#31** `run_ledger.csv`'s `input_tokens`/`output_tokens`/`cost_usd` go blank for a legitimately notebook-less run — *RESOLVED*. `studies/run_ledger.py` read these three fields exclusively from `pipeline.ipynb`'s stamped metadata cell (or a `solution.md` fallback) — safe before #30, when every run produced one; no longer true once `pipeline_deliverable: false` correctly allowed a run to close without a notebook. Found on the first real #30-fixed run (`mathexpert_kinematic_matching_test/20260903T191706`, GATED). Fixed by reading `debug/telemetry/summary.json` instead: telemetry is written per LLM call regardless of deliverable shape, exists for exactly this purpose ("where did the budget go; does the machinery improve outcomes"), and carries all FOUR token fields — the ledger now also records `cache_read_tokens`/`cache_creation_tokens`, which the deliverable-derived path never reported and which are precisely what a prompt-section change moves. The deliverable path stays as a fallback for runs predating telemetry and never overwrites a telemetry value; `wall_s` comes from the run's own close. One faithfulness bug fixed alongside it: `Telemetry.merge` summed unpriced calls as `0.0`, so a whole run on an open-weight backend (which never reports a price) recorded `total_cost_usd: 0.0` — indistinguishable from a run that genuinely cost nothing. It now reports `None` with a `cost_calls` count, and the ledger leaves the column blank rather than claiming zero.
-- [x] **#32** `CorpusSearch`/`CorpusAdd`/`CorpusGetPaper` closures had no type annotations, silently breaking on any OpenAI-compatible backend (Ollama/vLLM/OpenRouter) — *RESOLVED*. `StructuredTool.from_function` (what these backends use to build each tool's JSON schema for the model) omits the `"type"` key entirely from a parameter's schema when the closure's own Python signature carries no type annotation (confirmed empirically: `CorpusSearch(query, top_k=10)` produces `{"query": {"title": "Query"}}`, no `"type"`, vs `{"query": {"title": "Query", "type": "string"}}` once annotated) — Claude's own native adapter never goes through this schema-inference path, so the bug was invisible there. Found via a user bug report investigating a literature-corpus tool failure on Qwen3.8:27b (Ollama). Audited the entire closure-tool surface (routing.py, worker.py, strategizer.py, every other literature.py closure) for the same pattern — confirmed isolated to exactly 5 call sites across `backends/base.py` (the universal `CorpusSearch`/`CorpusGetPaper` every agent gets) and `agents/literature.py` (`LiteratureReviewAgent`'s own duplicate `CorpusAdd`/`CorpusSearch`/`CorpusGetPaper` trio, which overrides the base default entirely). Fixed by adding the missing annotations at all 5 sites.
-- [x] **#33** `LiteratureReviewAgent`'s `asyncable()` wrapper (adds a `wait=` kwarg to every external discovery tool — `search_semantic_scholar`, `search_openalex`, `arxiv_search_papers`, etc.) broke tool-schema generation on every OpenAI-compatible backend — *RESOLVED*. The wrapper hand-set `wrapper.__signature__` (so `inspect.signature()` shows the real params) but never set `wrapper.__annotations__` to match; `inspect.signature()` (parameter NAMES) and `typing.get_type_hints()` (parameter TYPES) are independent lookups — the latter reads `__annotations__` directly and ignores `__signature__` — so pydantic's schema builder (`ValidatedFunction.__init__`, via `StructuredTool.from_function`) found a real param name from the signature but nothing for it in `type_hints`, raising a bare `KeyError` (e.g. `KeyError: 'query'`) for the first param of every async-wrapped tool. This aborted the entire `_build_tools()` loop before any tool — including `CorpusSearch`/`CorpusAdd` (#32) — could be reached, so the #32 fix could never be verified end-to-end. Found verifying #32 for real via a `literature_reviewer` delegation on a local Ollama model (`corpus_search_ollama_test/20260903T234452`, `D001` FAILED with the exact `KeyError('query')` traceback); reproduced directly in-process against 10 affected closures (`search_semantic_scholar`, `get_semantic_scholar_paper_details`, `search_openalex`, `get_openalex_citations`, `get_openalex_references`, `get_semantic_scholar_recommendations`, `DownloadPdf`, `arxiv_search_papers`, `arxiv_download_paper`, `arxiv_read_paper`) before fixing. Fixed by also setting `wrapper.__annotations__` from `base_sig`'s own parameter annotations (plus `wait: bool`) alongside the existing `__signature__` override. Reran the same delegation post-fix (`corpus_search_ollama_test/20260903T235500`) — all three corpus tools now dispatch correctly on Ollama; the only remaining diagnostic was an unrelated, self-corrected strategizer usage error (missing `hypothesis_ids`).
-- [x] **#34** A run stopped by an org-level Claude billing cap was indistinguishable from an ordinary UNGATED close — *RESOLVED*. The Claude Code CLI backend returns a billing-cap notice as ORDINARY assistant text ("You've hit your org's monthly spend limit · run /usage-credits to ask your admin for a higher limit"), not a raised exception — so `retry_on_transient`'s exception-based retry (which already correctly classifies `"rate limit"`/`"429"` text as transient) never even saw it: the strategizer just produced this as its final reply, made no more tool calls, and the run closed `UNGATED` with nothing distinguishing an externally-caused stop from the strategizer genuinely deciding it was done or a real gate/science failure. Found reading `supercompressible-material/runs/20260903T233207` (the most recent Oscar run — 67 evals legitimately completed, only 14% of its 12h wall budget used, cut off by one $16.24/213k-output-token strategizer turn) via its `debug/transcripts/strategizer/turn_001.jsonl`, not the retrospectives (this run wrote none for the terminal turn) — ground-truth read past the initial too-narrow theory ("5-hour rate limit", the user's framing) to the literal stop text. `AgenticRun(resume_from=...)` (checkpoint replay via `checkpoints.sqlite` + `debug/thread_id`) already existed and needed no change — the gap was detection + surfacing only (user-scoped explicitly, ruled out both a full new resumability system and blocking in-process backoff, since a monthly cap has no known reset window to wait out). Fixed in `agent_runtime.py`: `_EXTERNAL_STOP_SIGNATURES` matches this text in the terminal `last_report`, records `stop_reason` in `run_status.json` (null on an ordinary close), and logs the exact `resume_from=` invocation to resume the SAME run once the cap clears.
-- [x] **#35** `AgenticRun(resume_from=...)` — the very mechanism BACKLOG #34's guidance points users at — was a silent no-op for every run it was meant to help — *RESOLVED*. `graph.invoke(None, config)` (adda's resume convention) is a real LangGraph no-op once a checkpoint has reached its terminal `Command(goto=END)`: no node re-runs, no new model call, the persisted `last_report` is handed back byte-identical. Every NORMAL close reaches that terminal state (GATED/UNGATED/FAILED all share the same terminal branch in `strategizer.py`) — including every #34-flagged externally-stopped run, which is exactly the case #34's resume guidance targets. Confirmed empirically with a minimal `StateGraph` + `SqliteSaver` reproduction outside adda entirely: a node's own call counter stayed at 1 across a second `invoke(None, ...)` on the same completed thread, and confirmed separately that passing NEW non-None input on that same thread DOES force real re-execution (counter went to 2). Found because a "resume" of `supercompressible-material/20260903T233207` (the #34 run) appeared to fail again with the exact same 19-hour-old text — mistaken by a second agent (correctly, on reflection) for live confirmation that the account was still blocked, when it was actually just replaying stale state; user then set the actual requirement: resume must genuinely retry both stopped AND interrupted runs, refusing only when the run already closed cleanly (GATED, an accepted `Done()`) with `PROBLEM_STATEMENT.md` unchanged since — nothing new to do in that one case. Fixed in `agent_runtime.py`: on resume, `graph.get_state(config).next` distinguishes a genuinely mid-flight interruption (non-empty — unaffected, still `invoke(None, ...)`) from a terminal checkpoint (empty — now builds fresh `{"messages": [HumanMessage(...)], "done": False}` input, explaining why it's resuming, so the entry node genuinely re-executes with the accumulated message history intact via `MessagesState`'s `add_messages` reducer); raises `AgenticRunError` instead of silently no-opping for the one case explicitly not worth resuming. A prior bug in the same patch, caught before shipping: the "did PROBLEM_STATEMENT.md change" hash comparison was comparing the LIVE text (already carrying the per-run constraint-snapshot preamble — budgets/elapsed time, which always differs between runs) against the original snapshot's raw-content hash, so it reported "changed" on every resume even with a byte-identical problem statement; fixed by capturing the raw-content hash before the preamble is prepended.
-- [x] **#36** Reproduction-gate/deliverable execution's dedup-on-write silently fails to recognize ANY row as already-in-ledger, so re-executing `data_generation` can re-add every design point instead of the documented zero — *RESOLVED*. `notebook_exec.py`'s `sandbox_env()` (the environment for reproduction-gate/deliverable/scratch execution against a sandbox ledger copy) stamps a FIXED synthetic `F3DASM_DELEGATION_ID` (default `"D999"`) that never matches the real delegation(s) that actually generated the ledger's rows (`D005`, `D009`, ...). `InstrumentedDataGenerator._drop_duplicate_buffer()`'s dedup-on-write is deliberately scoped per-delegation (`mine = df_out["_delegation_id"] == self.delegation_id`) — correct for a real concurrent campaign, where a different delegation legitimately re-measuring a design is not waste and collapsing across delegations would corrupt that — but this reproduction-gate execution is a validation REPLAY of already-generated data, not a live campaign delegation, so per-delegation scoping is the wrong semantics for it specifically: `mine` matches zero rows (nothing in the ledger was ever written by `"D999"`), so `data_generation` re-adds every design point, violating `notebook_exec.py`'s own documented "LAZY: zero new oracle rows" reproduction invariant. Lands in a sandbox copy (not the real store), so this doesn't corrupt real data — but it can spuriously fail the reproduction gate on a genuinely reproducible notebook. Reported secondhand by a peer agent monitoring a separate, currently-running Oscar campaign ("D020/D021 worked around it manually, diffing against the full ledger by hand each time") — verified independently against the actual source before fixing, not trusted as stated. Two of that same report's other three claims did NOT hold up under direct code inspection at the time (`QueryStore`'s namespace mask is correctly built and applied — no bug found; left untouched, flagged unconfirmed) — but its THIRD claim, that the namespace registry doesn't survive resume, initially looked unconfirmable from a first code read and was WRONGLY left as "can't confirm the mechanism" here; the peer agent kept digging and found the real, confirmed mechanism — see #37. Fixed #36 itself with a new `dedup_scope` parameter (`"delegation"` default, unchanged; `"all"` dedupes against the whole ledger regardless of who wrote each row) threaded from `InstrumentedDataGenerator.__init__` through `get_evaluator()`'s new `F3DASM_DEDUP_SCOPE` env read, set to `"all"` by `sandbox_env()` specifically (real campaign delegations never set this env var, so they keep today's per-delegation behavior unchanged).
-- [x] **#37** Resuming a run silently wipes any dynamically-registered oracle (namespace or canonical) — *RESOLVED*. `_init_canonical_store()` (`agent_runtime.py`) is called unconditionally at the top of EVERY `execute()` — fresh run and resume alike, no `if _resume is None` guard anywhere near it — and rebuilt `run_config.json` from a literal dict sourced only from `config.yaml`, with no `"oracles"` key at all and no read-modify-write against whatever was already on disk; it just overwrote the file outright. Any oracle registered mid-run via `register_evaluator_entrypoint()` — a namespaced `oracles[namespace]` block (Delegate(namespace=...) opening a new design) OR the canonical `evaluator_entrypoint` itself (the common "an agent authors + registers its own evaluator" pattern, where `config.yaml` declares no entrypoint at all) — was silently destroyed the moment `execute()` ran again for the same `run_dir`. Not a resume-specific in-memory cache, and not something `register_evaluator_entrypoint()`'s own atomic write could ever protect against, since the DESTRUCTIVE step was a completely separate function's unconditional overwrite. Found by a peer agent (monitoring a separate, currently-running Oscar campaign) who kept digging after their first framing ("namespace registry doesn't survive resume") couldn't be confirmed here from an initial code read alone — they read `_init_canonical_store` directly and traced the real mechanism, then confirmed it against that run's own `run_config.json` and the `ValueError: Unknown design namespace` D016 actually hit (9 wasted SLURM submissions before it traced the cause and self-healed by re-registering). Verified directly here before fixing (not trusted as stated): confirmed `_init_canonical_store` really is unconditional and really does write a fresh literal dict with no `oracles` key. Fixed by reading back any existing `run_config.json` first and preserving `evaluator_entrypoint`/`evaluator_output_names`/`evaluator_lookup`/`oracles` from it when present, falling back to `config.yaml`-derived values only when nothing exists yet (a genuinely fresh run) — `eval_budget`/`mem_cap_bytes` still refresh unconditionally from the current call's arguments, preserving the existing, deliberate "user raises the budget, resume can progress" behavior alongside the fix.
-- [x] **#38** `viewer.readers.tail_jsonl()` could silently swallow a line split across two writes, forever — *RESOLVED*. The generator's initial offset (for a pre-existing file: "skip current content, tail only new growth") was only ever captured on the FIRST `next()` call, not when `tail_jsonl()` itself was invoked — generators are lazy. A caller whose first iteration is even slightly delayed (any real consumer driven from a separate thread, not a bare `for` loop starting instantly) could observe the file already mid-line at that moment, if a writer's append of a line's first half happened to land in the gap. Naively setting `offset = current file size` then treated that in-flight prefix as "already seen" forever: once the remainder arrived, reading from `offset` onward yielded only the trailing fragment, never valid JSON on its own — confirmed by direct reproduction to fail non-deterministically (~25% of runs, even with a 10s timeout margin, ruling out plain flakiness) before this fix, and 100% of runs once the race was replaced with a deterministic construction (file already ends mid-line before `tail_jsonl` is even called). Fixed by backing the initial offset up to the position right after the LAST newline in the existing file (0 if there is none) instead of raw file size — any trailing unterminated line is then treated as new, unconsumed content, exactly as if tailing had started before it was ever written.
+Three groups, because they need three different things from you:
+
+| Group | What it means |
+|---|---|
+| **Awaiting your decision (§4)** | Already escalated. The work is understood; the *call* is yours. Not a new discovery — do not re-surface these as findings. |
+| **Actionable** | Someone can pick this up and do it without asking anything first. |
+| **Parked** | Deliberately deferred. No action expected; here so it is not rediscovered. |
+
+---
+
+## Awaiting your decision — CLAUDE.md §4
+
+These are blocked on a judgment call, not on effort. Each has been surfaced
+before. Until one is answered or closed, treat it as known, not news.
+
+- [ ] **#40** A mid-tier delegating node is cut off from the hypothesis ledger and the science monitor — *§4, who may mutate the ledger*. Latent while every graph is one tier deep; bites the first deeper topology. Three options, see §40 below.
+- [ ] **#10** Strategizer delegates the optimization as one monolithic un-budgeted campaign — *open, §4 user-owned* (**current binding constraint** — watchdog-kills runs)
+- [ ] **#17** Closure + budget-severity model (Memory>Time>Eval; dynamic constraints) — *open, §4 user-owned* — Done() prompt iterated (`0400a653`); runtime nudge + severity model deferred
+- [ ] **#19** Scientific adequacy is enforced as vibes while reproduction is enforced hard — *§4, partially addressed (`8ae9a402`, `93e6f0f2`); the load-bearing question is OPEN and empirical* — see §19 below
+- [ ] **#18** Critic should flag an infeasible-extremum headline on a constrained study — *open, §4 user-owned* — grounding moved to the critic (`6494489b`) but it only checks the value is real, not feasible
+
+## Actionable
+
 - [ ] **#1** Reconcile cancelled-but-completed delegations — *open, highest priority* (recurring UNGATED root cause; partially mitigated 2026-06-15)
+- [ ] **#6** Detect a delegation running but making zero ledger progress — *open*
+- [ ] **#22** Stall watchdog: liveness = "file written", not "progress made" — *open, medium (a backstop, not a primary control)*. `seconds_since_last_activity()` (`infra/watchdog_cleanup.py`) is implemented exactly as this item describes and its docstring defends the choice; whether a busy-but-unproductive run should be caught is still unanswered — see §22 below
+- [ ] **#41** The whole watchdog subsystem has no local caller — a watchdog kill in this repo still leaves no retrospective, no process reap, and no stall detection. *open, medium* — see §41 below
+- [ ] **#16** ABAQUS subprocess can't import workspace modules (PYTHONPATH) — *open, abaqus2py-owned* (recommendation only; not an f3dasm fix)
+
+## Parked — deferred on purpose
+
 - [ ] **#2** Richer delegator↔worker comms (typed blocker/escalation) — *deferred*
 - [ ] **#3** ProblemDefinerAgent pre-strategizer intake stage — *deferred*
-- [x] **#4** Single Jupyter-notebook deliverable — *DONE* (the live system; gate runs the notebook via nbclient; toolset completed `db288d5b`)
-- [x] **#5** KB entry: running a study on SLURM — *DONE* (`entries/0010-running-a-study-on-slurm.md`; the deliverable pipeline runs on SLURM, the agent graph stays local)
-- [ ] **#6** Detect a delegation running but making zero ledger progress — *open*
-- [ ] **#7** Remove the literature hand-listed tool docs (BF-13a) — *open* (needs corpus closures to carry docstrings first)
-- [x] **#8** Literature str/int error (lit-bug #3) — `64a8230a` (coerce arxiv `max_results` to int)
-- [x] **#9** Orchestrator-owned live validator for HypothesisUpdate — *DONE* (advise-with-teeth, charter-grounded, kill-switchable via `F3DASM_VERDICT_VALIDATOR`; merged into dev/confer; validated live run `20260623T002417` — fired, judged H1 correctly vs the gate critic, non-blocking)
-- [ ] **#10** Strategizer delegates the optimization as one monolithic un-budgeted campaign — *open, §4 user-owned* (**current binding constraint** — watchdog-kills runs)
-- [x] **#11** Orphaned background process survives watchdog kill — `5199b593` (process-group reap)
-- [x] **#12** Watchdog kill loses the strategizer's retrospective — `5199b593` (synthetic post-mortem entry)
-- [x] **#13** Per-cell notebook debugger — *DONE* (`RunPipelineCell` closure + `diagnose_notebook`; per-cell trace localizes a repro failure by cell name + traceback; runs against a ledger copy; kill-switch-free read-only diagnostic)
-- [ ] **#14** Watchdog reap (#11) MISSES detached campaign processes — *open, HIGH (real CPU leak)* — they escape the process-group kill (new session) and outlive the run
-- [ ] **#16** ABAQUS subprocess can't import workspace modules (PYTHONPATH) — *open, abaqus2py-owned* (recommendation only; not an f3dasm fix)
-- [ ] **#17** Closure + budget-severity model (Memory>Time>Eval; dynamic constraints) — *open, §4 user-owned* — Done() prompt iterated (`0400a653`); runtime nudge + severity model deferred
-- [ ] **#18** Critic should flag an infeasible-extremum headline on a constrained study — *open, §4 user-owned* — grounding moved to the critic (`6494489b`) but it only checks the value is real, not feasible
 - [ ] **#20** Open design-space discovery (agent invents new low-D parametrizations) — *spec approved, §4 user-owned, awaiting 2D experiment* — see [`OPEN_DESIGN_SPACE_FRAMEWORK.md`](OPEN_DESIGN_SPACE_FRAMEWORK.md); branch `exp/open-design-space`
 - [ ] **#23** Rename `literature_reviewer` → `consultant` + give it live-web tools so it answers tech-stack/API/doc questions, not only academic literature — *spec, not built (user decision 2026-06-30)* — see §23 below
-- [x] **#24** Duplicate/redundant design-point evaluations go undetected — *RESOLVED (simplified from spec)*. See [`specs/07-duplicate-evaluation-detection.md`](specs/07-duplicate-evaluation-detection.md) for the evidence (run `example_study/20260713T221841`: D003 spent 76% of its 160 evals re-evaluating 38 unique points, up to 10x each). Shipped design (user-simplified from the spec's ratio-threshold proposal): `DUPLICATE_EVALUATION` fires after 3 NEW duplicate rows since the last check, resets its counter, caps at 2 nudges per delegation, rate-limited to 1/60s (`science_monitor.py` `_check_duplicate_evaluations`, `instrumented.py` `duplicate_eval_stats`). `Wait()`'s poll loop now also drains the monitor every 10s so the nudge reaches a strategizer blocked on a live campaign, not just on its next tool call.
-- [x] **#25** MathExpert: a symbolic-derivation verification node — *BUILT (`12c882b`)* — shipped as `agents/math_expert.py` + `math_dsl`, exported as `MathExpertAgent`, handbook chapter `symbolic-derivation-patterns`, tests `test_math_expert_agent.py` / `test_math_dsl.py`. The spec below is kept for the record. — see [`specs/10-math-expert-agent.md`](specs/10-math-expert-agent.md). New delegate node giving an agent SymPy-backed, mechanically-verified symbolic math by default (an early modeling decision cascades into algebra an LLM's own arithmetic can't be trusted on); opt-in (delegate target, not a ledger gate). A derivation is a `.py` script written against a small first-party `math_dsl.Workspace` library, one file per edition under `runs/math_workspace/` (mirrors `LiteratureCorpus`'s persistence location); durability and "revise an assumption" are both plain filesystem operations (read/rerun; copy-edit-rerun for a counterfactual), not a bespoke trace-replay or dependency-graph mechanism — both were tried and dropped in favor of this during spec iteration. Four-valued verdict (`CONFIRMED`/`REFUTED`/`INCONCLUSIVE`/`ASSERTED`) keeps "is the algebra right" separate from "is the physical claim right." Verified derivations citable as prose-level hypothesis-ledger evidence (nothing mechanically enforced, per explicit user decision 2026-09-02); stress-tested against a real published derivation (Galeano-Rios et al. 2017, §2.1-2.30d).
-- [x] **#21** RecallStore/QueryStore are namespace-blind — *RESOLVED*. The "informational, not a metering gap" severity call was wrong: it nearly produced a false CRITICAL fabrication verdict and forced 6/7 critics into raw-CSV fallbacks in a real run. Fixed by giving both tools the same `experiment_stores()` aggregation `LedgerBreakdown`/`ScienceMonitor`/`GetStatus`/`CancelDelegation` already used (`_derive_store_dir` → `_all_store_dirs` in `routing.py`); no per-namespace stat merging (rejected as "muddy" per `OPEN_DESIGN_SPACE_FRAMEWORK.md`) — `RecallStore` prints one block per store, `QueryStore` concatenates rows across stores before filtering. The same audit found the identical single-store blind spot in the `Done()` reproduction gate's laziness/integrity check, `CheckDeliverable`'s row-count fail-fast, and two guidance texts — fixed alongside this one.
-- [ ] **#40** A mid-tier delegating node is silently cut off from the hypothesis ledger and the science monitor. `graph_builder.build_graph` passes `notes_dir=notes_dir if name == spec.entry else None`, and `Node._init_orchestration` reads a missing `notes_dir` as "no ledger": `_ledger`, `_milestones`, `_science_monitor` and `_telemetry` all stay `None`. So an orchestrating node that is not the entry can delegate, but its delegations are never hypothesis-linked and never monitored for drift. Latent today (every shipped graph is one tier deep) and surfaced by the node-layer collapse to a single `Node`, which made the node layer's one remaining `name == entry` special case visible. It is expressed as a `None` rather than as a declared capability, unlike every other capability in the system (single source of truth = the Agent's `tools`). **Needs the user's call — CLAUDE.md §4:** who may mutate the shared hypothesis ledger is an epistemic decision, not a refactor. Options: (a) leave as is and state the one-tier assumption explicitly; (b) give every orchestrating node a ledger view, keeping MUTATE declaration-gated as now; (c) make ledger access a declared capability like the rest.
-
-- [ ] **#39** Flaky CI test `tests/test_operator_channel.py::test_a_note_queued_while_draining_is_not_lost` — failed on `macos-latest / 3.13` for commit `01193b3` (CI run 34690958061, 2026-09-12; `assert ['first'] == ['first', 'second']`), a commit that touched only `tests/test_literature_guardrails.py`. Timing race between the draining thread and the queued note; passes locally and on the other matrix cells. Not investigated — needs a deterministic handshake (event/barrier) instead of a sleep, then verify the fix against the same matrix cell.
 
 ---
 
-## 1. Reconcile cancelled-but-completed delegations
-**Status:** partially mitigated 2026-06-15 (cancel hardened + eval-count now
-from ledger); the core inconsistency remains. **Highest priority** — it is the
-recurring root cause of UNGATED / hypotheses-left-OPEN outcomes across runs.
+## 40. A mid-tier delegating node is cut off from the ledger and the monitor — §4
 
-`CancelDelegation` detaches a worker and tells the strategizer "result will be
-ignored," but the **detached worker keeps running**, finishes, stamps real evals
-into the canonical ledger, and writes its report to disk. The run then holds two
-contradictory truths: the official record (delegation_log / registry / what the
-strategizer is told) says *ignored / not executed*, while the ledger + on-disk
-report say *done*. Primary evidence (run 20260615T192313): D005/D006 were
-cancelled-detached, absent from delegation_log, yet have 145/32 ledgered evals +
-`D006/REPORT_SUMMARY.txt` ("H1 SUPPORTED"). The strategizer then claimed "the
-falsification was not executed" (per the runtime's "ignore it") while the critic
-read the disk report — a **non-converging gate loop** rooted in inconsistent
-state, NOT agent hallucination or prompt friction. Re-confirmed 2026-06-16: the
-8d e2e left H1/H2 OPEN citing "D004 cancelled post-completion."
+**Status:** open, awaiting the maintainer's call. Surfaced repeatedly in review;
+recorded here so it stops being re-reported as a new finding.
 
-**Done so far:** (a) `evals_used` now counts from the ledger so those evals
-aren't dropped from the run total (`agent_runtime.py`); (b) cancel is hardened
-against impatience — two-shot for delegations already producing ledgered evals;
-docstring + poll/premature nudges reframed (`routing.py`).
+**Mechanism.** `graph_builder.build_graph` passes
+`notes_dir=notes_dir if name == spec.entry else None`, and
+`Node._init_orchestration` reads a missing `notes_dir` as "no ledger":
+`_ledger`, `_milestones`, `_science_monitor` and `_telemetry` all stay `None`.
+So an orchestrating node that is not the entry node can delegate, but its
+delegations are never hypothesis-linked and never monitored for drift.
 
-**Still to design:** when a detached worker completes with stamped ledger rows,
-**reconcile** it — record its completion in the delegation_log (so the
-strategizer sees it finished, not "ignored"), or stop the worker BEFORE it
-stamps. Pick one source of truth so strategizer and critic never see
-contradictory delegation state. Related: the stuck-delegation detection in #6.
+**Why it is latent.** Every shipped graph is one tier deep, so no node has ever
+been in this position in a real run. It became visible only when the node layer
+collapsed to a single `Node`, which left this as the one remaining
+`name == entry` special case.
 
----
+**Why it is a §4 question, not a refactor.** Who may mutate the shared
+hypothesis ledger is an epistemic decision. The capability is also expressed as
+a `None` rather than as a declared capability, unlike every other capability in
+the system (single source of truth = the Agent's `tools`).
 
-## 2. Richer delegator↔worker comms — typed blocker/escalation
-**Status:** deferred (prefer benchmarking the current system first). Design explored 2026-06-15.
+**Options:**
+- (a) Leave as is, and state the one-tier assumption explicitly in the spec.
+- (b) Give every orchestrating node a ledger VIEW, keeping MUTATE
+  declaration-gated as it is now.
+- (c) Make ledger access a declared capability like everything else.
 
-**Today:** the protocol is near single-shot — `Delegate(task, expected_report, …)`
-down, the worker's structured report up, and exactly **one blocking
-`FollowUp(question)` clarification** mid-task (≤1 per delegation; routes to the
-delegating agent — or the human for the entry node). When no operator/TTY is
-present FollowUp now returns an autonomous-proceed notice instead of blocking
-(headless `input()` EOFError fixed 2026-06-16). The delegator can only
-`CancelDelegation` a running worker — it **cannot steer** one.
-
-**Principle:** a *blocker* differs from a *clarification* on **who must act** —
-a clarification needs information back; a blocker needs the delegator to take an
-**action** the worker can't take itself. So the fix is not "let the worker ask
-more," it's "give the delegator the right levers." The real levers a blocked
-worker needs: **provide** a missing input/capability, **grant** more eval
-budget, **revise** scope, **reroute** to another specialist, **abort** cleanly.
-
-**Chosen direction (Approach A + C's logging):** a worker tool `Escalate(blocker,
-kind)` distinct from `FollowUp` — `kind ∈ {missing_input, over_budget,
-capability_gap, scope_conflict, unrecoverable}` — that *blocks* (reuse the
-FollowUp wait/Reply plumbing) and the delegator answers with a **typed
-decision** (`provide / grant_budget(n) / revise_scope / reroute(target) /
-abort`) that the runtime *applies* (budget bump, clean abort, re-delegation).
-Log the escalation + its resolution to the delegation log (auditable, fits the
-science-integrity ethos). These same `abort`/`grant_budget`/`reroute` levers are
-what the strategizer needs to act on the stuck-delegation signal in #6.
-
-**Open question to settle first:** which of the 5 delegator actions earn their
-place vs YAGNI?
-
----
-
-## 3. ProblemDefinerAgent — a pre-strategizer intake stage
-**Status:** deferred. Raised 2026-06-16.
-
-A new agent that sits **between the human and the strategizer**, running once at
-the very start of a run, before the strategizer takes over. Its job is to turn a
-raw human problem statement into a high-signal, airtight brief so the strategizer
-spends its budget on science, not on plumbing/ambiguity.
-
-**Responsibilities:**
-- **(a) Airtight problem statement** — resolve ambiguity, pin the objective
-  (minimise/maximise), constraints, success criterion, and what "the result"
-  is. Today this is partly covered by the advisory `_review_problem_statement`
-  pre-run pass (`agent_runtime.py:680`); the ProblemDefiner would *own* and
-  extend it (interactive with the human, not just advisory).
-- **(b) Tech stack + ExperimentData schema** — decide/confirm the f3dasm Domain
-  (input variables + bounds + types) and the **output columns** of the canonical
-  ExperimentData (objective col name, feasibility cols, units), so the ledger
-  schema is fixed before any delegation runs.
-- **(c) Hard-to-automate plumbing** — the evaluator entrypoint, eval/wall
-  budgets, output_names, any study-specific config that today lives in
-  `config.yaml` / `PROBLEM_STATEMENT.md` and is easy to get subtly wrong.
-
-**Why:** it **offloads the strategizer** (which currently has to infer schema,
-reconcile config vs problem statement, and self-review well-posedness) and hands
-it a higher-quality signal. Net effect: fewer SCIENCE_DRIFT / MILESTONE_BLOCK
-diagnostics traceable to an under-specified brief, and a fixed ledger schema from
-turn one.
-
-**To design when picked up:** is it a graph node (entry before strategizer) or a
-runtime pre-pass like the current problem-statement review? How interactive with
-the human (blocking Q&A vs one-shot)? Does it *write* `config.yaml` + an enriched
-`PROBLEM_STATEMENT.md` as its output artifacts (so the brief is itself a
-reproducible deliverable)? Relationship to the existing
-`_review_problem_statement` advisory pass (replace vs wrap).
-
----
-
-## 4. Single Jupyter-notebook deliverable
-**Status:** RESOLVED — this IS the live system: `pipeline.ipynb` is the sole deliverable,
-the gate executes it via nbclient (`notebook_exec.run_deliverable` / `_reproduction_gate`)
-with the zero-new-evals + `REPRODUCED:` asserts, no `solution.md`/`pipeline.py`, and the
-agent authors the cells through the structured tools (the CRUD set completed in `db288d5b`).
-Every implication below was implemented. Original write-up kept for the record.
-**Status (orig):** deferred. Raised 2026-06-15.
-
-Merge the two deliverables (`solution.md` prose + `pipeline.py` executable) into
-**one `.ipynb`** — markdown cells for the writeup, code cells for the lazy
-create→run→analyze pipeline. One human-readable, runnable artifact.
-
-**Implications to design when picked up:**
-- The reproduction gate (`Node._reproduction_gate`) would execute the
-  *notebook* lazily (e.g. `jupyter nbconvert --execute` / `nbclient`) instead of
-  `python pipeline.py`, keeping the same asserts: exit clean + **zero new oracle
-  evals** + headline self-assert (now a pre-critic gate, timeout = max(10% of
-  the time budget, 180s)).
-- `WriteDeliverable` accepts `.ipynb`; `_missing_deliverables` requires it.
-- The runtime currently auto-writes `solution.md` from the `Done()` summary —
-  that prose would instead become the notebook's leading markdown cells (decide
-  who authors it: agent vs runtime injection).
-- Keep the lazy + cache-or-load contract intact (notebook re-run = reproduction,
-  no sims, no heavy refit).
-
----
-
-## 5. KB entry: running a study on SLURM
-**Status:** RESOLVED 2026-06-23 — `entries/0010-running-a-study-on-slurm.md`.
-Raised 2026-06-15.
-
-KB entry added: `Pipeline.run(mode="slurm", cluster=SlurmCluster(...))`, per-step
-`SlurmResources`, `parallel=True` → `cluster_array` striping, canonical-store
-FileLock making concurrent array writes + lazy FINISHED-skip resume safe, and the
-key boundary — the deliverable pipeline runs on SLURM, the agent graph stays
-LOCAL (no slurm path in agent_runtime/run.py). Lightweight by request; deeper
-how-to docs deferred (none requested).
-
----
-
-## 6. Detect a delegation that is running but making zero ledger progress
-**Status:** raised 2026-06-16. Cross-links #1 (reconcile) and #2 (steering levers).
-
-A delegation can be **alive but unproductive**: the worker is still `Working`,
-wall-time is climbing, but it is stamping **zero new rows** into the canonical
-ledger. Today the strategizer cannot tell "slow but progressing" from "stuck /
-spinning," so it polls, then either waits until the time budget dies or cancels
-on impatience (feeding #1). Primary evidence (run 20260616T004655): the
-implementer (D004) was alive ~228s+ yet produced **0 ledgered evals**; the run
-ended UNGATED with an empty ledger.
-
-**The signal:** status == Working AND wall-time since last ledger row > threshold
-AND ledger delta == 0. That is detectable from the same `RunStateSummary` /
-delegation timing the runtime already tracks. Surface it to the strategizer as a
-distinct notice ("D004 has run 200s with no ledger progress") rather than letting
-it guess from poll counts.
-
-**Then it needs a lever, not just a notice** — which is exactly the typed
-delegator decisions in #2 (`grant_budget` if it's genuinely close, `reroute` or
-`abort` if it's stuck). Without #2 the only response is still the blunt
-`CancelDelegation`. So #6 is the *detector*; #2 supplies the *actuators*; #1
-ensures whatever the worker already stamped is reconciled rather than orphaned.
-
-**Open question:** the threshold — fixed seconds, a fraction of the time budget,
-or adaptive to the worker's own first-row latency? A cheap robust default: warn
-once past max(120s, 15% of budget) with no row, escalate past 2× that.
-
----
-
-## 7. Remove the literature hand-listed tool docs (BF-13a)
-**Status:** raised 2026-06-21. Follow-through on BF-13(b) (commit 6b9c8dd8).
-
-`literature.py` still hand-lists every tool in `<corpus_tools>`/`<discovery_tools>`
-with bare signatures; the implementer's `<role>` "Available tools" list does the
-same. BF-13(b) made the auto-generated `<tools>` catalog the authoritative,
-MCP-qualified source, so these hand-lists are now a second source that can drift
-from it.
-
-**Why not done yet:** the corpus closures (`CorpusAdd`/`CorpusSearch`/
-`CorpusGetPaper`/`CorpusList`) are docstring-less lambdas in
-`build_closure_tools`, and `render_tool_catalog` falls back to "(no description)"
-for them. Deleting the hand-list before the closures carry real docstrings would
-DEGRADE the catalog (lose the BM25-weighting note, the "ERROR if no full-text"
-semantics, the acquisition workflow). The implementer list also mixes native
-tools (Read/Bash — bare-correct) with closures (qualified) — a blanket delete
-would lose the native-tool descriptions too.
-
-**The principled fix:** give each corpus/discovery closure a real docstring (one
-line is enough — the SDK already reads `fn.__doc__` for its tool schema), then
-delete the hand-lists and let the qualified auto-catalog be the single source.
-Test: assert the literature catalog (qualified) carries a non-"(no description)"
-entry for every corpus tool, and that no bare hand-list signature survives.
-
-## 8. Localize literature str/int error (lit-bug #3)
-**Status:** RESOLVED 2026-06-22 (commit 64a8230a) — localized via the
-string-`max_results` repro in run 20260622T165943; `arxiv_search_papers` /
-`arxiv_list_papers` now coerce `max_results` to int. Original write-up below.
-**Status (orig):** raised 2026-06-21. Observed in a wet literature run (prior session),
-exact site not captured.
-
-A wet literature delegation hit a `str`/`int` type error twice ("str-int error
-×2"), separate from the dense-ranking crash (fixed 33d8d3f4) and the name
-mismatch (fixed 6b9c8dd8). No traceback was captured this session — the wet test
-was killed to save resources before it streamed output.
-
-**Likely neighbourhood:** the citation-count / BM25 weighting path
-(`log10(c+1)`), where a `citationCount` arriving as a string from S2/OpenAlex
-JSON would break arithmetic; `build_closure_tools` already guards
-`int(citation_count or 0)` on `CorpusAdd`, so the unguarded site is probably in
-`CorpusRank` or the corpus's internal ranking, or in an OpenAlex/S2 field read.
-**Needs a real wet run with the traceback** (`uv run pytest
-tests/test_literature_wet.py -s --no-cov`) to localize before fixing —
-do not guess-patch without the stack.
-
-## 9. Orchestrator-owned live validator for HypothesisUpdate
-**Status:** IMPLEMENTED (advisory) 2026-06-22 — the #9 live verdict validator
-(`verdict_validator.py` + `nodes/critic_gate.py` `_run_verdict_validator`)
-validates each closing verdict's substance against the charter at the
-HypothesisUpdate boundary, ADVISES (never blocks), escalates on repeat flags.
-Runs on the **critic's** model (one refereeing standard, decoupled from the
-strategizer it judges). Given prior-rulings **MEMORY** 2026-06-23 (commit
-88856cb9) so a borderline verdict can't oscillate between calls — see #15.
-**§4 — user owns it.** The DEEPER architectural separation below (dedicated
-verdict-adjudicator node / freeze the criterion at proposal time / binding
-`LinkFalsificationAttempt`) remains OPEN — the advisory validator is one
-realization, not the full separation.
-
-Today the strategizer carries a triple burden for every hypothesis: it (1) states
-the hypothesis + falsification criterion, (2) frames the falsification attempt,
-and (3) judges the attempt's results — proposer, experiment-designer, and judge in
-one agent. The only live guard on `HypothesisUpdate` is RULE-based (the Popperian
-charter's `ERROR_RETURN`: cannot mark SUPPORTED without a falsification attempt on
-record; cite only completed delegations). It checks *form*, not *substance*.
-
-**Idea:** an **orchestrator-owned LLM** that validates each `HypothesisUpdate`
-call LIVE at the tool boundary (where `ERROR_RETURN` fires now), independent of the
-strategizer's own reasoning — offloading the judging role. It would check the
-substance a rule cannot:
-- the falsification attempt actually PROBES the registered prediction (severity —
-  could it have refuted?);
-- the verdict (SUPPORTED / FALSIFIED / INCONCLUSIVE) FOLLOWS from the cited
-  evidence/ledger numbers;
-- prediction and falsification_criterion test the SAME claim (catches goalpost-moving).
-
-**Evidence motivating it (n=5 audit, `_audit_preserved/n5_20260621_222224`):**
-- run03 strategizer moved its own goalposts — registered prediction ("reach f ≤ −1.0")
-  ≠ falsification_criterion (relative budget test); the critic flagged it Charter §4.
-  The strategizer self-reported the CONSISTENCY contradiction in its retrospective.
-- `LinkFalsificationAttempt` was used only 2× across 6 runs — falsification linkage
-  is effectively advisory/bypassed (a run02 critic: "the flag is advisory, not binding").
-- verdicts are non-reproducible: the same H2 question (multi-start vs BO) came back
-  FALSIFIED (r1, r2) and SUPPORTED (r4, r5) depending on the run's self-chosen budget.
-
-**Open design questions (resume-cold):**
-- BLOCK vs ADVISE: does it reject the update (hard, like `ERROR_RETURN`) or annotate
-  it for the critic (soft)? Budgets are soft elsewhere — lean advise-then-escalate.
-- Relation to the critic: the critic judges the DELIVERABLE at gate-time; this judges
-  HYPOTHESIS verdicts LIVE as asserted — complementary, not a replacement.
-- Cost/latency: one extra LLM call per HypothesisUpdate; pick a model tier; cache.
-- Where it lives: `science_monitor.py` / the HypothesisUpdate tool wrapper — the
-  Popperian-rules surface the user owns. Do NOT implement without the user's design call.
-- Relates to the deferred "separate the falsification-judge from the hypothesis-author"
-  options (freeze criterion at proposal time; dedicated verdict-adjudicator node;
-  binding LinkFalsificationAttempt + INCONCLUSIVE as valid closure).
-
-**Done-when (KPI):** verdict reproducibility across same-problem runs improves;
-goalpost-moves caught LIVE (not only post-hoc by the critic); the falsification-attempt
-linkage becomes load-bearing rather than advisory.
+**When it stops being latent:** the first graph with a delegating node that is
+not the entry — including any ablation arm that tests a deeper topology. That
+arm would silently lose its epistemic monitoring.
 
 ## 10. Strategizer delegates the optimization as ONE monolithic, un-budgeted campaign
 **Status:** PARTIALLY MITIGATED 2026-06-22 (commit pending) — added a "scope each
@@ -357,208 +116,6 @@ the implementer a wall-clock-aware budget that caps the campaign and returns par
 results; (c) cheaper default surrogate/acquisition (the slowness is GP-refit cost); (d)
 raise the 3600s watchdog. Do NOT pick without the user — budget is soft by charter.
 
-## 11. Orphaned background process survives the watchdog kill (resource leak)
-**Status:** RESOLVED 2026-06-22 (commit 5199b593) — run.py is now a process-group
-leader (`os.setpgrp`) and the watchdog reaps the group (`reap_process_group` in
-`watchdog_cleanup.py`) before `os._exit`. Residual: a child that `setsid`'s escapes
-the group (documented). Original write-up below.
-
-The implementer backgrounds its BO campaign as a detached process
-(`uv run python …/optimize_1000eval.py &`-style). When the watchdog force-exits
-run.py via os._exit(2), that detached child is NOT reaped — it kept running at ~230%
-CPU after the run died (had to be killed manually). Backgrounded children outlive the
-run. **Fix direction:** the watchdog should kill its whole process group (or the
-implementer's Bash backgrounding should be tracked and reaped on close); alternatively
-discourage detaching the campaign. No reasonable reading justifies a live orphan after
-a kill.
-
-## 12. Watchdog kill loses the strategizer's retrospective (blinds §1 Step 1)
-**Status:** RESOLVED 2026-06-22 (commit 5199b593) — the watchdog now appends a synthetic
-`role="watchdog"` post-mortem (`write_watchdog_retrospective`) with the last delegation
-state + diagnostics + a transcript pointer, so §1 Step 1 gets a breadcrumb. (A real
-first-person strategizer retro on watchdog remains impossible — the agent is killed
-mid-flight.) Original write-up below.
-
-Retrospectives are written at clean run close; the watchdog's os._exit kills the
-strategizer BEFORE it writes one. So EVERY watchdog-killed run has ZERO first-person
-signal from the orchestrator — the very runs we most need to diagnose (its DECISION/
-FRICTION on delegation, budgeting, gating). Observed: run 20260622T165943 has
-retrospectives only for D001/D004, none for the strategizer, so its campaign-
-decomposition reasoning had to be reconstructed from the transcript (§1 Step 4) instead
-of read directly (Step 1). **Fix direction:** have the watchdog handler flush a
-best-effort strategizer retrospective (or a partial "interrupted" one) before os._exit.
-
----
-
-## 13. Per-cell notebook debugger (agent can't see WHICH cell failed reproduction)
-**Status:** RESOLVED 2026-06-23 — `RunPipelineCell` closure (`nodes/tools/routing.py`)
-+ `diagnose_notebook` (`notebook_exec.py`); 5 headless tests + live closure smoke.
-Original spec below. Surfaced by run 20260623T002417 (FAILED).
-
-**Problem.** `CheckDeliverable` runs `pipeline.ipynb` top-to-bottom via nbclient and
-returns a BINARY pass/fail with a high-level message. When reproduction fails the
-strategizer cannot see *which* cell raised, its traceback, or its stdout/state — so it
-iterates blindly. Primary evidence: run 20260623T002417 burned ~10 gate attempts
-(`REPRO_GATE_BOUNCE`×6 → `REPRO_GATE_FAILED`) and FAILED; the strategizer's DONE
-retrospective BLOCKED field reads verbatim: *"No tool to execute and debug pipeline.ipynb
-cell-by-cell in isolation… the CheckDeliverable gate was binary fail/pass with high-level
-error messages only. I needed a cell-level executor (run cell 'analysis' and return
-stdout/stderr/state) to pinpoint whether the failure was in data loading, ledger path
-resolution, output formatting, or the gate's expectations."* It never diagnosed that its
-own pillar cells were stubs (`print('doe')`, …), so the REJECT was unavoidable.
-
-**Why this is parsimonious (not overfit).** "An agent must be able to observe the failure
-it is asked to fix" is a general observability principle — a philosopher nods. The binary
-gate throws away per-cell information nbclient ALREADY produces. This is not a workaround
-for one run; it is the diagnostic counterpart the repro gate has always lacked.
-
-**Proposed tool (DRY — reuse the gate's runner).** Add a strategizer closure, e.g.
-`RunPipelineCell(name: str | None = None)`, registered alongside `ShowNotebook` /
-`RunScratch` / `CheckDeliverable` (`nodes/tools/routing.py`), backed by the SAME nbclient
-execution `notebook_exec.py` already uses for the gate:
-- `name` given → execute `pipeline.ipynb` top-to-bottom up to AND INCLUDING the cell with
-  that `metadata.name` (fresh kernel, the gate's environment + canonical store), return that
-  cell's stdout / stderr / traceback + an `errored` flag. (Top-to-bottom because cells share
-  state — imports/vars from earlier cells; "run cell N in isolation" would spuriously fail.)
-- `name` omitted → execute the whole notebook and return a PER-CELL trace (each cell:
-  ok | errored, the first failing cell's name + traceback, stdout tail) — the granular
-  version of `CheckDeliverable`.
-
-**Boundary / safety.** Read-only diagnostic: run in the same sandboxed, zero-new-eval mode
-the gate uses (must NOT mutate the canonical ledger — a notebook that calls
-`get_evaluator()` against a full store is lazy/no-op; guard the same way the gate does).
-Pure diagnostic — does not change the gate's accept/reject criteria (not §4 critic
-substance). Likely the minimal change is to expose what nbclient already captures, so much
-of the work is surfacing, not new execution.
-
-**Done-when (KPI).** A subsequent run that hits a repro failure resolves it WITHOUT
-exhausting gate attempts — i.e. `REPRO_GATE_BOUNCE` count on a recovered run drops to ≤2
-(vs 6 in 20260623T002417), or the strategizer's retrospective no longer lists the
-cell-level executor as a BLOCKED gap. Headless: a test that a deliberately-broken cell is
-pinpointed by name + traceback (not a binary fail).
-
-**Reuse.** `notebook_exec.py` (nbclient runner behind `CheckDeliverable`), the notebook
-closures in `nodes/tools/routing.py` (`ShowNotebook`/`RunScratch` registration pattern),
-`metadata.name` cell addressing (already the notebook CRUD convention).
-
----
-
-## 14. Watchdog reap (#11) misses detached campaign processes (real CPU leak)
-**Status:** RESOLVED 2026-06-23 — recursive reap via per-delegation PID
-self-registration at the oracle entry (`governor_pids.jsonl`) +
-`watchdog_cleanup.reap_governor_pids`, which kills each campaign's process tree
-(incl. detached/new-session escapees the `killpg` missed). Wired into
-`studies/.../run.py` `_watchdog` and the memory watcher; see FEATURES.md §E.
-Validated on the resource-governance wet run (zero orphans at close).
-Original write-up kept for the record.
-Discovered live during audit run 20260623T015907.
-HIGH — leaks a full CPU core per watchdog-killed run; orphans accumulate for days.
-
-**Problem.** #11's reap (`watchdog_cleanup.reap_process_group` -> `os.killpg(pgid)`)
-kills only run.py's process GROUP. The implementer launches its optimization
-campaign as a DETACHED background process (`/tmp/campaign_v2.py`) with poll-loop
-bashes waiting on `campaign_report.json` -- these run in a NEW session, so they
-escape the group kill (the residual risk the code comments already flagged) and
-outlive the watchdog `os._exit(2)`.
-
-**Primary evidence (audit run 20260623T015907, watchdog_killed at 60min).** Minutes
-after the watchdog fired, `ps` showed PID 47561 `python3 /tmp/campaign_v2.py` at
-125% CPU / 42min CPU still running, plus two `until [ -f .../D003/
-campaign_report.json ]` poll bashes (63962, 59331), AND an ancient zombie from a
-2-day-old run (26085, "Waiting for 975 evaluations", polling run 20260621T155717).
-The leak accumulates across runs/days. Had to `kill` them by hand to free the CPU
-before the next run.
-
-**Fix direction (touches the watchdog -- needs approval).** At reap time the
-campaign's parent chain is still intact (it reparents to launchd only AFTER run.py
-exits), so a recursive process-TREE walk by PPID at reap time catches it where the
-process-group kill does not. Options: (a) dependency-free recursive `pgrep -P`
-BFS from os.getpid(), SIGTERM each (recommended); (b) `psutil.children(recursive=True)`
-(adds dep); (c) a spawned-PID registry. Keep the walk BEFORE `os._exit` (chain intact).
-
-**Done-when.** After a watchdog kill, `ps aux | grep -E 'campaign|campaign_report'`
-returns zero leftovers. Headless: extend `test_reap_kills_a_detached_background_process`
-to a GRANDCHILD in a new session that the group kill misses (the current test's
-child is a session leader pid==pgid, so the group kill happens to catch it).
-
-**Reuse.** `watchdog_cleanup.reap_process_group`, `studies/agentic_black_box_3d/run.py`
-`_watchdog`, `tests/test_watchdog_cleanup.py`.
-
----
-
-## 15. Verdict oscillation on borderline cases — finding + resolved trigger
-**Status:** RESOLVED 2026-06-23. Root cause FIXED (commit 88856cb9, the #9
-validator memory); the §4 trigger question was RESOLVED **with no Charter change**
-(see "RESOLVED" below). Captured here because the run artifacts that surfaced it
-are ephemeral (wiped on the next run).
-
-**Finding (two wet runs, bb3d).** Haiku run `20260623T194849` GATED but took 4 gate
-attempts; H1/H2 each oscillated FALSIFIED↔INCONCLUSIVE 4-5× (`VERDICT_SUBSTANCE_FLAG`=4).
-The live verdict validator was **stateless** — it re-judged each verdict from
-scratch, with no view of its own prior rulings, so on a *borderline* result it
-flipped. The Sonnet-strategizer A/B `20260623T212346` GATED in 2 attempts with
-**0 oscillation** (best_f ≈ −1.000, the true optimum; cheaper: $1.34 vs $1.61).
-
-**Crucial nuance (don't over-read the A/B).** The validator ran on **Haiku in BOTH
-runs** (it reuses the CRITIC adapter, telemetry-confirmed: `verdict_validation |
-model=claude-haiku-4-5`), so validator model strength was a *constant*. The Sonnet
-win came from the **strategizer** writing grounded, calibrated predictions
-(`f ≤ −0.998` vs the known prior-best −0.9958) that produced CLEAR met→SUPPORTED
-outcomes — it avoided the borderline trigger UPSTREAM, it did not make the referee
-more consistent. So: **oscillation is triggered by borderline verdicts**, not by a
-weak referee per se.
-
-**What was fixed.** #9 validator now gets its prior rulings on the same hypothesis
-(ledger `status_log`) + a justify-any-reversal guard → can't silently flip. This is
-INSURANCE: on harder problems (supercompressible), a severe test that misses a
-*well-calibrated* prediction by a hair is genuine knife-edge science, not a
-calibration artifact — so the borderline case WILL recur regardless of model
-strength, and the stateless defect would have bitten again.
-
-**RESOLVED (§4, user's call 2026-06-23) — NO Charter change.** The question was
-whether a near-miss on a severe test is FALSIFIED or INCONCLUSIVE. Conclusion: the
-existing Charter §3 already answers it by the correct variable — **adequacy, not
-margin** — so a new "boundary" rule would be overfit AND a claim-protecting
-loophole:
-- near-miss from an **inadequate/under-budgeted** search → INCONCLUSIVE via the
-  existing §3 confound/Duhem–Quine clause (did the hypothesis fail, or did the
-  optimizer just not get there?);
-- near-miss from a **genuinely adequate** test → FALSIFIED, and that is correct
-  (the registered prediction was simply false; declining it would "protect a
-  favoured claim", which §3/§4 forbid).
-A blanket "near-miss → INCONCLUSIVE" collapses those two and lets an agent dodge a
-real refutation — a step away from Popper, not a refinement. The campaign
-delegations' "zone-based" logic is the loophole, not the intent. If a threshold
-turns out to be a bad operationalization, §4 already prescribes the fix: revise the
-prediction explicitly and re-test — don't reinterpret the old result. The
-oscillation itself is handled by the validator-memory fix + calibration, not by
-softening §3.
-
-**Minor tool friction (1 occurrence, note-only).** `EditPipelineCell` rejected a
-full-field edit lacking `expected_rev` (an optimistic-concurrency guard) → one
-`ERROR_RETURN`; the agent had to `ShowNotebook` first to get the rev. Watch for
-recurrence before treating as a fix.
-
----
-
-## 16. ABAQUS subprocess can't import workspace modules (PYTHONPATH) — abaqus2py-owned
-
-**Status: open — recommendation only (not an f3dasm fix).** During run
-`20260624T021359`, all 51 ABAQUS runs of the first D003 attempt failed with
-`ImportError: No module named 'supercompressible_lin_buckle_param'`: the workspace
-dir was not on `PYTHONPATH` when the ABAQUS subprocess ran (it worked in validation
-only because a validate script did `sys.path.insert(0, WORKSPACE)`). This also
-contaminated the canonical store with 51 NEW-status rows that had to be cleared
-before D004 (meta_errors.md Bug 1).
-
-**Owner: the external `abaqus2py` package**, not f3dasm — `F3DASMAbaqusSimulator`
-(which generates the `preprocess.py` wrapper and launches ABAQUS) is imported from
-`abaqus2py` (`studies/fragile_becomes_supercompressible/main.py`), which is not in
-this repo. **Recommended fix (in abaqus2py):** inject the workspace dir into the
-ABAQUS subprocess environment (`PYTHONPATH`) or emit `sys.path.insert(0, WORKSPACE)`
-into the generated `preprocess.py`, so worker-authored param modules resolve without
-relying on the parent process's cwd/sys.path.
-
 ## 17. Closure decoupled from success-criteria + budget; budget-severity model — §4
 
 **Status: open, §4 user-owned. Partially addressed.** Run `20260624T021359` closed
@@ -586,31 +143,6 @@ on it is unresolved. The benchmark `PROBLEM_STATEMENT.md` framing (objective exc
 strain; Riks demoted to a separate "Validation requirement"; criterion #4 buried)
 contributed and is owned by the user (handled in the benchmark repo, not f3dasm —
 robustness must not depend on a perfectly-framed problem statement).
-
-## 18. Critic should flag an infeasible-extremum headline on a constrained study — §4
-
-**Status: open, §4 user-owned.** Commit `6494489b` removed the runtime
-`REPRODUCED` extremum machine-check (it forced constrained studies to headline
-their infeasible unconstrained extremum) and shifted headline grounding onto the
-critic. But the critic's HEADLINE PROVENANCE mandate (`agents/critic.py:31-41`)
-only verifies the headline value is **real** (traces to a ledger row) — it does
-NOT verify the headline is **feasible**. So nothing currently flags the specific
-failure of run 20260624T021359: a headline equal to the unconstrained extremum
-(λ_cr_nd = 0.90709, a NON-coilable design) on a study whose objective is
-`maximize λ_cr_nd subject to coilable = True`.
-
-**Proposed (one clause, §4):** add to the critic's headline check that, when the
-study declares a feasibility constraint (a constraint output column), the headline
-must be the best **feasible** design; a headline equal to an infeasible extremum
-is a MAJOR finding. The constraint identity could come from
-run_config (an explicit constraint column) or be inferred from the deliverable's
-stated objective. Deferred pending the user's call on how to represent the
-constraint to the critic (it is the epistemic-contract owner's decision).
-
-**Why not the runtime instead:** the runtime can't judge which ledger column is
-the constraint or what counts as feasible generically without more config; the
-critic already reads the deliverable's stated objective, so it is the better
-place to judge feasibility-of-headline. See `6494489b` and `agents/critic.py`.
 
 ## 19. Scientific adequacy is enforced as vibes while reproduction is enforced hard — §4
 
@@ -685,7 +217,92 @@ as a communicated scientific claim.
 
 ---
 
-## #22 — Stall watchdog: liveness = "file written", not "progress made" (backstop defect)
+## 18. Critic should flag an infeasible-extremum headline on a constrained study — §4
+
+**Status: open, §4 user-owned.** Commit `6494489b` removed the runtime
+`REPRODUCED` extremum machine-check (it forced constrained studies to headline
+their infeasible unconstrained extremum) and shifted headline grounding onto the
+critic. But the critic's HEADLINE PROVENANCE mandate (`agents/critic.py:31-41`)
+only verifies the headline value is **real** (traces to a ledger row) — it does
+NOT verify the headline is **feasible**. So nothing currently flags the specific
+failure of run 20260624T021359: a headline equal to the unconstrained extremum
+(λ_cr_nd = 0.90709, a NON-coilable design) on a study whose objective is
+`maximize λ_cr_nd subject to coilable = True`.
+
+**Proposed (one clause, §4):** add to the critic's headline check that, when the
+study declares a feasibility constraint (a constraint output column), the headline
+must be the best **feasible** design; a headline equal to an infeasible extremum
+is a MAJOR finding. The constraint identity could come from
+run_config (an explicit constraint column) or be inferred from the deliverable's
+stated objective. Deferred pending the user's call on how to represent the
+constraint to the critic (it is the epistemic-contract owner's decision).
+
+**Why not the runtime instead:** the runtime can't judge which ledger column is
+the constraint or what counts as feasible generically without more config; the
+critic already reads the deliverable's stated objective, so it is the better
+place to judge feasibility-of-headline. See `6494489b` and `agents/critic.py`.
+
+## 1. Reconcile cancelled-but-completed delegations
+**Status:** partially mitigated 2026-06-15 (cancel hardened + eval-count now
+from ledger); the core inconsistency remains. **Highest priority** — it is the
+recurring root cause of UNGATED / hypotheses-left-OPEN outcomes across runs.
+
+`CancelDelegation` detaches a worker and tells the strategizer "result will be
+ignored," but the **detached worker keeps running**, finishes, stamps real evals
+into the canonical ledger, and writes its report to disk. The run then holds two
+contradictory truths: the official record (delegation_log / registry / what the
+strategizer is told) says *ignored / not executed*, while the ledger + on-disk
+report say *done*. Primary evidence (run 20260615T192313): D005/D006 were
+cancelled-detached, absent from delegation_log, yet have 145/32 ledgered evals +
+`D006/REPORT_SUMMARY.txt` ("H1 SUPPORTED"). The strategizer then claimed "the
+falsification was not executed" (per the runtime's "ignore it") while the critic
+read the disk report — a **non-converging gate loop** rooted in inconsistent
+state, NOT agent hallucination or prompt friction. Re-confirmed 2026-06-16: the
+8d e2e left H1/H2 OPEN citing "D004 cancelled post-completion."
+
+**Done so far:** (a) `evals_used` now counts from the ledger so those evals
+aren't dropped from the run total (`agent_runtime.py`); (b) cancel is hardened
+against impatience — two-shot for delegations already producing ledgered evals;
+docstring + poll/premature nudges reframed (`routing.py`).
+
+**Still to design:** when a detached worker completes with stamped ledger rows,
+**reconcile** it — record its completion in the delegation_log (so the
+strategizer sees it finished, not "ignored"), or stop the worker BEFORE it
+stamps. Pick one source of truth so strategizer and critic never see
+contradictory delegation state. Related: the stuck-delegation detection in #6.
+
+---
+
+## 6. Detect a delegation that is running but making zero ledger progress
+**Status:** raised 2026-06-16. Cross-links #1 (reconcile) and #2 (steering levers).
+
+A delegation can be **alive but unproductive**: the worker is still `Working`,
+wall-time is climbing, but it is stamping **zero new rows** into the canonical
+ledger. Today the strategizer cannot tell "slow but progressing" from "stuck /
+spinning," so it polls, then either waits until the time budget dies or cancels
+on impatience (feeding #1). Primary evidence (run 20260616T004655): the
+implementer (D004) was alive ~228s+ yet produced **0 ledgered evals**; the run
+ended UNGATED with an empty ledger.
+
+**The signal:** status == Working AND wall-time since last ledger row > threshold
+AND ledger delta == 0. That is detectable from the same `RunStateSummary` /
+delegation timing the runtime already tracks. Surface it to the strategizer as a
+distinct notice ("D004 has run 200s with no ledger progress") rather than letting
+it guess from poll counts.
+
+**Then it needs a lever, not just a notice** — which is exactly the typed
+delegator decisions in #2 (`grant_budget` if it's genuinely close, `reroute` or
+`abort` if it's stuck). Without #2 the only response is still the blunt
+`CancelDelegation`. So #6 is the *detector*; #2 supplies the *actuators*; #1
+ensures whatever the worker already stamped is reconciled rather than orphaned.
+
+**Open question:** the threshold — fixed seconds, a fraction of the time budget,
+or adaptive to the worker's own first-row latency? A cheap robust default: warn
+once past max(120s, 15% of budget) with no row, escalate past 2× that.
+
+---
+
+## 22. Stall watchdog: liveness = "file written", not "progress made" (backstop defect)
 
 **Severity:** medium (a backstop, not a primary control — the real cure for the
 hang it failed to bound is the per-call validator timeout, shipped in `9d58b2a3`).
@@ -717,6 +334,135 @@ delegation_log completed count). Validate headless before trusting it.
 exposed this can no longer run 89 min — it aborts in ~2 min. The watchdog defect only
 matters for a *different*, not-yet-observed hang that the per-call timeouts don't cover.
 Fix it when such a case appears, or as deliberate hardening — not as symptom-chasing.
+
+---
+
+## 16. ABAQUS subprocess can't import workspace modules (PYTHONPATH) — abaqus2py-owned
+
+**Status: open — recommendation only (not an f3dasm fix).** During run
+`20260624T021359`, all 51 ABAQUS runs of the first D003 attempt failed with
+`ImportError: No module named 'supercompressible_lin_buckle_param'`: the workspace
+dir was not on `PYTHONPATH` when the ABAQUS subprocess ran (it worked in validation
+only because a validate script did `sys.path.insert(0, WORKSPACE)`). This also
+contaminated the canonical store with 51 NEW-status rows that had to be cleared
+before D004 (meta_errors.md Bug 1).
+
+**Owner: the external `abaqus2py` package**, not f3dasm — `F3DASMAbaqusSimulator`
+(which generates the `preprocess.py` wrapper and launches ABAQUS) is imported from
+`abaqus2py` (`studies/fragile_becomes_supercompressible/main.py`), which is not in
+this repo. **Recommended fix (in abaqus2py):** inject the workspace dir into the
+ABAQUS subprocess environment (`PYTHONPATH`) or emit `sys.path.insert(0, WORKSPACE)`
+into the generated `preprocess.py`, so worker-authored param modules resolve without
+relying on the parent process's cwd/sys.path.
+
+## 41. The watchdog subsystem has no caller inside this repo
+
+**Status:** open, raised 2026-09-21 while fixing the non-compliant-close
+retrospective loss (`973b70c`). Verified directly against every function in
+`infra/watchdog_cleanup.py`, not inferred.
+
+**What is missing.** These all exist, are tested, and have **zero production
+callers anywhere in the package**:
+
+| Function | What it is for |
+|---|---|
+| `write_watchdog_retrospective` | the #12 synthetic post-mortem on a hard kill |
+| `reap_process_group` | kill leftover background jobs the run spawned |
+| `read_governor_pids` / `check_memory_and_kill` | the #14 recursive tree kill + memory cap |
+| `seconds_since_last_activity` | the §22 stall signal |
+
+`internal/FEATURES.md` points at `studies/.../run.py` as the caller — meaning a
+study's own runner. That is true of the out-of-repo campaign runners in
+`f3dasm-agentic-benchmarks`, but **none of the 8 local `studies/*/run.py` wire
+any of it**. So locally: a watchdog kill produces no retrospective, a detached
+campaign is never reaped, and a hung run is never force-exited.
+
+**Why this is not just "wire one function".** `973b70c` closed every
+*in-process* close (a normal close and a crash inside `AgenticRun`) because
+those paths run adda's own code. A watchdog kill by definition does not — the
+process is gone. Protecting it means something outside the graph owning a
+deadline and calling in, which is a capability this package does not currently
+have at all. That is a design decision about where the watchdog lives (the
+package? the study's runner? a supervisor?), not a missing call site.
+
+**Consequence if left as is.** It is not a silent correctness bug — runs still
+work. It is an *observability* gap concentrated exactly where CLAUDE.md §1 Step 1
+says the highest-signal evidence lives, and it makes three FEATURES.md entries
+read as more complete than they are (#12's is now corrected; #14's and §22's
+descriptions still describe behaviour no local run gets).
+
+**Smallest honest first step:** decide whether adda ships a watchdog at all, or
+whether it is deliberately the caller's job. If the latter, say so in
+FEATURES.md and the docs and stop describing the subsystem as a live feature; if
+the former, the deadline owner has to live above `AgenticRun.execute()`.
+
+## 2. Richer delegator↔worker comms — typed blocker/escalation
+**Status:** deferred (prefer benchmarking the current system first). Design explored 2026-06-15.
+
+**Today:** the protocol is near single-shot — `Delegate(task, expected_report, …)`
+down, the worker's structured report up, and exactly **one blocking
+`FollowUp(question)` clarification** mid-task (≤1 per delegation; routes to the
+delegating agent — or the human for the entry node). When no operator/TTY is
+present FollowUp now returns an autonomous-proceed notice instead of blocking
+(headless `input()` EOFError fixed 2026-06-16). The delegator can only
+`CancelDelegation` a running worker — it **cannot steer** one.
+
+**Principle:** a *blocker* differs from a *clarification* on **who must act** —
+a clarification needs information back; a blocker needs the delegator to take an
+**action** the worker can't take itself. So the fix is not "let the worker ask
+more," it's "give the delegator the right levers." The real levers a blocked
+worker needs: **provide** a missing input/capability, **grant** more eval
+budget, **revise** scope, **reroute** to another specialist, **abort** cleanly.
+
+**Chosen direction (Approach A + C's logging):** a worker tool `Escalate(blocker,
+kind)` distinct from `FollowUp` — `kind ∈ {missing_input, over_budget,
+capability_gap, scope_conflict, unrecoverable}` — that *blocks* (reuse the
+FollowUp wait/Reply plumbing) and the delegator answers with a **typed
+decision** (`provide / grant_budget(n) / revise_scope / reroute(target) /
+abort`) that the runtime *applies* (budget bump, clean abort, re-delegation).
+Log the escalation + its resolution to the delegation log (auditable, fits the
+science-integrity ethos). These same `abort`/`grant_budget`/`reroute` levers are
+what the strategizer needs to act on the stuck-delegation signal in #6.
+
+**Open question to settle first:** which of the 5 delegator actions earn their
+place vs YAGNI?
+
+---
+
+## 3. ProblemDefinerAgent — a pre-strategizer intake stage
+**Status:** deferred. Raised 2026-06-16.
+
+A new agent that sits **between the human and the strategizer**, running once at
+the very start of a run, before the strategizer takes over. Its job is to turn a
+raw human problem statement into a high-signal, airtight brief so the strategizer
+spends its budget on science, not on plumbing/ambiguity.
+
+**Responsibilities:**
+- **(a) Airtight problem statement** — resolve ambiguity, pin the objective
+  (minimise/maximise), constraints, success criterion, and what "the result"
+  is. Today this is partly covered by the advisory `_review_problem_statement`
+  pre-run pass (`agent_runtime.py:680`); the ProblemDefiner would *own* and
+  extend it (interactive with the human, not just advisory).
+- **(b) Tech stack + ExperimentData schema** — decide/confirm the f3dasm Domain
+  (input variables + bounds + types) and the **output columns** of the canonical
+  ExperimentData (objective col name, feasibility cols, units), so the ledger
+  schema is fixed before any delegation runs.
+- **(c) Hard-to-automate plumbing** — the evaluator entrypoint, eval/wall
+  budgets, output_names, any study-specific config that today lives in
+  `config.yaml` / `PROBLEM_STATEMENT.md` and is easy to get subtly wrong.
+
+**Why:** it **offloads the strategizer** (which currently has to infer schema,
+reconcile config vs problem statement, and self-review well-posedness) and hands
+it a higher-quality signal. Net effect: fewer SCIENCE_DRIFT / MILESTONE_BLOCK
+diagnostics traceable to an under-specified brief, and a fixed ledger schema from
+turn one.
+
+**To design when picked up:** is it a graph node (entry before strategizer) or a
+runtime pre-pass like the current problem-statement review? How interactive with
+the human (blocking Q&A vs one-shot)? Does it *write* `config.yaml` + an enriched
+`PROBLEM_STATEMENT.md` as its output artifacts (so the brief is itself a
+reproducible deliverable)? Relationship to the existing
+`_review_problem_statement` advisory pass (replace vs wrap).
 
 ---
 
