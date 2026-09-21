@@ -254,6 +254,46 @@ def _log_memory_kill(run_dir, killed: list[str], cap_bytes: int) -> None:
         pass
 
 
+def _delegation_diagnostics_summary(debug: Path) -> tuple[dict, dict]:
+    """Read ``delegation_log.jsonl`` + ``diagnostics.jsonl`` (disk-only) into the
+    small summaries a synthesized retrospective quotes. Best-effort: a missing
+    or unreadable file just yields an empty summary for that half.
+    """
+    delg: dict = {}
+    dl = debug / "delegation_log.jsonl"
+    if dl.exists():
+        for ln in dl.read_text().splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            delg[r.get("id")] = f"{r.get('to_node')}:{r.get('status')}"
+
+    diag: dict = {}
+    dg = debug / "diagnostics.jsonl"
+    if dg.exists():
+        for ln in dg.read_text().splitlines():
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                r = json.loads(ln)
+            except Exception:
+                continue
+            k = r.get("error_type") or r.get("type") or "other"
+            diag[k] = diag.get(k, 0) + 1
+    return delg, diag
+
+
+def _append_retrospective(debug: Path, rec: dict) -> None:
+    debug.mkdir(parents=True, exist_ok=True)
+    with (debug / "retrospectives.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
 def write_watchdog_retrospective(run_dir, watchdog_seconds: int) -> None:
     """Append a synthetic post-mortem to ``<run_dir>/debug/retrospectives.jsonl``.
 
@@ -262,36 +302,24 @@ def write_watchdog_retrospective(run_dir, watchdog_seconds: int) -> None:
     fabricated first-person text. It surfaces the last delegation state and the
     diagnostics tally (disk-only) plus a pointer to the strategizer transcript, so
     a watchdog-killed run gives §1 Step 1 a breadcrumb instead of silence.
+
+    The watchdog-kill-specific case of :func:`write_fallback_retrospective` —
+    kept as its own entry point (rather than folded into the generic one)
+    because a hard kill really is a distinct event from "the exit interview
+    was never answered", and this module's own tests key off
+    ``role="watchdog"``/``source_id="WATCHDOG"`` specifically.
+
+    Honest status: this function has NO caller anywhere in this package today
+    — it is meant to be invoked by the out-of-repo campaign runner's watchdog
+    (a study's ``run.py``, per BACKLOG #12), but none of the 8 local
+    ``studies/*/run.py`` wire it. A watchdog kill in this repo currently
+    leaves no retrospective at all; only the in-process closes covered by
+    :func:`write_fallback_retrospective` (a normal close or a crash inside
+    ``AgenticRun``) are guaranteed one.
     """
     try:
         debug = Path(run_dir) / "debug"
-        delg: dict = {}
-        dl = debug / "delegation_log.jsonl"
-        if dl.exists():
-            for ln in dl.read_text().splitlines():
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    r = json.loads(ln)
-                except Exception:
-                    continue
-                delg[r.get("id")] = f"{r.get('to_node')}:{r.get('status')}"
-
-        diag: dict = {}
-        dg = debug / "diagnostics.jsonl"
-        if dg.exists():
-            for ln in dg.read_text().splitlines():
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    r = json.loads(ln)
-                except Exception:
-                    continue
-                k = r.get("error_type") or r.get("type") or "other"
-                diag[k] = diag.get(k, 0) + 1
-
+        delg, diag = _delegation_diagnostics_summary(debug)
         text = (
             "## WATCHDOG POST-MORTEM\n"
             f"Run force-killed at {watchdog_seconds}s — no clean close, so the "
@@ -307,8 +335,78 @@ def write_watchdog_retrospective(run_dir, watchdog_seconds: int) -> None:
             "flagged": False,
             "text": text,
         }
-        debug.mkdir(parents=True, exist_ok=True)
-        with (debug / "retrospectives.jsonl").open("a", encoding="utf-8") as f:
-            f.write(json.dumps(rec) + "\n")
+        _append_retrospective(debug, rec)
+    except Exception:
+        pass
+
+
+def write_fallback_retrospective(
+    run_dir, *, role: str, reason: str, skip_if_present: bool = True,
+) -> None:
+    """Synthesize ``role``'s retrospective from disk state when its own
+    post-Done exit-interview reply never arrived.
+
+    THE INVARIANT: a run that closes while the exit interview is still
+    outstanding (UNGATED, FAILED, an external stop) must still end up with a
+    ``role`` entry in ``retrospectives.jsonl`` — capture, don't request. The
+    interview itself (``_FAILED_RETROSPECTIVE`` / ``_EXIT_INTERVIEW`` in
+    ``nodes/tools/routing/feedback.py``) asks for one more cooperative Done()
+    call; nothing enforced that it actually arrived, so a model that answered
+    in prose instead silently lost the record. This is the code-level
+    guarantee that closes that gap, independent of what the model does.
+
+    The record uses the same shape as a real retrospective (ts, source_id,
+    role, flagged, text) so every existing reader of retrospectives.jsonl
+    still works, but is unmistakably NOT the agent's own first-person words:
+    ``source_id`` is prefixed ``SYNTHESIZED:`` and the text opens with a
+    banner saying so. CLAUDE.md §1 Step 1 already warns that a real,
+    first-person retrospective can misdiagnose mechanism — a synthesized one
+    has no first-person account to even misdiagnose FROM, so it must never be
+    read as one.
+
+    ``skip_if_present`` (default True) makes this idempotent: if a REAL
+    (non-synthesized) entry for ``role`` already exists, nothing is written —
+    a compliant close must produce exactly one real entry, never a
+    synthesized duplicate alongside it.
+
+    Best-effort: never raises, on a missing run_dir/debug/ included, so a
+    run's close can never be broken by this.
+    """
+    try:
+        debug = Path(run_dir) / "debug"
+        retro_path = debug / "retrospectives.jsonl"
+        if skip_if_present and retro_path.exists():
+            for ln in retro_path.read_text().splitlines():
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    r = json.loads(ln)
+                except Exception:
+                    continue
+                if r.get("role") == role and not str(
+                        r.get("source_id", "")).startswith("SYNTHESIZED:"):
+                    return  # a real entry already exists — no duplicate
+
+        delg, diag = _delegation_diagnostics_summary(debug)
+        text = (
+            "## SYNTHESIZED RETROSPECTIVE — NOT FIRST-PERSON\n"
+            f"{reason}\n"
+            f"This entry was reconstructed from disk state; it was NOT "
+            f"written by the {role} itself and carries no first-person "
+            "account — do not read it as one (CLAUDE.md §1 Step 1). "
+            f"Reconstruct actual reasoning from debug/transcripts/{role}/ "
+            "if needed.\n"
+            f"Last delegation state: {delg or '(none)'}\n"
+            f"Diagnostics: {diag or '(none)'}"
+        )
+        rec = {
+            "ts": datetime.now(tz=timezone.utc).isoformat(timespec="seconds"),
+            "source_id": f"SYNTHESIZED:{role}",
+            "role": role,
+            "flagged": False,
+            "text": text,
+        }
+        _append_retrospective(debug, rec)
     except Exception:
         pass

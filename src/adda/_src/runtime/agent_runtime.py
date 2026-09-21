@@ -779,6 +779,24 @@ class AgenticRun:
                         # resume needs to charge, so record it here too.
                         wall_s=round(time.time() - ctx.start_time, 1),
                     )
+                    # A crash never reaches _finalize_run's normal close, so
+                    # it never reaches the _fallback_retrospective call there
+                    # either — this is the same "exit interview reply never
+                    # arrived" gap on a second path (GraphRecursionError,
+                    # KeyboardInterrupt, OOM, …). Call it here too, BEFORE
+                    # re-raising, so the record lands regardless. Never let a
+                    # failure in here mask the real crash.
+                    try:
+                        self._fallback_retrospective(
+                            ctx.run_dir,
+                            reason=(
+                                f"Run crashed ({type(_exc).__name__}) before "
+                                "reaching a normal close, so the exit "
+                                "interview was never reached."
+                            ),
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
                     raise
         finally:
             if _serve_jobid:
@@ -947,6 +965,14 @@ class AgenticRun:
         nb_path = self._stamp_notebook_provenance(
             ctx, meta_md, gate_outcome, now_ts)
 
+        # Capture, don't request: every close — GATED, UNGATED, FAILED, or an
+        # external stop — passes through here, so this is the one place that
+        # can guarantee the entry node's retrospective exists even when its
+        # post-Done exit-interview reply never arrived (a model that answers
+        # in prose instead of calling Done() again silently lost the record
+        # before this existed). No-op on a compliant close.
+        self._fallback_retrospective(ctx.run_dir)
+
         # Persist the terminal gate outcome to run_status.json on the NORMAL
         # close too (the crash path writes its own). Without this a
         # cleanly-closed run leaves no run_status.json and the §1 protocol's
@@ -981,6 +1007,56 @@ class AgenticRun:
         log.removeHandler(ctx.log_handler)
         ctx.log_handler.close()
         return report
+
+    def _fallback_retrospective(
+        self, run_dir: Path, reason: str | None = None
+    ) -> None:
+        """Ensure the graph's entry node has a retrospective, even if it
+        never answered the post-Done exit interview.
+
+        ``feedback.py``'s ``_enter_retrospective_round`` (called on every
+        UNGATED/FAILED close, and after a critic PASS) sets
+        ``node._awaiting_retro`` and asks for ONE more Done() call carrying a
+        ``### Retrospective`` block — but nothing enforces that the reply
+        actually arrives. A model that answers in prose instead just ends the
+        turn, the graph reaches END, and the record is silently lost (run
+        20260920T005201, studies/tube_buckling_sensitivity: closed UNGATED
+        with 2 worker retrospectives on disk and none from the strategizer).
+        The same gap exists on the CRASH path (``_invoke_graph``'s
+        ``except BaseException`` around ``graph.invoke``): a
+        GraphRecursionError/KeyboardInterrupt/OOM never reaches this method's
+        normal call site in ``_finalize_run`` either, so that path calls this
+        directly, with its own ``reason``, right before re-raising.
+
+        This is the code-level guarantee CLAUDE.md §2 calls for instead of a
+        prompt rule: capture, don't request. It is idempotent
+        (``write_fallback_retrospective``'s ``skip_if_present``) so a
+        compliant close — the real entry lands via
+        ``FeedbackTools._capture_retrospective`` before this ever runs — is a
+        no-op here, never a duplicate.
+
+        Best-effort: never raises, so it can't break a run's close (or mask
+        the exception on the crash path, which wraps this call in its own
+        try/except too, belt-and-suspenders).
+        """
+        try:
+            from ..infra.watchdog_cleanup import write_fallback_retrospective
+            entry_name = getattr(self._graph_spec, "entry", None)
+            entry_agent = (self._graph_spec.nodes or {}).get(entry_name) \
+                if entry_name else None
+            role = getattr(entry_agent, "role", None) or entry_name \
+                or "strategizer"
+            write_fallback_retrospective(
+                run_dir, role=role,
+                reason=reason or (
+                    f"Run closed without the {role}'s post-Done "
+                    "retrospective turn arriving — either it was never "
+                    "reached, or the model answered in prose instead of "
+                    "calling Done() again."
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _warn_if_externally_stopped(
         self, report: str, ctx: _RunContext

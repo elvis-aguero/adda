@@ -516,7 +516,30 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 ### Synthetic watchdog retrospective (#12)
 - **What:** a watchdog kill leaves a labelled post-mortem so the analysis protocol
   isn't blind.
-- **Where:** `watchdog_cleanup.py` `write_watchdog_retrospective`. **Status:** done.
+- **Where:** `watchdog_cleanup.py` `write_watchdog_retrospective`. Has no
+  in-package caller — it is invoked by the out-of-repo campaign runner
+  (`studies/.../run.py`'s watchdog), and none of the 8 local studies wire it, so
+  the watchdog-kill path is currently unprotected in THIS repo. **Status:** the
+  synthesizer itself is done and tested; wiring it to a local watchdog caller
+  is not (tracked in `internal/BACKLOG.md`).
+
+### Fallback retrospective on a non-compliant close
+- **What:** every in-process close that never reaches the entry node's real,
+  first-person retrospective — UNGATED, FAILED, an external stop, or an
+  unhandled crash (`GraphRecursionError`/`KeyboardInterrupt`/OOM) — still
+  gets one, synthesized from disk state and clearly marked as such
+  (`source_id` prefixed `SYNTHESIZED:`). "Capture, don't request": the
+  post-Done exit interview asks for one more cooperative Done() call, and
+  nothing used to enforce the reply actually arrived.
+- **Where:** `watchdog_cleanup.py` `write_fallback_retrospective` (shares its
+  disk-reading/append core with `write_watchdog_retrospective` rather than
+  duplicating it); called from `agent_runtime.py`
+  `AgenticRun._fallback_retrospective`, wired at both the normal close
+  (`_finalize_run`) and the crash path (`_invoke_graph`'s
+  `except BaseException`, before the re-raise). Idempotent — a compliant
+  close's real entry is never duplicated. **Status:** done for every
+  in-process close; does NOT cover a watchdog kill (see #12 above — that
+  path has no local caller at all).
 
 ### KB (handbook) entries
 - **What:** curated knowledge the agents consult (incl. running on SLURM, pipeline

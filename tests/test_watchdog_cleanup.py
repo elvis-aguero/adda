@@ -17,6 +17,7 @@ from adda._src.infra.watchdog_cleanup import (
     reap_governor_pids,
     reap_process_group,
     seconds_since_last_activity,
+    write_fallback_retrospective,
     write_watchdog_retrospective,
 )
 
@@ -217,6 +218,93 @@ def test_write_watchdog_retrospective_never_raises_on_missing_dir(tmp_path):
     write_watchdog_retrospective(tmp_path, 3600)
     rec = json.loads((tmp_path / "debug" / "retrospectives.jsonl").read_text().splitlines()[0])
     assert rec["role"] == "watchdog" and "(none)" in rec["text"]
+
+
+# ── write_fallback_retrospective: the general "capture, don't request" synth ──
+# BACKLOG #12 built write_watchdog_retrospective for a watchdog kill; this is
+# the SAME synthesizer generalised to every other non-compliant close (UNGATED,
+# FAILED, external stop) that leaves the exit-interview reply never arriving —
+# not a second synthesizer next to it.
+
+def test_write_fallback_retrospective_synthesizes_for_missing_role(tmp_path):
+    debug = tmp_path / "debug"
+    debug.mkdir()
+    write_fallback_retrospective(
+        tmp_path, role="strategizer", reason="the exit interview never arrived")
+    lines = [ln for ln in (debug / "retrospectives.jsonl").read_text().splitlines()
+             if ln.strip()]
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert rec["role"] == "strategizer"
+
+
+def test_write_fallback_retrospective_is_identifiable_as_synthesized():
+    """A synthesized entry must never be mistaken for the agent's own
+    first-person words (CLAUDE.md §1 Step 1's caveat)."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        from pathlib import Path
+        run_dir = Path(td)
+        (run_dir / "debug").mkdir()
+        write_fallback_retrospective(
+            run_dir, role="strategizer", reason="never arrived")
+        rec = json.loads(
+            (run_dir / "debug" / "retrospectives.jsonl")
+            .read_text().splitlines()[0])
+        assert rec["source_id"].startswith("SYNTHESIZED")
+        assert "SYNTHESIZED" in rec["text"] or "not first-person" in rec["text"]
+        assert "not" in rec["text"].lower() and "first-person" in rec["text"].lower()
+
+
+def test_write_fallback_retrospective_appends_pre_existing_worker_entries_survive(
+        tmp_path):
+    debug = tmp_path / "debug"
+    debug.mkdir()
+    (debug / "retrospectives.jsonl").write_text(
+        json.dumps({"source_id": "D001", "role": "datagenerator", "text": "x"}) + "\n"
+        + json.dumps({"source_id": "D002", "role": "implementer", "text": "y"}) + "\n"
+    )
+    write_fallback_retrospective(
+        tmp_path, role="strategizer", reason="never arrived")
+    lines = [ln for ln in (debug / "retrospectives.jsonl").read_text().splitlines()
+             if ln.strip()]
+    assert len(lines) == 3
+    roles = {json.loads(ln)["role"] for ln in lines}
+    assert roles == {"datagenerator", "implementer", "strategizer"}
+
+
+def test_write_fallback_retrospective_skips_when_a_real_entry_already_exists(
+        tmp_path):
+    """A compliant close (the real Done()-carried retrospective already
+    landed) must NOT get a synthesized duplicate."""
+    debug = tmp_path / "debug"
+    debug.mkdir()
+    (debug / "retrospectives.jsonl").write_text(
+        json.dumps({"source_id": "DONE", "role": "strategizer", "text": "real"}) + "\n"
+    )
+    write_fallback_retrospective(
+        tmp_path, role="strategizer", reason="never arrived")
+    lines = [ln for ln in (debug / "retrospectives.jsonl").read_text().splitlines()
+             if ln.strip()]
+    assert len(lines) == 1  # no duplicate appended
+    assert json.loads(lines[0])["source_id"] == "DONE"
+
+
+def test_write_fallback_retrospective_never_raises_on_missing_dir(tmp_path):
+    # debug/ does not even exist yet.
+    write_fallback_retrospective(
+        tmp_path, role="strategizer", reason="never arrived")
+    rec = json.loads(
+        (tmp_path / "debug" / "retrospectives.jsonl")
+        .read_text().splitlines()[0])
+    assert rec["role"] == "strategizer"
+
+
+def test_write_fallback_retrospective_never_raises_on_missing_run_dir(tmp_path):
+    # The run_dir itself doesn't exist -- best-effort must swallow this too.
+    write_fallback_retrospective(
+        tmp_path / "does_not_exist", role="strategizer", reason="x")
+    # No exception is the assertion here.
 
 
 # ── resource AWARENESS (telemetry): peak RSS high-water + static envelope ─────

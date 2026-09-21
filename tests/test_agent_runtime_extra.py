@@ -643,3 +643,256 @@ def test_record_node_models_writes_what_make_adapter_would_resolve(tmp_path):
     assert written["math_expert"]["model"] == "qwen3.8-27b-256k"
     assert written["math_expert"]["backend"] == "ollama"
     assert written["strategizer"]["model"] == run._model
+
+
+# ---------------------------------------------------------------------------
+# _fallback_retrospective — a non-compliant close (UNGATED/FAILED/external
+# stop) must still leave a strategizer retrospective on disk, without relying
+# on the strategizer's cooperative extra Done() call ever arriving. Run
+# 20260920T005201 (studies/tube_buckling_sensitivity, UNGATED) closed with
+# _awaiting_retro still true and NO strategizer entry in
+# debug/retrospectives.jsonl — see CLAUDE.md's "capture, don't request".
+# ---------------------------------------------------------------------------
+
+
+def test_fallback_retrospective_synthesizes_for_the_entry_node_role(tmp_path):
+    """A close whose exit-interview reply never arrived still yields a
+    strategizer retrospective, synthesized from disk state."""
+    import json as _json
+
+    from adda._src.runtime.agent_runtime import AgenticRun
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    (run_dir / "debug").mkdir(parents=True)
+
+    run._fallback_retrospective(run_dir)
+
+    lines = [
+        line for line in
+        (run_dir / "debug" / "retrospectives.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(lines) == 1
+    rec = _json.loads(lines[0])
+    assert rec["role"] == "strategizer"
+    assert rec["source_id"].startswith("SYNTHESIZED")
+
+
+def test_fallback_retrospective_appends_worker_entries_survive(tmp_path):
+    """Pre-existing worker retrospectives (recorded at delegation completion)
+    are never clobbered by the fallback."""
+    import json as _json
+
+    from adda._src.runtime.agent_runtime import AgenticRun
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    debug = run_dir / "debug"
+    debug.mkdir(parents=True)
+    (debug / "retrospectives.jsonl").write_text(
+        _json.dumps({"source_id": "D001", "role": "datagenerator", "text": "x"})
+        + "\n"
+        + _json.dumps({"source_id": "D002", "role": "implementer", "text": "y"})
+        + "\n"
+    )
+
+    run._fallback_retrospective(run_dir)
+
+    lines = [
+        line for line in
+        (debug / "retrospectives.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(lines) == 3
+    roles = {_json.loads(line)["role"] for line in lines}
+    assert roles == {"datagenerator", "implementer", "strategizer"}
+
+
+def test_fallback_retrospective_no_duplicate_on_a_compliant_close(tmp_path):
+    """A compliant close (the real Done()-carried retrospective already
+    landed) produces exactly one real strategizer entry — no synthesized
+    duplicate alongside it."""
+    import json as _json
+
+    from adda._src.runtime.agent_runtime import AgenticRun
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    debug = run_dir / "debug"
+    debug.mkdir(parents=True)
+    (debug / "retrospectives.jsonl").write_text(
+        _json.dumps(
+            {"source_id": "DONE", "role": "strategizer", "text": "real"})
+        + "\n"
+    )
+
+    run._fallback_retrospective(run_dir)
+
+    lines = [
+        line for line in
+        (debug / "retrospectives.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(lines) == 1
+    rec = _json.loads(lines[0])
+    assert rec["source_id"] == "DONE"
+
+
+def test_fallback_retrospective_never_raises_when_debug_missing(tmp_path):
+    """Best-effort: a run_dir/debug/ that was never created must not break
+    the close."""
+    from adda._src.runtime.agent_runtime import AgenticRun
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run._fallback_retrospective(tmp_path / "runs" / "does_not_exist")
+    # No exception is the assertion here.
+
+
+def test_finalize_run_calls_the_fallback_retrospective(tmp_path):
+    """_finalize_run — the single choke point every close (UNGATED, FAILED,
+    external stop, budget exhaustion) passes through — must invoke the
+    fallback so no non-watchdog close path can skip it."""
+    from unittest.mock import patch as _patch
+
+    from adda._src.runtime.agent_runtime import AgenticRun, _RunContext
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    debug_dir = run_dir / "debug"
+    debug_dir.mkdir(parents=True)
+
+    import logging as _logging
+    ctx = _RunContext(
+        ts="T", run_dir=run_dir, debug_dir=debug_dir,
+        notes_dir=debug_dir / "strategizer_notes",
+        workspace_dir=run_dir / "workspace",
+        problem="x", problem_sha256="a", live_problem_sha256="a",
+        resume_from=None, start_time=0.0, thread_id="th",
+        log=_logging.getLogger("test_finalize_run"),
+        log_handler=_logging.NullHandler(),
+        delegation_log=MagicMock(), canonical_cfg={}, study_cfg={},
+        initial_state={}, graph_config={},
+    )
+    with _patch.object(run, "_fallback_retrospective") as mocked:
+        run._finalize_run(ctx, {"last_report": "done", "outcome": "GATED",
+                                 "termination": "done", "reviewed": True,
+                                 "token_totals": {}})
+    mocked.assert_called_once_with(run_dir)
+
+
+def test_invoke_graph_crash_still_yields_a_fallback_retrospective(tmp_path):
+    """A crash (GraphRecursionError, KeyboardInterrupt, OOM, ...) never
+    reaches _finalize_run's normal close, so _invoke_graph's own
+    `except BaseException` around graph.invoke must call the fallback
+    itself, before re-raising -- and the original exception must still
+    propagate unchanged (a failure inside the fallback must never mask the
+    crash the user needs to see)."""
+    import json as _json
+    import logging as _logging
+
+    from adda._src.runtime.agent_runtime import AgenticRun, _RunContext
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    debug_dir = run_dir / "debug"
+    debug_dir.mkdir(parents=True)
+
+    class _CrashingGraph:
+        def invoke(self, *a, **k):
+            raise RuntimeError("boom")
+
+    run._graph = _CrashingGraph()
+
+    ctx = _RunContext(
+        ts="T", run_dir=run_dir, debug_dir=debug_dir,
+        notes_dir=debug_dir / "strategizer_notes",
+        workspace_dir=run_dir / "workspace",
+        problem="x", problem_sha256="a", live_problem_sha256="a",
+        resume_from=None, start_time=0.0, thread_id="th",
+        log=_logging.getLogger("test_invoke_graph_crash"),
+        log_handler=_logging.NullHandler(),
+        delegation_log=MagicMock(), canonical_cfg={}, study_cfg={},
+        initial_state={}, graph_config={},
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        run._invoke_graph(ctx)
+
+    lines = [
+        line for line in
+        (debug_dir / "retrospectives.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    assert len(lines) == 1
+    rec = _json.loads(lines[0])
+    assert rec["role"] == "strategizer"
+    assert rec["source_id"].startswith("SYNTHESIZED")
+    assert "RuntimeError" in rec["text"]
+
+
+def test_invoke_graph_crash_fallback_never_shadows_the_exception(tmp_path):
+    """Even if the fallback synthesis itself raises, the ORIGINAL crash must
+    still propagate -- the fallback is diagnostic, not load-bearing."""
+    import logging as _logging
+    from unittest.mock import patch as _patch
+
+    from adda._src.runtime.agent_runtime import AgenticRun, _RunContext
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    debug_dir = run_dir / "debug"
+    debug_dir.mkdir(parents=True)
+
+    class _CrashingGraph:
+        def invoke(self, *a, **k):
+            raise RuntimeError("boom")
+
+    run._graph = _CrashingGraph()
+
+    ctx = _RunContext(
+        ts="T", run_dir=run_dir, debug_dir=debug_dir,
+        notes_dir=debug_dir / "strategizer_notes",
+        workspace_dir=run_dir / "workspace",
+        problem="x", problem_sha256="a", live_problem_sha256="a",
+        resume_from=None, start_time=0.0, thread_id="th",
+        log=_logging.getLogger("test_invoke_graph_crash_shadow"),
+        log_handler=_logging.NullHandler(),
+        delegation_log=MagicMock(), canonical_cfg={}, study_cfg={},
+        initial_state={}, graph_config={},
+    )
+
+    with _patch.object(
+        run, "_fallback_retrospective",
+        side_effect=Exception("fallback exploded"),
+    ):
+        with pytest.raises(RuntimeError, match="boom"):
+            run._invoke_graph(ctx)
+
+
+def test_fallback_retrospective_accepts_a_custom_reason(tmp_path):
+    """The crash path passes its own reason naming the exception type, so
+    the synthesized text says the run died rather than implying the
+    interview was merely skipped."""
+    import json as _json
+
+    from adda._src.runtime.agent_runtime import AgenticRun
+
+    (tmp_path / "PROBLEM_STATEMENT.md").write_text("x\n", encoding="utf-8")
+    run = AgenticRun(tmp_path)
+    run_dir = tmp_path / "runs" / "T"
+    (run_dir / "debug").mkdir(parents=True)
+
+    run._fallback_retrospective(run_dir, reason="Run crashed (RuntimeError)")
+
+    rec = _json.loads(
+        (run_dir / "debug" / "retrospectives.jsonl")
+        .read_text().splitlines()[0])
+    assert "Run crashed (RuntimeError)" in rec["text"]
