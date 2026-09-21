@@ -19,11 +19,18 @@ TWO GAPS, AND ONLY ONE OF THEM IS SCRIPTABLE
     republish" into a red build, which is the most a repository can do about
     an action it cannot perform.
 
-WHY A CONTENT HASH RATHER THAN THE FILE'S BYTES
-    The hash covers the DATA the page renders -- prompt text, tool rosters,
-    gates, citations -- and not the surrounding HTML. A change to the
-    generator's stylesheet should not tell everyone the artifact is stale, and
-    a change to a single word of a prompt must.
+TWO HASHES, BECAUSE ONE OF THEM WAS A BLIND SPOT
+    ``content_hash`` covers the DATA the page renders -- prompt text, tool
+    rosters, gates, citations -- and deliberately not the surrounding HTML, so
+    restyling the generator does not announce that every agent's instructions
+    moved.
+
+    That is right, and on its own it was wrong: a change to the page's CHROME
+    still has to be published, and the content hash cannot see it. Adding a
+    collapse control to the side panel changed no prompt at all, so this tool
+    reported IN SYNC while the artifact had no toggle on it. ``chrome_hash``
+    covers the file with the DATA block removed, and the two are reported
+    separately -- content drift and presentation drift are different news.
 
     uv run python internal/tools/promptmap_sync.py            # report
     uv run python internal/tools/promptmap_sync.py --record V # after publishing
@@ -123,6 +130,19 @@ def content_hash(data: dict) -> str:
     ).hexdigest()
 
 
+def chrome_hash() -> str:
+    """The page WITHOUT its data: the markup, the styles, the behaviour.
+
+    Exactly the half ``content_hash`` is blind to -- which is the half that
+    let a new side-panel control ship to the repository and not to the
+    artifact, with this tool reporting IN SYNC the whole time.
+    """
+    html = MAP.read_text(encoding="utf-8")
+    return hashlib.sha256(
+        re.sub(r"const DATA = \{.*?\};\n", "", html, flags=re.S).encode()
+    ).hexdigest()
+
+
 def differences(old: dict, new: dict) -> list[str]:
     """Human-readable drift, per role and per gate -- not a byte diff.
 
@@ -158,11 +178,12 @@ def report() -> int:
     ch, lh = content_hash(committed), content_hash(live)
     rec = json.loads(RECORD.read_text(encoding="utf-8")) if RECORD.exists() else {}
 
-    print(f"committed map  {ch[:12]}")
-    print(f"live code      {lh[:12]}")
-    print(f"published      {(rec.get('content_hash') or '-')[:12]}"
-          f"   version {rec.get('artifact_version', '?')}"
-          f"   {rec.get('published_at', '')}")
+    kh = chrome_hash()
+    print(f"committed map  content {ch[:12]}  chrome {kh[:12]}")
+    print(f"live code      content {lh[:12]}")
+    print(f"published      content {(rec.get('content_hash') or '-')[:12]}"
+          f"  chrome {(rec.get('chrome_hash') or '-')[:12]}"
+          f"   version {rec.get('artifact_version', '?')}")
     print()
 
     status = 0
@@ -172,9 +193,12 @@ def report() -> int:
         for line in differences(committed, live):
             print(f"  {line}")
         print("\n  Fix:  make promptmap && git add internal/promptmap.html\n")
-    elif rec.get("content_hash") != ch:
+    elif rec.get("content_hash") != ch or rec.get("chrome_hash") != kh:
         status = 2
-        print("UNPUBLISHED: the committed map is current, the artifact is not.")
+        what = ("its prompts" if rec.get("content_hash") != ch
+                else "its presentation")
+        print(f"UNPUBLISHED: the committed map is current, the artifact is "
+              f"behind on {what}.")
         for line in differences(
                 json.loads(RECORD.read_text())["data"], committed) if rec.get("data") else []:
             print(f"  {line}")
@@ -193,10 +217,14 @@ def record(version: str) -> int:
         "url": URL,
         "artifact_version": version,
         "content_hash": content_hash(data),
+        "chrome_hash": chrome_hash(),
         "published_at": _dt.datetime.now(_dt.timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%SZ"),
         "note": "Written by promptmap_sync.py --record after a successful "
-                "publish. The hash covers the map's DATA, not its HTML.",
+                "publish. content_hash covers the map's DATA; chrome_hash "
+                "covers everything else in the file, because a change to "
+                "the page's controls needs publishing too and the content "
+                "hash cannot see it.",
     }, indent=2) + "\n", encoding="utf-8")
     print(f"recorded version {version} at {content_hash(data)[:12]}")
     return 0

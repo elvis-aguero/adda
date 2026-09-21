@@ -57,23 +57,38 @@ a{color:var(--accent)}
   position:sticky;top:0;height:100vh;overflow-y:auto}
 .main{min-width:0;padding-block:22px 60px;padding-inline:clamp(16px,3vw,38px)}
 
-/* Collapsed rail. The rail narrows to a strip rather than disappearing, so
-   the button that brings it back is always where the button that hid it was
-   — a floating control somewhere else is how a viewer loses the panel and
-   has to reload to get it back. */
-.shell[data-rail="off"]{grid-template-columns:38px minmax(0,1fr)}
-.shell[data-rail="off"] .rail{padding-inline:5px;gap:0;overflow:hidden}
+/* Collapsing the rail. It narrows to a strip rather than disappearing, so the
+   control that brings it back sits exactly where the control that hid it was
+   — a floating button somewhere else is how a viewer loses the panel and has
+   to reload to get it back.
+
+   The button is borderless on purpose: .railbtn beside it is borderless too,
+   and a bordered box here would read as a heavier object than the navigation
+   it sits above. It earns a surface on hover, like every other control in
+   this rail. */
+.shell{transition:grid-template-columns .16s ease}
+.shell[data-rail="off"]{grid-template-columns:44px minmax(0,1fr)}
+.shell[data-rail="off"] .rail{padding-inline:8px;gap:0;overflow:hidden}
 .shell[data-rail="off"] .rail > *:not(.brand){display:none}
 .shell[data-rail="off"] .brandtext{display:none}
-.shell[data-rail="off"] .brand{align-items:center}
-.brand{flex-direction:row;align-items:flex-start;gap:8px}
-.brandtext{display:flex;flex-direction:column;gap:3px;min-width:0}
-.railtoggle{margin-left:auto;flex:none;background:none;border:1px solid var(--line);
-  border-radius:var(--r);color:var(--ink-3);cursor:pointer;font:inherit;font-size:13px;
-  line-height:1;padding:4px 7px}
-.railtoggle:hover{border-color:var(--accent);color:var(--accent)}
+.shell[data-rail="off"] .brand{justify-content:center}
 
-.brand{display:flex;flex-direction:column;gap:3px}
+.brandtext{display:flex;flex-direction:column;gap:3px;min-width:0}
+.railtoggle{margin-left:auto;flex:none;display:grid;place-items:center;
+  width:26px;height:26px;margin-top:-3px;padding:0;background:none;border:0;
+  border-radius:var(--r);color:var(--ink-3);cursor:pointer;
+  transition:background-color .12s ease,color .12s ease}
+.shell[data-rail="off"] .railtoggle{margin-left:0;margin-top:0}
+.railtoggle:hover{background:var(--surface-2);color:var(--ink)}
+/* One chevron, turned — not two glyphs swapped. An inline SVG also renders
+   identically everywhere, which a character like U+25C0 does not. */
+.railtoggle svg{width:15px;height:15px;transition:transform .16s ease}
+.shell[data-rail="off"] .railtoggle svg{transform:rotate(180deg)}
+
+/* Row, and top-aligned: the toggle sits on the title's line. The stamp under
+   the title wraps to two or three lines depending on width, so centring would
+   drop the control to the middle of that block instead. */
+.brand{display:flex;flex-direction:row;align-items:flex-start;gap:10px}
 .brand b{font-size:15px;font-weight:700;letter-spacing:-.01em}
 .brand span{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
 
@@ -319,7 +334,9 @@ td.m.path{color:var(--accent)}
       </div>
       <button id="railtoggle" class="railtoggle" type="button" aria-expanded="true"
               aria-controls="rail" aria-label="Hide the side panel"
-              title="Hide the side panel  (\\)">&#9668;</button>
+              title="Hide the side panel  (\\)"><svg viewBox="0 0 16 16" fill="none"
+        aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor"
+        stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     </div>
 
     <div class="search">
@@ -1264,7 +1281,6 @@ const railBtn = $("#railtoggle");
 function setRail(on){
   shell.dataset.rail = on ? "on" : "off";
   railBtn.setAttribute("aria-expanded", on ? "true" : "false");
-  railBtn.innerHTML = on ? "&#9668;" : "&#9654;";
   const label = on ? "Hide the side panel" : "Show the side panel";
   railBtn.setAttribute("aria-label", label);
   railBtn.title = label + "  (\\)";

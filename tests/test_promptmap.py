@@ -593,6 +593,58 @@ def test_the_publication_record_is_present_and_well_formed():
         "internal/promptmap.published.json is missing -- without it nothing "
         "knows whether the published artifact is current")
     data = json.loads(record.read_text(encoding="utf-8"))
-    for field in ("url", "artifact_version", "content_hash", "published_at"):
+    for field in ("url", "artifact_version", "content_hash", "chrome_hash",
+                  "published_at"):
         assert data.get(field), f"the publication record has no {field!r}"
     assert len(data["content_hash"]) == 64, "content_hash is not a sha256"
+    assert len(data["chrome_hash"]) == 64, "chrome_hash is not a sha256"
+
+
+def test_the_two_hashes_see_different_halves_of_the_page(tmp_path):
+    """Why there are two of them.
+
+    ``content_hash`` reads the DATA block and ``chrome_hash`` reads
+    everything else, so each must be blind to the other's half -- otherwise
+    one of them is redundant and the pair gives false confidence. The
+    presentation half is the one that went unwatched: a collapse control
+    shipped to the repository, the artifact never got it, and the sync
+    report said IN SYNC the whole time because no prompt had changed.
+
+    ``sync.MAP`` is repointed at a copy rather than the committed file being
+    edited in place: a test that rewrites a tracked file leaves the working
+    tree dirty if it dies between the write and the restore.
+    """
+    import json
+
+    spec = importlib.util.spec_from_file_location(
+        "_promptmap_sync", _ROOT / "internal" / "tools" / "promptmap_sync.py")
+    sync = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sync)
+
+    def data_of(text):
+        return json.loads(re.search(r"const DATA = (\{.*?\});\n", text, re.S).group(1))
+
+    html = (_ROOT / "internal" / "promptmap.html").read_text(encoding="utf-8")
+    copy = tmp_path / "promptmap.html"
+    copy.write_text(html, encoding="utf-8")
+    sync.MAP = copy
+    before = sync.chrome_hash()
+
+    restyled = html.replace("--r:3px;", "--r:7px;", 1)
+    assert restyled != html, "the stylesheet no longer carries --r"
+    copy.write_text(restyled, encoding="utf-8")
+    assert sync.chrome_hash() != before, (
+        "chrome_hash did not move when the stylesheet did -- it is not "
+        "watching presentation")
+    assert sync.content_hash(data_of(restyled)) == sync.content_hash(data_of(html)), (
+        "content_hash moved on a restyle -- it is supposed to be blind to "
+        "how the page looks")
+
+    # ... and the other way round: a prompt edit must move content_hash and
+    # leave chrome_hash alone, or the two are not a partition of the file.
+    copy.write_text(html.replace("You are the Strategizer", "You are the STRATEGIZER", 1),
+                    encoding="utf-8")
+    assert sync.chrome_hash() == before, (
+        "chrome_hash moved on a prompt edit -- it is reading the DATA block")
+    assert sync.content_hash(data_of(copy.read_text(encoding="utf-8"))) != \
+        sync.content_hash(data_of(html))
