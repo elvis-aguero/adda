@@ -82,7 +82,7 @@ rather than silently reverting to the default.
 |---|---|---|
 | `context_window` | tokens the backend will accept. `0` asks the server (Ollama's served `num_ctx`, vLLM's `max_model_len`); set it to pin the value or to sweep it. The resolved number AND its source are recorded | `0` |
 | `context_policy` | how one agent turn is kept inside the served context window (OpenAI-compatible backends only — the Claude SDK does its own and does it better). `compact` summarises the middle of the conversation, so a delegation's RESULT survives even when its prose does not; `trim` drops those messages instead — free and deterministic, but blind to what it discards. There is no "off": an unmanaged context is the crash this exists to stop | `compact` |
-| `max_output_tokens` | tokens ONE model reply may generate. `0` derives it from the context window (a quarter of it, capped at 8192) — the same share the trim reserves for the reply; `-1` removes the cap. Bounds a looping turn that would otherwise generate for hours on a large-window server | `0` |
+| `max_output_tokens` | tokens ONE model reply may generate. `0` derives it from the context window (a quarter of it, capped at 65536) — the same share the trim reserves for the reply; `-1` removes the cap. Bounds a looping turn that would otherwise generate for hours on a large-window server | `0` |
 | `debug` | capture full transcripts, diagnostics and per-delegation logs under `runs/<ts>/debug/`. Required for the run-analysis workflow | `false` |
 | `recursion_limit` | LangGraph step ceiling for one run | `2000` |
 | `max_consecutive_errors` | consecutive failures to one target before the run halts | `12` |

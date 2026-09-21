@@ -59,13 +59,15 @@ _RESPONSE_HEADROOM = 0.25
 #: which no message-granularity trim can fix.
 _MAX_SINGLE_MESSAGE_SHARE = 0.4
 
-#: Absolute ceiling on ONE reply, whatever the window allows. A 262144-token
-#: window permits a ~65k-token reply, which at the ~18 tok/s an L40S sustains
-#: for a 27B model is over an hour of generation inside a single agent turn
-#: (observed: one strategizer request past 26k tokens and still climbing after
-#: 25 minutes, zero delegations, the run's whole budget gone). No legitimate
-#: reply from these agents is this long; a reply approaching it is a loop.
-MAX_OUTPUT_TOKENS_CEILING = 8192
+#: Absolute ceiling on ONE reply, whatever the window allows. It exists so a
+#: very large window does not mean "no bound at all" — not to clip the
+#: derived reservation below what the trim already set aside. Set to
+#: ``262144 * _RESPONSE_HEADROOM`` so it stops binding at the largest window
+#: in real use (``qwen3.8-27b-256k``): below that, the derived value (25% of
+#: the window) is always <= this ceiling, so the ceiling only ever clamps
+#: windows larger than 256k. A reply approaching this ceiling is a loop, not
+#: legitimate output.
+MAX_OUTPUT_TOKENS_CEILING = 65536
 
 #: Never cap below this, however small the window: a cap under one long
 #: tool-call argument turns a runaway into a truncated, unparseable call.
@@ -111,8 +113,13 @@ def resolve_max_output_tokens(window: int, explicit: int = 0) -> int | None:
     reserves ``_RESPONSE_HEADROOM`` of it for the reply. Leaving the server
     free to generate the whole window makes that reservation a fiction: the
     input is trimmed to make room for a reply that is then allowed to overrun
-    it anyway. Deriving both from one constant is what keeps them consistent,
-    and the ceiling keeps a very large window from meaning "no bound at all".
+    it anyway. Deriving both from one constant is what keeps them consistent.
+
+    ``MAX_OUTPUT_TOKENS_CEILING`` exists only to stop an unbounded window
+    from meaning "no bound at all" — it is not meant to clip the derived
+    reservation itself. Below a 262144-token window the derived value never
+    exceeds the ceiling, so the ceiling does not bind there; it only clamps
+    windows larger than that.
     """
     if explicit > 0:
         return explicit

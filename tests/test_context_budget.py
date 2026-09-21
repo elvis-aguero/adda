@@ -274,12 +274,15 @@ def test_the_derived_cap_matches_the_share_the_trim_reserves():
 
 
 def test_a_huge_window_is_still_bounded():
-    """262144 * 0.25 is ~65k tokens -- over an hour of generation at the rate a
-    27B model sustains on one L40S. 'A quarter of the window' alone is not a
-    bound on a server configured that large."""
+    """1048576 * 0.25 is 262144 tokens -- far over an hour of generation at
+    the rate a 27B model sustains on one L40S. The ceiling must clip the
+    derived value here, not merely equal it, or this stops testing the
+    clamp."""
     from adda._src.backends import context_budget as cb
 
-    assert cb.resolve_max_output_tokens(262144) == cb.MAX_OUTPUT_TOKENS_CEILING
+    derived = int(1048576 * cb._RESPONSE_HEADROOM)
+    assert derived > cb.MAX_OUTPUT_TOKENS_CEILING
+    assert cb.resolve_max_output_tokens(1048576) == cb.MAX_OUTPUT_TOKENS_CEILING
 
 
 def test_a_tiny_window_does_not_produce_a_cap_that_cuts_a_tool_call():
@@ -313,7 +316,7 @@ def test_the_adapter_caps_under_either_policy():
 
     settings.configure({"context_policy": "trim"})
     a = VLLMAdapter(model="m", system_prompt="s")
-    a._ctx_window = (262144, "server")
+    a._ctx_window = (1048576, "server")
 
     assert a._resolve_max_output_tokens() == cb.MAX_OUTPUT_TOKENS_CEILING
 
