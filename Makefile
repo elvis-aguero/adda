@@ -3,7 +3,7 @@
 PACKAGEDIR := dist
 COVERAGEREPORTDIR := coverage_html_report
 
-.PHONY: help test test-html build docs lint promptmap promptmap-status attest-paper decline-paper
+.PHONY: help test test-html build docs lint paper promptmap promptmap-status attest-paper decline-paper
 
 help:
 	@echo "Please use \`make <target>' where <target> is one of:"
@@ -12,6 +12,7 @@ help:
 	@echo "  build       Build the package"
 	@echo "  docs        Build the documentation with mkdocs"
 	@echo "  lint        Lint the code with ruff"
+	@echo "  paper       Rebuild paper/main.pdf reproducibly"
 	@echo "  promptmap   Regenerate internal/promptmap.html (prompt + gate provenance)"
 	@echo "  promptmap-status  Is the map in sync with the code, and with what is published?"
 	@echo "  attest-paper   Sign that paper/ reflects the code as of HEAD"
@@ -50,3 +51,16 @@ attest-paper:
 decline-paper:
 	@test -n "$(WHY)" || (echo "usage: make decline-paper WHY='no design decision here'"; exit 1)
 	uv run python internal/tools/paper_attestation.py --decline "$(WHY)"
+
+# The committed paper/main.pdf is a generated artifact, so it must not depend
+# on WHEN or WHERE it was built: pdfTeX stamps a creation date and a random
+# document /ID, which would make every rebuild a diff even with the .tex
+# unchanged (and a binary, unmergeable one). SOURCE_DATE_EPOCH + the
+# \pdftrailerid{} in main.tex pin both, so the PDF only changes when the paper
+# does. Deliberately NOT gated in CI -- a stale PDF is not a correctness
+# failure, and nobody's build should break over a document.
+paper:
+	SOURCE_DATE_EPOCH=1600000000 FORCE_SOURCE_DATE=1 \
+	  latexmk -cd -pdf -interaction=nonstopmode -outdir=build paper/main.tex
+	cp paper/build/main.pdf paper/main.pdf
+	@echo "paper/main.pdf rebuilt"
