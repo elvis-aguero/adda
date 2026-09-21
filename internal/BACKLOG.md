@@ -25,7 +25,6 @@ Three groups, because they need three different things from you:
 These are blocked on a judgment call, not on effort. Each has been surfaced
 before. Until one is answered or closed, treat it as known, not news.
 
-- [ ] **#40** A mid-tier delegating node is cut off from the hypothesis ledger and the science monitor — *§4, who may mutate the ledger*. Latent while every graph is one tier deep; bites the first deeper topology. Three options, see §40 below.
 - [ ] **#10** Strategizer delegates the optimization as one monolithic un-budgeted campaign — *open, §4 user-owned* (**current binding constraint** — watchdog-kills runs)
 - [ ] **#17** Closure + budget-severity model (Memory>Time>Eval; dynamic constraints) — *open, §4 user-owned* — Done() prompt iterated (`0400a653`); runtime nudge + severity model deferred
 - [ ] **#19** Scientific adequacy is enforced as vibes while reproduction is enforced hard — *§4, partially addressed (`8ae9a402`, `93e6f0f2`); the load-bearing question is OPEN and empirical* — see §19 below
@@ -47,38 +46,6 @@ before. Until one is answered or closed, treat it as known, not news.
 - [ ] **#23** Rename `literature_reviewer` → `consultant` + give it live-web tools so it answers tech-stack/API/doc questions, not only academic literature — *spec, not built (user decision 2026-06-30)* — see §23 below
 
 ---
-
-## 40. A mid-tier delegating node is cut off from the ledger and the monitor — §4
-
-**Status:** open, awaiting the maintainer's call. Surfaced repeatedly in review;
-recorded here so it stops being re-reported as a new finding.
-
-**Mechanism.** `graph_builder.build_graph` passes
-`notes_dir=notes_dir if name == spec.entry else None`, and
-`Node._init_orchestration` reads a missing `notes_dir` as "no ledger":
-`_ledger`, `_milestones`, `_science_monitor` and `_telemetry` all stay `None`.
-So an orchestrating node that is not the entry node can delegate, but its
-delegations are never hypothesis-linked and never monitored for drift.
-
-**Why it is latent.** Every shipped graph is one tier deep, so no node has ever
-been in this position in a real run. It became visible only when the node layer
-collapsed to a single `Node`, which left this as the one remaining
-`name == entry` special case.
-
-**Why it is a §4 question, not a refactor.** Who may mutate the shared
-hypothesis ledger is an epistemic decision. The capability is also expressed as
-a `None` rather than as a declared capability, unlike every other capability in
-the system (single source of truth = the Agent's `tools`).
-
-**Options:**
-- (a) Leave as is, and state the one-tier assumption explicitly in the spec.
-- (b) Give every orchestrating node a ledger VIEW, keeping MUTATE
-  declaration-gated as it is now.
-- (c) Make ledger access a declared capability like everything else.
-
-**When it stops being latent:** the first graph with a delegating node that is
-not the entry — including any ablation arm that tests a deeper topology. That
-arm would silently lose its epistemic monitoring.
 
 ## 10. Strategizer delegates the optimization as ONE monolithic, un-budgeted campaign
 **Status:** PARTIALLY MITIGATED 2026-06-22 (commit pending) — added a "scope each

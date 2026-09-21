@@ -57,8 +57,18 @@ def build_graph(
 
         # ONE node class. Whether it orchestrates or answers follows from
         # `outgoing`, and what it may DO follows from what its Agent declares
-        # in `tools` — never from its type. notes_dir is passed only to the
-        # entry node: it owns the run's hypothesis + milestone ledgers.
+        # in `tools` — never from its type. notes_dir is passed to every node:
+        # a delegating node is simply a node that needs help from another
+        # node (CLAUDE.md "all nodes are equal"), and telemetry / the
+        # science monitor / hypothesis-ledger READ access matter for every
+        # role, not only the entry node. WRITE access (HypothesisPropose/
+        # Update, Milestone*) stays gated separately, by each Agent's own
+        # declared `tools` (see nodes/tools/routing/__init__.py) — passing
+        # notes_dir here grants no capability a node has not already
+        # declared. A leaf node (no outgoing edges) never even reads this
+        # argument — Node.__init__ forwards notes_dir only to
+        # _init_orchestration, never to _init_leaf — so this only takes
+        # effect for a non-entry node that itself has outgoing edges.
         node = Node(
             adapter,
             name=name,
@@ -68,7 +78,7 @@ def build_graph(
             interactive=interactive,
             max_ask=max_ask,
             worker_adapters={n: node_adapters[n] for n in outgoing},
-            notes_dir=notes_dir if name == spec.entry else None,
+            notes_dir=notes_dir,
             workspace_dir=workspace_dir,
             delegation_log=delegation_log,
             report_sections=getattr(agent, "report_sections", None),

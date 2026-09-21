@@ -283,6 +283,155 @@ def test_repr_arrow_shows_preamble():
     assert "Focus on Python." in r
 
 
+# ---------------------------------------------------------------------------
+# notes_dir grants every orchestrating node its own ledgers, not just entry.
+#
+# CLAUDE.md: "a delegating node is simply a node that needs help from another
+# node" — there is no worker-vs-non-worker class. graph_builder used to pass
+# notes_dir only to `name == spec.entry`; a node's ledger/telemetry access
+# was decided by its POSITION in the graph rather than by what its Agent
+# declares in `tools`. See the graph_builder.py comment for the fix.
+# ---------------------------------------------------------------------------
+
+
+def _capture_nodes(monkeypatch):
+    """Monkeypatch graph_builder.Node so built instances are inspectable
+    (build_graph returns only a compiled LangGraph graph, never the raw
+    Node objects it constructed)."""
+    import adda._src.runtime.graph_builder as gb
+
+    built: dict = {}
+    original = gb.Node
+
+    class TrackingNode(original):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            built[kw.get("name")] = self
+
+    monkeypatch.setattr(gb, "Node", TrackingNode)
+    return built
+
+
+def _three_tier_graph():
+    """entry -> mid -> leaf, where `mid` itself has an outgoing edge (the
+    2-tier shape no shipped study graph uses today, but that the fix must
+    handle correctly)."""
+    class Strat(Agent):
+        role = "strategizer"
+        description = "entry"
+        tools = frozenset({"Done", "HypothesisPropose", "HypothesisList"})
+
+    class Mid(Agent):
+        role = "implementer"
+        description = "mid-tier node with its own outgoing edge"
+        tools = frozenset({"HypothesisList", "HypothesisGet"})
+
+    class Leaf(Agent):
+        role = "implementer"
+        description = "leaf"
+
+    spec = Graph(
+        nodes={"s": Strat(), "mid": Mid(), "leaf": Leaf()},
+        edges=(Edge("s", "mid"), Edge("mid", "leaf")),
+        entry="s",
+    )
+    return spec
+
+
+def _build_three_tier(monkeypatch, tmp_path):
+    from adda._src.infra.delegation_log import DelegationLog
+
+    built = _capture_nodes(monkeypatch)
+    spec = _three_tier_graph()
+    notes = tmp_path / "debug" / "strategizer_notes"
+    notes.mkdir(parents=True)
+    dlog = DelegationLog(tmp_path / "debug" / "delegation_log.jsonl")
+
+    build_graph(
+        spec,
+        lambda n, a: StubAdapter("## Done\nAll done."),
+        notes_dir=notes,
+        delegation_log=dlog,
+    )
+    return built
+
+
+def test_build_graph_non_entry_orchestrating_node_gets_ledger(monkeypatch, tmp_path):
+    """A non-entry node with its own outgoing edges gets a real hypothesis
+    ledger, milestone ledger, science monitor and telemetry — not None
+    just because it isn't the entry node."""
+    built = _build_three_tier(monkeypatch, tmp_path)
+    mid = built["mid"]
+
+    assert mid._ledger is not None
+    assert mid._milestones is not None
+    assert mid._science_monitor is not None
+    assert mid._telemetry is not None
+
+
+def test_build_graph_non_entry_node_declared_read_tools_work(monkeypatch, tmp_path):
+    """mid's declared HypothesisList must actually see what the entry node
+    proposed — these tools were dead (permanently None-gated) before the fix."""
+    built = _build_three_tier(monkeypatch, tmp_path)
+    strat, mid = built["s"], built["mid"]
+
+    result = strat.adapter.closure_tools["HypothesisPropose"](
+        "thin walls buckle first",
+        "any sweep produces a feasible f >= 2.0",
+        "dense sweep finds nothing below 1.5",
+        0.5,
+    )
+    assert not result.startswith("ERROR")
+
+    listing = mid.adapter.closure_tools["HypothesisList"]()
+    assert "ERROR" not in listing
+    assert "thin walls buckle first"[:10] in listing or "H1" in listing
+
+
+def test_build_graph_non_entry_node_has_no_undeclared_write_path(monkeypatch, tmp_path):
+    """mid owns a real ledger/milestone-ledger object now, but it never
+    declared the WRITE tools — HypothesisPropose/Update/Milestone* must stay
+    absent from its exposed closures. Write access is gated by the Agent's
+    own declared `tools`, never by ledger ownership (CLAUDE.md §4: verdict
+    mutation stays the strategizer's)."""
+    built = _build_three_tier(monkeypatch, tmp_path)
+    mid = built["mid"]
+
+    for write_tool in (
+        "HypothesisPropose", "HypothesisUpdate", "LinkFalsificationAttempt",
+        "MilestonePropose", "MilestoneComplete", "MilestoneSkip",
+    ):
+        assert write_tool not in mid.adapter.closure_tools, write_tool
+
+
+def test_build_graph_single_tier_graph_unaffected(monkeypatch, tmp_path):
+    """Regression guard: every shipped graph today is single-tier (entry +
+    leaves only). A leaf's constructor never even reads notes_dir
+    (Node.__init__ forwards it only to _init_orchestration, never to
+    _init_leaf) — so passing the real notes_dir to a leaf changes nothing.
+    Only the entry node should own ledgers; a leaf never sets `_ledger` at
+    all (it resolves reads through the delegation-log fallback instead)."""
+    from adda._src.infra.delegation_log import DelegationLog
+
+    built = _capture_nodes(monkeypatch)
+    spec = _two_node_graph()
+    notes = tmp_path / "debug" / "strategizer_notes"
+    notes.mkdir(parents=True)
+    dlog = DelegationLog(tmp_path / "debug" / "delegation_log.jsonl")
+
+    build_graph(
+        spec,
+        lambda n, a: StubAdapter("## Done\nAll done."),
+        notes_dir=notes,
+        delegation_log=dlog,
+    )
+
+    entry, worker = built["orch"], built["worker"]
+    assert entry._owns_epistemics is True
+    assert entry._ledger is not None
+    assert not hasattr(worker, "_ledger")
+
+
 def test_to_mermaid_styles_nodes_and_edges():
     """Styled mermaid: classDef per agent class, class assignments,
     and dotted (consultation) arrows from non-entry sources."""

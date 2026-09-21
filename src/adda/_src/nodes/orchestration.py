@@ -92,9 +92,14 @@ class OrchestrationMixin:
         # Graph-wide delegation log (demand-driven episodic memory)
         self._delegation_log: DelegationLog | None = delegation_log
         # Whether THIS node owns the run's epistemic ledgers. Decided once,
-        # here, from what graph_builder passed: it hands notes_dir to the
-        # entry node alone. Ownership is never acquired later — see
-        # _install_epistemics.
+        # here, from what graph_builder passed: it hands the real notes_dir
+        # to every orchestrating node (any node with outgoing edges), not
+        # just the entry node — a delegating node is a node that needs
+        # help from another node, nothing more, and telemetry / the science
+        # monitor / hypothesis-ledger READ access matter for every role.
+        # WRITE access (HypothesisPropose/Update, Milestone*) is gated
+        # separately, by each Agent's own declared `tools`. Ownership is
+        # never acquired later — see _install_epistemics.
         self._owns_epistemics: bool = notes_dir is not None
         self._install_epistemics()
         # Running total of delegations at the START of the current __call__
@@ -158,9 +163,12 @@ class OrchestrationMixin:
         knowing nothing about why the constructor had left it None. Three
         consequences, all of them silent:
 
-        * ``graph_builder`` hands ``notes_dir`` to the entry node alone, so it
-          alone owns the ledgers. Any other orchestrating node re-acquired one
-          on its first turn, undoing that decision.
+        * ``graph_builder`` used to hand ``notes_dir`` to the entry node
+          alone, so it alone owned the ledgers; any other orchestrating node
+          re-acquired one on its first turn, undoing that decision. (It now
+          hands the real ``notes_dir`` to every orchestrating node, so this
+          particular inconsistency no longer applies — kept here as the
+          historical reason ``_install_epistemics`` exists as one site.)
         * Only the ledger was re-pointed when the run's notes dir differed from
           the constructor's; the milestone ledger and telemetry kept writing to
           the stale path.
