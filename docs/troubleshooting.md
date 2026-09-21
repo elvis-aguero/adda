@@ -86,7 +86,11 @@ problem. Set it to `0` to disable.
 
 **Wall-clock overran the budget.** `budget` is soft — it nudges. The hard
 backstop is `runtime: run_backstop_multiple` (default `2.0`), after which
-the run is force-closed.
+the run is force-closed. That check runs *inside* the graph, though, so it
+can only fire on the run's own next turn — no help if the run has genuinely
+wedged (a hung model call, a stuck simulation) and never gets there. For
+that, launch under the external watchdog instead — see
+[Launching under a watchdog](authoring-a-study.md#launching-under-a-watchdog).
 
 ## When the result isn't what you wanted
 

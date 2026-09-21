@@ -231,3 +231,23 @@ Then run it:
 from adda import AgenticRun
 AgenticRun(study_dir="studies/example_study").execute()
 ```
+
+## Launching under a watchdog
+
+`budget` and `run_backstop_multiple` (above) are both checked from *inside*
+the run, so neither can help if the run genuinely wedges — a hung model call,
+a stuck simulation — and never reaches its own next check. For that, launch
+the study as a child process under an external watchdog instead: it owns the
+wall-clock deadline from outside, and force-kills the whole run (every
+process it spawned, not just the top one) if the deadline passes.
+
+```bash
+python -m adda.watchdog studies/example_study --budget 00:45:00
+```
+
+The deadline is twice whatever budget you give it (or `config.yaml`'s own
+`budget:` if you don't pass `--budget`) — plenty of headroom, since this is a
+last-resort kill switch for a hang, not a way to police a slow run. `python -m
+adda <study-dir>` on its own still works exactly as before; this is an
+additional, safer way to launch the same run when you want a hard outer
+backstop.

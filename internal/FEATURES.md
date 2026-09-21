@@ -508,20 +508,50 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **What:** a hard wall-clock timer force-exits a stalled run; on exit it recursively
   kills every campaign process tree — including detached/new-session ones that a
   process-group kill misses.
-- **Where:** `studies/.../run.py` `_watchdog`; `watchdog_cleanup.py` `reap_governor_pids`.
-- **Config:** watchdog = 2× the run's time budget. Operational kill-switch
-  `F3DASM_DISABLE_WATCHDOG=1` turns the wall-clock force-exit OFF (the memory-cap
-  watcher stays on) — for long supervised runs. **Status:** done.
+- **Where:** `studies/.../run.py` `_watchdog` (the out-of-repo benchmarks harness'
+  own launcher) and, in THIS repo, `python -m adda.watchdog` (BACKLOG #41 — see
+  below), both driving `watchdog_cleanup.py`'s `reap_process_group` /
+  `reap_governor_pids`.
+- **Config:** watchdog = 2× the run's time budget (a floor, not a default —
+  `adda.watchdog`'s `--watchdog-multiple` can only raise it). Operational
+  kill-switch `F3DASM_DISABLE_WATCHDOG=1` turns the wall-clock force-exit OFF
+  (the memory-cap watcher stays on) on the out-of-repo harness — for long
+  supervised runs. **Status:** done.
+
+### `python -m adda.watchdog` — the in-package run launcher (#41)
+- **What:** a launcher that runs a study as a CHILD process, in its own process
+  group, and owns the wall-clock deadline from the PARENT — the maintainer's
+  explicit design (`paper/sections/03-method.tex`, "A wall-clock watchdog
+  outside the run": an in-process backstop that may itself be stuck cannot be
+  trusted). `python -m adda <study-dir>` itself stays exactly as unprotected as
+  before — this is an additional, safer way to launch the same run. On timeout
+  it SIGTERMs the whole child process group, escalates to SIGKILL if anything
+  survives a short grace period, reaps any registered campaign PIDs the run
+  spawned (`reap_governor_pids` — catches the detached/new-session descendants
+  a plain process-group signal misses), and appends a labelled
+  `write_watchdog_retrospective` post-mortem to the run's
+  `retrospectives.jsonl`. Exits `124` (distinguishable from any real exit code
+  the run itself could produce) on a kill; propagates the run's own exit
+  status otherwise.
+- **Deadline:** derived from the SAME budget value the run itself resolves
+  (`--budget`, or `config.yaml`'s `budget:`, via the shared
+  `run_setup._parse_budget_str`) at the 2× floor (`--watchdog-multiple`, never
+  settable below 2.0) — the two values can never silently disagree. Refuses to
+  run at all if no budget can be resolved.
+- **Where:** `_src/infra/watchdog_launcher.py` (`run_under_watchdog`,
+  `resolve_deadline_seconds`, `main`); thin top-level forwarding package
+  `adda/watchdog/` mirrors `adda/viewer/`'s own convention.
+- **Status:** done, headless-tested (`tests/test_watchdog_launcher.py`) against
+  a trivial sub-second child, including a grandchild-reap assertion.
 
 ### Synthetic watchdog retrospective (#12)
 - **What:** a watchdog kill leaves a labelled post-mortem so the analysis protocol
   isn't blind.
-- **Where:** `watchdog_cleanup.py` `write_watchdog_retrospective`. Has no
-  in-package caller — it is invoked by the out-of-repo campaign runner
-  (`studies/.../run.py`'s watchdog), and none of the 8 local studies wire it, so
-  the watchdog-kill path is currently unprotected in THIS repo. **Status:** the
-  synthesizer itself is done and tested; wiring it to a local watchdog caller
-  is not (tracked in `internal/BACKLOG.md`).
+- **Where:** `watchdog_cleanup.py` `write_watchdog_retrospective`, called from
+  `_src/infra/watchdog_launcher.py` on a timeout (see #41 above) and from the
+  out-of-repo campaign runner's own watchdog. **Status:** done, and now has an
+  in-package caller — a watchdog kill via `python -m adda.watchdog` is
+  protected locally, not only on the out-of-repo harness.
 
 ### Fallback retrospective on a non-compliant close
 - **What:** every in-process close that never reaches the entry node's real,
@@ -538,8 +568,8 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   (`_finalize_run`) and the crash path (`_invoke_graph`'s
   `except BaseException`, before the re-raise). Idempotent — a compliant
   close's real entry is never duplicated. **Status:** done for every
-  in-process close; does NOT cover a watchdog kill (see #12 above — that
-  path has no local caller at all).
+  in-process close; a watchdog kill is a SEPARATE case, covered by
+  `write_watchdog_retrospective` instead (see #12 above).
 
 ### KB (handbook) entries
 - **What:** curated knowledge the agents consult (incl. running on SLURM, pipeline

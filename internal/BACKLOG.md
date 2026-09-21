@@ -34,8 +34,7 @@ before. Until one is answered or closed, treat it as known, not news.
 
 - [ ] **#1** Reconcile cancelled-but-completed delegations — *open, highest priority* (recurring UNGATED root cause; partially mitigated 2026-06-15)
 - [ ] **#6** Detect a delegation running but making zero ledger progress — *open*
-- [ ] **#22** Stall watchdog: liveness = "file written", not "progress made" — *open, medium (a backstop, not a primary control)*. `seconds_since_last_activity()` (`infra/watchdog_cleanup.py`) is implemented exactly as this item describes and its docstring defends the choice; whether a busy-but-unproductive run should be caught is still unanswered — see §22 below
-- [ ] **#41** The whole watchdog subsystem has no local caller — a watchdog kill in this repo still leaves no retrospective, no process reap, and no stall detection. *open, medium* — see §41 below
+- [ ] **#22** Stall watchdog: liveness = "file written", not "progress made" — *open, medium (a backstop, not a primary control)*. `seconds_since_last_activity()` (`infra/watchdog_cleanup.py`) is implemented exactly as this item describes and its docstring defends the choice; whether a busy-but-unproductive run should be caught is still unanswered — see §22 below. Note: `python -m adda.watchdog` (#41, resolved — see `internal/BACKLOG_RESOLVED.md`) is a flat 2×-budget hard deadline and deliberately does NOT consult this liveness signal, so this item is still genuinely open and independent of #41's fix.
 - [ ] **#16** ABAQUS subprocess can't import workspace modules (PYTHONPATH) — *open, abaqus2py-owned* (recommendation only; not an f3dasm fix)
 
 ## Parked — deferred on purpose
@@ -321,47 +320,6 @@ this repo. **Recommended fix (in abaqus2py):** inject the workspace dir into the
 ABAQUS subprocess environment (`PYTHONPATH`) or emit `sys.path.insert(0, WORKSPACE)`
 into the generated `preprocess.py`, so worker-authored param modules resolve without
 relying on the parent process's cwd/sys.path.
-
-## 41. The watchdog subsystem has no caller inside this repo
-
-**Status:** open, raised 2026-09-21 while fixing the non-compliant-close
-retrospective loss (`973b70c`). Verified directly against every function in
-`infra/watchdog_cleanup.py`, not inferred.
-
-**What is missing.** These all exist, are tested, and have **zero production
-callers anywhere in the package**:
-
-| Function | What it is for |
-|---|---|
-| `write_watchdog_retrospective` | the #12 synthetic post-mortem on a hard kill |
-| `reap_process_group` | kill leftover background jobs the run spawned |
-| `read_governor_pids` / `check_memory_and_kill` | the #14 recursive tree kill + memory cap |
-| `seconds_since_last_activity` | the §22 stall signal |
-
-`internal/FEATURES.md` points at `studies/.../run.py` as the caller — meaning a
-study's own runner. That is true of the out-of-repo campaign runners in
-`f3dasm-agentic-benchmarks`, but **none of the 8 local `studies/*/run.py` wire
-any of it**. So locally: a watchdog kill produces no retrospective, a detached
-campaign is never reaped, and a hung run is never force-exited.
-
-**Why this is not just "wire one function".** `973b70c` closed every
-*in-process* close (a normal close and a crash inside `AgenticRun`) because
-those paths run adda's own code. A watchdog kill by definition does not — the
-process is gone. Protecting it means something outside the graph owning a
-deadline and calling in, which is a capability this package does not currently
-have at all. That is a design decision about where the watchdog lives (the
-package? the study's runner? a supervisor?), not a missing call site.
-
-**Consequence if left as is.** It is not a silent correctness bug — runs still
-work. It is an *observability* gap concentrated exactly where CLAUDE.md §1 Step 1
-says the highest-signal evidence lives, and it makes three FEATURES.md entries
-read as more complete than they are (#12's is now corrected; #14's and §22's
-descriptions still describe behaviour no local run gets).
-
-**Smallest honest first step:** decide whether adda ships a watchdog at all, or
-whether it is deliberately the caller's job. If the latter, say so in
-FEATURES.md and the docs and stop describing the subsystem as a live feature; if
-the former, the deadline owner has to live above `AgenticRun.execute()`.
 
 ## 2. Richer delegator↔worker comms — typed blocker/escalation
 **Status:** deferred (prefer benchmarking the current system first). Design explored 2026-06-15.
