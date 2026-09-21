@@ -29,9 +29,12 @@ def decode_list_arg(raw) -> list[str]:
 
     ``raw`` is a real list (each element stringified) or a string encoding
     a list — JSON array, Python list/tuple repr, comma-joined, or a bare
-    scalar (returned as a one-element list). Never raises: a malformed
-    bracket/paren-delimited string degrades to a one-element list holding
-    the raw string, same as an unparseable JSON string always has.
+    scalar (returned as a one-element list). ``None`` decodes to ``[]``
+    ("no ids given") rather than falling through to ``str(None)`` and
+    being treated as the one-element list ``["None"]``. Never raises: a
+    malformed bracket/paren-delimited string degrades to a one-element
+    list holding the raw string, same as an unparseable JSON string
+    always has.
 
     Precedence matters. A bracket/paren-delimited string is tried as JSON
     first, then — only once JSON fails — as a Python literal, BEFORE any
@@ -41,6 +44,8 @@ def decode_list_arg(raw) -> list[str]:
     """
     if isinstance(raw, list):
         return [str(h) for h in raw]
+    if raw is None:
+        return []
     s = str(raw).strip()
     if s[:1] in ("[", "("):
         try:

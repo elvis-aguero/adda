@@ -71,3 +71,15 @@ def test_decode_list_arg_empty_string_preserves_prior_behavior():
     holding the empty string), so this fix touches nothing beyond repr/tuple
     decoding."""
     assert decode_list_arg("") == [""]
+
+
+def test_decode_list_arg_none_returns_empty_list():
+    """``None`` must decode to ``[]``, not the literal string ``"None"``.
+
+    Before the fix, ``None`` fell through to ``str(raw).strip()`` — and
+    ``str(None)`` is the four-character string ``"None"`` — so callers got
+    a one-element list holding a bogus id instead of "no ids given". Every
+    call site today guards ``None`` before reaching this decoder, but this
+    is the shared entry point for every list-valued tool argument and must
+    be correct at the boundary on its own."""
+    assert decode_list_arg(None) == []
