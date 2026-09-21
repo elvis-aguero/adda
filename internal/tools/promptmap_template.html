@@ -57,6 +57,22 @@ a{color:var(--accent)}
   position:sticky;top:0;height:100vh;overflow-y:auto}
 .main{min-width:0;padding-block:22px 60px;padding-inline:clamp(16px,3vw,38px)}
 
+/* Collapsed rail. The rail narrows to a strip rather than disappearing, so
+   the button that brings it back is always where the button that hid it was
+   — a floating control somewhere else is how a viewer loses the panel and
+   has to reload to get it back. */
+.shell[data-rail="off"]{grid-template-columns:38px minmax(0,1fr)}
+.shell[data-rail="off"] .rail{padding-inline:5px;gap:0;overflow:hidden}
+.shell[data-rail="off"] .rail > *:not(.brand){display:none}
+.shell[data-rail="off"] .brandtext{display:none}
+.shell[data-rail="off"] .brand{align-items:center}
+.brand{flex-direction:row;align-items:flex-start;gap:8px}
+.brandtext{display:flex;flex-direction:column;gap:3px;min-width:0}
+.railtoggle{margin-left:auto;flex:none;background:none;border:1px solid var(--line);
+  border-radius:var(--r);color:var(--ink-3);cursor:pointer;font:inherit;font-size:13px;
+  line-height:1;padding:4px 7px}
+.railtoggle:hover{border-color:var(--accent);color:var(--accent)}
+
 .brand{display:flex;flex-direction:column;gap:3px}
 .brand b{font-size:15px;font-weight:700;letter-spacing:-.01em}
 .brand span{font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
@@ -295,10 +311,15 @@ td.m.path{color:var(--accent)}
 </style>
 
 <div class="shell">
-  <nav class="rail">
+  <nav class="rail" id="rail">
     <div class="brand">
-      <b>Agent's-Eye View</b>
-      <span id="stamp"></span>
+      <div class="brandtext">
+        <b>Agent's-Eye View</b>
+        <span id="stamp"></span>
+      </div>
+      <button id="railtoggle" class="railtoggle" type="button" aria-expanded="true"
+              aria-controls="rail" aria-label="Hide the side panel"
+              title="Hide the side panel  (\\)">&#9668;</button>
     </div>
 
     <div class="search">
@@ -1232,9 +1253,35 @@ document.addEventListener("change", e=>{
 });
 
 $("#q").addEventListener("input", e=>{ query = e.target.value; render(); });
+/* ---------- the side panel, hidden or shown ----------
+   Remembered per viewer in localStorage: it is a reading preference, not
+   shared state, and every access is guarded because a private window or
+   blocked site data makes the accessor throw rather than return null. */
+const RAIL_KEY = "promptmap.rail";
+const shell = document.querySelector(".shell");
+const railBtn = $("#railtoggle");
+
+function setRail(on){
+  shell.dataset.rail = on ? "on" : "off";
+  railBtn.setAttribute("aria-expanded", on ? "true" : "false");
+  railBtn.innerHTML = on ? "&#9668;" : "&#9654;";
+  const label = on ? "Hide the side panel" : "Show the side panel";
+  railBtn.setAttribute("aria-label", label);
+  railBtn.title = label + "  (\\)";
+  try { localStorage.setItem(RAIL_KEY, on ? "on" : "off"); } catch(_) {}
+}
+
+let railOpen = true;
+try { railOpen = localStorage.getItem(RAIL_KEY) !== "off"; } catch(_) { railOpen = true; }
+setRail(railOpen);
+railBtn.addEventListener("click", () => setRail(shell.dataset.rail === "off"));
+
 document.addEventListener("keydown", e=>{
   if(e.key==="/" && e.target.tagName!=="INPUT"){ e.preventDefault(); $("#q").focus(); }
   if(e.key==="Escape" && e.target.id==="q"){ e.target.value=""; query=""; render(); }
+  if(e.key==="\\" && e.target.tagName!=="INPUT" && e.target.tagName!=="TEXTAREA"){
+    e.preventDefault(); setRail(shell.dataset.rail === "off");
+  }
 });
 
 indexSpans();

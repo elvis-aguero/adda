@@ -1,7 +1,7 @@
 {
   "url": "https://claude.ai/artifact/EXuUsKPBFJjPbHJKoMSRJr",
-  "artifact_version": "15",
-  "content_hash": "0c32357b652aa26af38f2f6a2f562a22fa519664f74d38b3aa2d0afc69e91982",
-  "published_at": "2026-09-20T14:09:00Z",
+  "artifact_version": "16",
+  "content_hash": "9618431f7b140406548c645fae942872e11bf2c2405a46f21b0d2889fe3b3476",
+  "published_at": "2026-09-21T22:27:53Z",
   "note": "Written by promptmap_sync.py --record after a successful publish. The hash covers the map's DATA, not its HTML."
 }
