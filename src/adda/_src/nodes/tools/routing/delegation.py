@@ -31,6 +31,7 @@ from typing import Any
 from ....prompts.tool_catalog import tool_examples
 from ..._constants import (
     backstop_enabled,
+    budget_wrapup_message,
     delegate_cutoff_enabled,
     delegate_cutoff_multiple,
     run_backstop_multiple,
@@ -1741,14 +1742,21 @@ class DelegationTools:
     def _budget_broadcast(self, delegation_id: str) -> list[str]:
         """Broadcast a newly-crossed 10%-overbudget threshold, once.
 
-        Queued for every other Working delegation and returned for this one.
+        Returned for THIS delegation (folded into the strategizer's own
+        GetStatus/Wait text — the strategizer polled, so it gets the
+        strategizer-shaped message, e.g. "call Done()"); queued for every
+        OTHER Working delegation, which gets the worker-shaped message
+        instead (a worker cannot call Done() — see
+        nodes/_constants.py:budget_wrapup_message). The two used to share
+        one Done()-mentioning string that a worker had no way to act on.
         """
         node = self.node
         budget = node._budget_seconds
         run_start = node._run_start
         if budget is None or run_start is None:
             return []
-        pct = ((time.time() - run_start) / budget) * 100
+        elapsed = time.time() - run_start
+        pct = (elapsed / budget) * 100
         # Thresholds: 80, 90, 100, 110, 120, …
         threshold = int(pct // 10) * 10
         if threshold < 80:
@@ -1757,20 +1765,28 @@ class DelegationTools:
             if threshold in node._budget_notified_pcts:
                 return []
             node._budget_notified_pcts.add(threshold)
-            _backstop_mult = run_backstop_multiple()
-            _over = backstop_enabled() and pct >= _backstop_mult * 100
-            msg = (
-                f"BACKSTOP IMMINENT: {pct:.0f}% of time "
-                "budget — past the "
-                f"{int(_backstop_mult)}x cost "
-                "backstop. Stop polling and call Done() "
-                "NOW with a partial report."
-            ) if _over else (
-                f"BUDGET: {pct:.0f}% of time budget consumed. "
-                "Wrap up your current work and return a partial "
-                "report as soon as possible."
-            )
-            # Queue for all currently Working delegations.
+            if threshold >= 100:
+                strategizer_msg = budget_wrapup_message(
+                    elapsed, budget, can_call_done=True)
+                worker_msg = budget_wrapup_message(
+                    elapsed, budget, can_call_done=False)
+                _backstop_mult = run_backstop_multiple()
+                if backstop_enabled() and pct >= _backstop_mult * 100:
+                    _bk = (
+                        f" BACKSTOP IMMINENT: past the "
+                        f"{int(_backstop_mult)}x cost backstop — the run "
+                        "will be force-closed."
+                    )
+                    strategizer_msg += _bk
+                    worker_msg += _bk
+            else:
+                strategizer_msg = worker_msg = (
+                    f"BUDGET: {pct:.0f}% of time budget consumed. "
+                    "Wrap up your current work and return a partial "
+                    "report as soon as possible."
+                )
+            # Queue the worker-shaped message for all OTHER currently
+            # Working delegations.
             with node._registry_lock:
                 active = [
                     did for did, e in node._registry.items()
@@ -1778,8 +1794,8 @@ class DelegationTools:
                     and did != delegation_id
                 ]
             for did in active:
-                node._pending_worker_msgs.setdefault(did, []).append(msg)
-        return [msg]
+                node._pending_worker_msgs.setdefault(did, []).append(worker_msg)
+        return [strategizer_msg]
 
     def CancelDelegation(self, delegation_id: str) -> str:
         """Detach a delegation whose RESULT you no longer want.

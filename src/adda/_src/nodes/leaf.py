@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ..runtime.graph_state import AgenticState
 
 from ..infra.delegation_log import DelegationLog  # noqa: F401 (type hint)
+from ._constants import budget_band_due, budget_wrapup_message
 from .parsing import _classify_response, _to_adapter_messages
 
 
@@ -146,6 +147,26 @@ class LeafMixin:
 
         return {"ReportEvals": ReportEvals}
 
+    def _budget_wrapup_message(self, state: AgenticState) -> str | None:
+        """The same escalating wrap-up ladder an orchestrating node's own
+        turn gets (nodes/_constants.py), for a leaf worker. Read straight
+        from ``state`` — a leaf never runs :meth:`_absorb_state`, so it has
+        no ``_budget_seconds``/``_run_start`` of its own, but the state it is
+        handed carries the run's budget/start time regardless of which node
+        is answering (CLAUDE.md "all nodes are equal").
+
+        A worker cannot call Done(), so the text asks for what it CAN do:
+        finish the step in flight, report what it has, and return.
+        """
+        budget, start = state.get("budget_seconds"), state.get("start_time")
+        if budget is None or start is None:
+            return None
+        import time
+        elapsed = time.time() - start
+        if not budget_band_due(elapsed, budget, self._budget_bands_fired):
+            return None
+        return budget_wrapup_message(elapsed, budget, can_call_done=False)
+
     def _respond(self, state: AgenticState) -> Any:
         """One task, one answer, handed back to whoever delegated it."""
         from langchain_core.messages import AIMessage
@@ -155,6 +176,9 @@ class LeafMixin:
 
         self._evals_reported.clear()
         messages = _to_adapter_messages(state["messages"])
+        wrapup = self._budget_wrapup_message(state)
+        if wrapup is not None:
+            messages = [*messages, {"role": "user", "content": wrapup}]
         text = self.adapter.invoke(messages)
 
         _req_sections = (

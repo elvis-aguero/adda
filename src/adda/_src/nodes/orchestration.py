@@ -23,11 +23,7 @@ if TYPE_CHECKING:
 from ..epistemics.hypothesis_ledger import HypothesisLedger
 from ..epistemics.science_monitor import ScienceMonitor
 from ..infra.delegation_log import DelegationLog
-from ._constants import (
-    delegate_cutoff_enabled,
-    delegate_cutoff_multiple,
-    run_backstop_multiple,
-)
+from ._constants import budget_band_due, budget_wrapup_message
 from .notices import wrap_notice
 from .parsing import _to_adapter_messages
 
@@ -648,32 +644,16 @@ class OrchestrationMixin:
             elapsed = time.time() - start
             pct = elapsed / budget
             if pct >= 1.0:
-                if delegate_cutoff_enabled():
-                    _ladder_txt = (
-                        "New delegations will be REFUSED past "
-                        f"{delegate_cutoff_multiple():g}x budget; a hard "
-                        "cost backstop then closes the run at "
-                        f"{int(run_backstop_multiple())}x budget."
-                    )
-                else:
-                    _ladder_txt = (
-                        "A hard cost backstop applies only at "
-                        f"{int(run_backstop_multiple())}x budget."
-                    )
-                warnings.append({
-                    "role": "user",
-                    "content": (
-                        f"Time budget fully consumed "
-                        f"({elapsed:.0f}s / {budget:.0f}s). This is an "
-                        "advisory soft limit — the run is NOT terminated. "
-                        "Wind down: finish the experiment in flight, then "
-                        "wrap up and call Done(); avoid starting new "
-                        f"delegations. {_ladder_txt} Do NOT cancel "
-                        "a delegation that is still progressing to save time — "
-                        "its ledgered evals already persist, so cancelling only "
-                        "throws away its report; let it finish and read it."
-                    ),
-                })
+                # Escalating ladder, once per newly-crossed 10% band (100,
+                # 110, 120, …) — not every turn, which a model learns to
+                # skip. Shared with leaf.py/delegation.py so a worker gets
+                # the same signal (nodes/_constants.py).
+                if budget_band_due(elapsed, budget, self._budget_bands_fired):
+                    warnings.append({
+                        "role": "user",
+                        "content": budget_wrapup_message(
+                            elapsed, budget, can_call_done=True),
+                    })
             elif pct >= 0.95:
                 warnings.append({
                     "role": "user",

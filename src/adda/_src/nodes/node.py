@@ -144,6 +144,11 @@ class Node(
         self._cost_observed: bool = False
         self._current_notes_dir: Path | None = None
         self._telemetry: Any = None
+        # Time-budget wrap-up ladder (nodes/_constants.py:budget_band_due):
+        # every node's OWN 10%-of-budget bands already reported, so an
+        # escalating message fires once per band whether this node
+        # orchestrates or answers — a property of any node, like recording.
+        self._budget_bands_fired: set[int] = set()
 
     # ── Run-context resolution (shared by every node) ────────────────────────
     # The read tools (RecallStore/QueryStore/HypothesisList/Get) may be granted

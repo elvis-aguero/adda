@@ -518,27 +518,43 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   (the memory-cap watcher stays on) on the out-of-repo harness — for long
   supervised runs. **Status:** done.
 
-### Delegate() time cutoff — new HARD cap on new delegations
-- **What:** a NEW HARD CAP on the time budget (a science budget — CLAUDE.md
-  §4 — approved explicitly by the maintainer for this one case; eval budgets
-  remain soft and untouched). Past `runtime: delegate_cutoff_multiple` × the
-  (soft) time budget (default `1.5`, disabled at `<= 0`), `Delegate()`
-  refuses to start a NEW delegation — an actionable `ERROR:` string, no
-  delegation registered. Every other close-out tool (`Wait`, `GetStatus`,
-  `Done`, deliverable tools) is untouched, and an in-flight delegation
-  started before the cutoff is never cancelled or disturbed — only NEW ones
-  are refused, so the run always has a path to close. Sits one rung below
-  `run_backstop_multiple` (which force-closes the run); if the cutoff
-  multiple is misconfigured `>=` the backstop multiple, `AgenticRun` warns
-  loudly at startup (it can never fire — the run closes first).
+### Delegate() time cutoff + escalating budget wrap-up ladder
+- **What:** two additions to the existing soft-budget/backstop ladder, both a
+  NEW HARD CAP on the time budget (a science budget — CLAUDE.md §4 — approved
+  explicitly by the maintainer for this one case; eval budgets remain soft
+  and untouched):
+  1. Past `runtime: delegate_cutoff_multiple` × the (soft) time budget (default
+     `1.5`, disabled at `<= 0`), `Delegate()` refuses to start a NEW
+     delegation — an actionable `ERROR:` string, no delegation registered.
+     Every other close-out tool (`Wait`, `GetStatus`, `Done`, deliverable
+     tools) is untouched, and an in-flight delegation started before the
+     cutoff is never cancelled or disturbed — only NEW ones are refused, so
+     the run always has a path to close. Sits one rung below
+     `run_backstop_multiple` (which force-closes the run); if the cutoff
+     multiple is misconfigured `>=` the backstop multiple, `AgenticRun`
+     warns loudly at startup (it can never fire — the run closes first).
+  2. Every node — not only an orchestrating one — gets an escalating
+     wrap-up message once per newly-crossed 10%-of-budget band at/past 100%
+     (100, 110, 120, …), instead of the strategizer's old every-turn repeat
+     past 1.0×. A worker (leaf node, or a `Delegate()`-spawned WorkerSession)
+     is told what it can actually do (finish the step, report what you have,
+     return) — never "call Done()", which only the strategizer holds. The
+     strategizer's own band message additionally says new delegations are
+     now refused once the cutoff multiple is actually passed.
 - **Where:** knobs in `nodes/_constants.py` (`delegate_cutoff_multiple`,
   `delegate_cutoff_enabled`); the refusal in
   `nodes/tools/routing/delegation.py::DelegationTools._check_delegate_cutoff`
-  (called first thing in `Delegate()`); the misconfiguration warning in
-  `runtime/agent_runtime.py::_warn_if_delegate_cutoff_unreachable`.
+  (called first thing in `Delegate()`); the shared ladder
+  (`budget_band_due`, `budget_wrapup_message`) in `nodes/_constants.py`,
+  called from `orchestration.py::_budget_warnings` (strategizer),
+  `leaf.py::_respond` (a leaf node reached via real graph routing), and
+  `delegation.py::_budget_broadcast` (the WorkerSession path a `Delegate()`
+  worker actually runs through in the built-in graph); the misconfiguration
+  warning in `runtime/agent_runtime.py::_warn_if_delegate_cutoff_unreachable`.
   Diagnostic: `DELEGATE_CUTOFF` via the existing `_record_intervention`
   mechanism (`diagnostics.jsonl`), the same channel `MILESTONE_BLOCK` uses.
-- **Status:** done, headless-tested (`tests/test_delegate_time_cutoff.py`).
+- **Status:** done, headless-tested (`tests/test_delegate_time_cutoff.py`,
+  `tests/test_budget_wrapup_ladder.py`).
 
 ### `python -m adda.watchdog` — the in-package run launcher (#41)
 - **What:** a launcher that runs a study as a CHILD process, in its own process
