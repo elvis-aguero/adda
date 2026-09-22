@@ -29,7 +29,12 @@ from pathlib import Path
 from typing import Any
 
 from ....prompts.tool_catalog import tool_examples
-from ..._constants import backstop_enabled, run_backstop_multiple
+from ..._constants import (
+    backstop_enabled,
+    delegate_cutoff_enabled,
+    delegate_cutoff_multiple,
+    run_backstop_multiple,
+)
 from ...notices import wrap_notice
 from ...parsing import (
     _classify_response,
@@ -1083,6 +1088,9 @@ class DelegationTools:
         without a graph spec (tests).
         """
         node = self.node
+        cutoff_refusal = self._check_delegate_cutoff()
+        if cutoff_refusal is not None:
+            return cutoff_refusal
         resolved = self._resolve_target(target)
         if resolved is None:
             return (
@@ -1200,6 +1208,42 @@ class DelegationTools:
         return (
             f"Delegation started. ID: {delegation_id!r}. "
             f"Use GetStatus('{delegation_id}') to poll for completion."
+        )
+
+    def _check_delegate_cutoff(self) -> str | None:
+        """Refuse a NEW delegation once elapsed time passes
+        delegate_cutoff_multiple x the (soft) time budget, or None to
+        proceed.
+
+        Only NEW delegations are gated here — an in-flight one is untouched
+        (this fires before a target is even resolved, so it never reaches
+        anything that would register/cancel a delegation). Every other tool
+        the strategizer needs to close a run (Wait, GetStatus, Done,
+        WriteDeliverable, …) lives outside DelegationTools.Delegate and is
+        unaffected, so the run always has a path to close.
+        """
+        node = self.node
+        if not delegate_cutoff_enabled():
+            return None
+        budget, start = node._budget_seconds, node._run_start
+        if budget is None or start is None:
+            return None
+        mult = delegate_cutoff_multiple()
+        elapsed = time.time() - start
+        if elapsed <= budget * mult:
+            return None
+        node._record_intervention(
+            "DELEGATE_CUTOFF", "(refused)",
+            f"new delegation refused past {mult:g}x time budget "
+            f"({elapsed:.0f}s / {budget:.0f}s)",
+        )
+        return (
+            f"ERROR: new delegations are refused past {mult:g}x the time "
+            f"budget ({elapsed:.0f}s elapsed / {budget:.0f}s budget). This "
+            "delegation was NOT started. Wrap up instead: Wait() on any "
+            "delegation still in flight and read its report, then call "
+            "Done() with what you have. Do not cancel a progressing "
+            "delegation — its ledgered evals persist regardless."
         )
 
     def _resolve_target(self, target: str) -> str | None:

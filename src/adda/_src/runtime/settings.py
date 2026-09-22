@@ -50,6 +50,7 @@ KNOWN_KEYS: frozenset[str] = frozenset({
     "context_policy",
     "context_window",
     "debug",
+    "delegate_cutoff_multiple",
     "doe_playbook",
     "f3dasm_api",
     "followup_wait_s",

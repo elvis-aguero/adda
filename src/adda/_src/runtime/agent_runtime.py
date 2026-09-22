@@ -19,6 +19,12 @@ from ..backends.base import Agent, Graph
 from ..infra.container_runner import ContainerRunner
 from ..infra.delegation_log import DelegationLog
 from ..infra.workspace_vcs import init_workspace_repo
+from ..nodes._constants import (
+    backstop_enabled,
+    delegate_cutoff_enabled,
+    delegate_cutoff_multiple,
+    run_backstop_multiple,
+)
 from ..prompts.agent_prompts import (
     DELEGATION_ROSTER_TEMPLATE,
     RUN_PATHS_PREAMBLE_TEMPLATE,
@@ -66,6 +72,26 @@ _EXTERNAL_STOP_SIGNATURES = {
     "org_spend_limit": "org's monthly spend limit",
 }
 
+
+
+def _warn_if_delegate_cutoff_unreachable() -> None:
+    """Startup guard: delegate_cutoff_multiple must sit strictly below
+    run_backstop_multiple or it can never fire — the run closes at the
+    backstop first. Not fatal (a stale/typo'd knob shouldn't make a study
+    unstartable, matching settings.configure's own leniency for unknown
+    keys); just tells the operator loudly, once, at the top of the run."""
+    if not delegate_cutoff_enabled() or not backstop_enabled():
+        return
+    _cutoff, _backstop = delegate_cutoff_multiple(), run_backstop_multiple()
+    if _cutoff >= _backstop:
+        logging.getLogger("adda").warning(
+            "runtime: delegate_cutoff_multiple (%.2gx) >= "
+            "run_backstop_multiple (%.2gx) — the run-level backstop closes "
+            "the run before the delegate cutoff can ever refuse a "
+            "delegation. Set delegate_cutoff_multiple below "
+            "run_backstop_multiple for it to take effect.",
+            _cutoff, _backstop,
+        )
 
 
 def resolve_node_identity(
@@ -410,6 +436,7 @@ class AgenticRun:
         # process-global, so building two AgenticRun objects before running
         # either would leave both executing under the second one's config.
         settings.configure(self._study_runtime, self._runtime_override)
+        _warn_if_delegate_cutoff_unreachable()
         ctx = self._prepare_run()
         result = self._invoke_graph(ctx)
         return self._finalize_run(ctx, result)

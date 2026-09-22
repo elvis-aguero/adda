@@ -23,7 +23,11 @@ if TYPE_CHECKING:
 from ..epistemics.hypothesis_ledger import HypothesisLedger
 from ..epistemics.science_monitor import ScienceMonitor
 from ..infra.delegation_log import DelegationLog
-from ._constants import run_backstop_multiple
+from ._constants import (
+    delegate_cutoff_enabled,
+    delegate_cutoff_multiple,
+    run_backstop_multiple,
+)
 from .notices import wrap_notice
 from .parsing import _to_adapter_messages
 
@@ -644,6 +648,18 @@ class OrchestrationMixin:
             elapsed = time.time() - start
             pct = elapsed / budget
             if pct >= 1.0:
+                if delegate_cutoff_enabled():
+                    _ladder_txt = (
+                        "New delegations will be REFUSED past "
+                        f"{delegate_cutoff_multiple():g}x budget; a hard "
+                        "cost backstop then closes the run at "
+                        f"{int(run_backstop_multiple())}x budget."
+                    )
+                else:
+                    _ladder_txt = (
+                        "A hard cost backstop applies only at "
+                        f"{int(run_backstop_multiple())}x budget."
+                    )
                 warnings.append({
                     "role": "user",
                     "content": (
@@ -652,8 +668,7 @@ class OrchestrationMixin:
                         "advisory soft limit — the run is NOT terminated. "
                         "Wind down: finish the experiment in flight, then "
                         "wrap up and call Done(); avoid starting new "
-                        "delegations. A hard cost backstop applies only at "
-                        f"{int(run_backstop_multiple())}x budget. Do NOT cancel "
+                        f"delegations. {_ladder_txt} Do NOT cancel "
                         "a delegation that is still progressing to save time — "
                         "its ledgered evals already persist, so cancelling only "
                         "throws away its report; let it finish and read it."

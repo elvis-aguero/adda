@@ -87,6 +87,7 @@ rather than silently reverting to the default.
 | `recursion_limit` | LangGraph step ceiling for one run | `2000` |
 | `max_consecutive_errors` | consecutive failures to one target before the run halts | `12` |
 | `run_backstop_multiple` | multiple of the wall budget after which the run is force-closed | `2.0` |
+| `delegate_cutoff_multiple` | multiple of the wall budget past which NEW delegations are refused (in-flight ones are never touched); must stay below `run_backstop_multiple` or it can never fire. `0` disables | `1.5` |
 | `followup_wait_s` | how long a `FollowUp` waits for a human answer | `600` |
 | `llm_retry_max` | retry attempts for a failed model call | `5` |
 | `llm_retry_base` | base seconds for retry backoff | `2.0` |
