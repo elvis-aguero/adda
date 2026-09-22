@@ -315,13 +315,17 @@ def test_integration_stateless_between_calls():
 
 def test_last_usage_populated_from_usage_metadata():
     """last_usage is populated with input/output token counts from AIMessage.usage_metadata."""
-    from langchain_core.messages import AIMessage
+    from langchain_core.messages import AIMessage, HumanMessage
 
     fake_msg = AIMessage(content="result")
     fake_msg.usage_metadata = {"input_tokens": 75, "output_tokens": 30}
 
+    # Realistic shape: the graph returns the input messages followed by
+    # what this call generated — usage is summed only over the latter.
     fake_agent = MagicMock()
-    fake_agent.invoke.return_value = {"messages": [fake_msg]}
+    fake_agent.invoke.return_value = {
+        "messages": [HumanMessage(content="go"), fake_msg],
+    }
 
     adapter = _make_adapter()
     adapter._agent = fake_agent

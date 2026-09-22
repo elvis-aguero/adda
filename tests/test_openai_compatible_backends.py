@@ -83,12 +83,17 @@ def test_build_agent_passes_endpoint_and_key(monkeypatch):
 # --------------------------------------------------------------------------
 
 def test_invoke_returns_content_and_populates_usage():
-    from langchain_core.messages import AIMessage
+    from langchain_core.messages import AIMessage, HumanMessage
 
+    # Realistic shape: the graph's returned "messages" is the input we sent
+    # (lc_msgs) followed by what this call generated — the reducer appends,
+    # it never replaces. Here that's the input HumanMessage plus one AI reply.
     msg = AIMessage(content="the answer")
     msg.usage_metadata = {"input_tokens": 11, "output_tokens": 7}
     fake_agent = MagicMock()
-    fake_agent.invoke.return_value = {"messages": [msg]}
+    fake_agent.invoke.return_value = {
+        "messages": [HumanMessage(content="go"), msg],
+    }
 
     a = VLLMAdapter(model="m", system_prompt="s")
     a._agent = fake_agent  # inject — no real server call
@@ -97,6 +102,182 @@ def test_invoke_returns_content_and_populates_usage():
     assert out == "the answer"
     assert a.last_usage["input_tokens"] == 11
     assert a.last_usage["output_tokens"] == 7
+    assert a.last_usage["total_cost_usd"] is None
+
+
+# ---------------------------------------------------------------------------
+# The undercounting bug: usage must be SUMMED across every AI message
+# generated this invocation, not read from the last one only. And it must
+# stop at the input boundary — messages passed IN (lc_msgs) must never be
+# summed, even when they carry usage_metadata from an earlier call, or the
+# total would double-count history instead of just being short by it.
+# ---------------------------------------------------------------------------
+
+def _ai(content, input_tokens, output_tokens, cache_read=0, cache_creation=0):
+    from langchain_core.messages import AIMessage
+    m = AIMessage(content=content)
+    m.usage_metadata = {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "input_token_details": {
+            "cache_read": cache_read, "cache_creation": cache_creation,
+        },
+    }
+    return m
+
+
+def test_usage_sums_across_every_ai_message_this_invocation():
+    """The regression test: several tool-calling round trips each carry
+    their own usage_metadata; the total must be their sum, not the last
+    message's value alone."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    fake_agent = MagicMock()
+    fake_agent.invoke.return_value = {"messages": [
+        HumanMessage(content="go"),           # input, excluded
+        _ai("call a tool", 10, 5),
+        ToolMessage(content="result", tool_call_id="t1"),
+        _ai("call another", 20, 8),
+        ToolMessage(content="result2", tool_call_id="t2"),
+        _ai("final answer", 30, 12),
+    ]}
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = fake_agent
+    out = a.invoke([{"role": "user", "content": "go"}])
+
+    assert out == "final answer"
+    assert a.last_usage["input_tokens"] == 10 + 20 + 30
+    assert a.last_usage["output_tokens"] == 5 + 8 + 12
+
+
+def test_input_history_usage_metadata_is_not_double_counted():
+    """Construct a case where summing ALL of result['messages'] (instead of
+    only what was generated this call) would inflate the total: the input
+    HumanMessage/AIMessage pair here carries usage_metadata as if from a
+    prior call. Only the new AI message's tokens may count."""
+    from langchain_core.messages import HumanMessage
+
+    stale_input_ai = _ai("previous turn's reply", 999, 999)
+    fake_agent = MagicMock()
+    fake_agent.invoke.return_value = {"messages": [
+        HumanMessage(content="earlier turn"),
+        stale_input_ai,                      # part of the input, must be excluded
+        HumanMessage(content="go"),
+        _ai("final answer", 10, 5),
+    ]}
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = fake_agent
+
+    # _to_lc_messages(messages) reconstructs the exact prefix the graph was
+    # given, so patch it to match the 3-message input prefix above (the two
+    # HumanMessages plus the stale AI reply between them) — i.e. everything
+    # in the fake result except the final new AI message.
+    import adda._src.backends.openai_compatible as oc_mod
+    prefix = fake_agent.invoke.return_value["messages"][:-1]
+    with patch.object(oc_mod, "_to_lc_messages", return_value=prefix):
+        out = a.invoke([{"role": "user", "content": "go"}])
+
+    assert out == "final answer"
+    assert a.last_usage["input_tokens"] == 10
+    assert a.last_usage["output_tokens"] == 5
+
+
+def test_tool_and_human_messages_are_skipped_without_usage_metadata():
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    fake_agent = MagicMock()
+    fake_agent.invoke.return_value = {"messages": [
+        HumanMessage(content="go"),
+        ToolMessage(content="result", tool_call_id="t1"),
+        _ai("final answer", 10, 5),
+    ]}
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = fake_agent
+    a.invoke([{"role": "user", "content": "go"}])
+
+    assert a.last_usage["input_tokens"] == 10
+    assert a.last_usage["output_tokens"] == 5
+
+
+def test_ai_message_with_no_usage_metadata_contributes_zero():
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    no_meta_ai = AIMessage(content="call a tool")  # no usage_metadata set
+    fake_agent = MagicMock()
+    fake_agent.invoke.return_value = {"messages": [
+        HumanMessage(content="go"),
+        no_meta_ai,
+        _ai("final answer", 10, 5),
+    ]}
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = fake_agent
+    a.invoke([{"role": "user", "content": "go"}])
+
+    assert a.last_usage["input_tokens"] == 10
+    assert a.last_usage["output_tokens"] == 5
+    assert a.last_usage["total_cost_usd"] is None
+
+
+def test_streaming_and_non_streaming_branches_agree_on_totals(monkeypatch):
+    """debug: true drives the streaming branch instead of a plain invoke();
+    both must land on identical usage totals for the same conversation."""
+    from langchain_core.messages import HumanMessage
+
+    msgs = [
+        HumanMessage(content="go"),
+        _ai("call a tool", 10, 5),
+        _ai("final answer", 20, 8),
+    ]
+
+    # Non-streaming branch.
+    fake_agent_a = MagicMock()
+    fake_agent_a.invoke.return_value = {"messages": list(msgs)}
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = fake_agent_a
+    a.invoke([{"role": "user", "content": "go"}])
+    non_streaming_usage = dict(a.last_usage)
+
+    # Streaming branch: stream() yields the whole state after each step,
+    # ending on the same final state invoke() would have returned. The
+    # streaming branch is picked by `.base.debug_enabled()`, imported fresh
+    # (locally) inside `_invoke_once` on every call, so patching it on the
+    # `.base` module is what actually takes effect.
+    import adda._src.backends.base as base_mod
+    monkeypatch.setattr(base_mod, "debug_enabled", lambda: True)
+
+    class _StreamingAgent:
+        def stream(self, state, config=None, stream_mode=None):
+            acc = list(state["messages"])
+            for m in msgs[len(state["messages"]):]:
+                acc = acc + [m]
+                yield {"messages": list(acc)}
+
+    b = VLLMAdapter(model="m", system_prompt="s")
+    b._agent = _StreamingAgent()
+    b.invoke([{"role": "user", "content": "go"}])
+    streaming_usage = dict(b.last_usage)
+
+    assert streaming_usage == non_streaming_usage
+    assert streaming_usage["input_tokens"] == 10 + 20
+    assert streaming_usage["output_tokens"] == 5 + 8
+
+
+def test_total_cost_usd_stays_none_never_zero():
+    from langchain_core.messages import HumanMessage
+
+    fake_agent = MagicMock()
+    fake_agent.invoke.return_value = {"messages": [
+        HumanMessage(content="go"), _ai("final answer", 10, 5),
+    ]}
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = fake_agent
+    a.invoke([{"role": "user", "content": "go"}])
+
     assert a.last_usage["total_cost_usd"] is None
 
 

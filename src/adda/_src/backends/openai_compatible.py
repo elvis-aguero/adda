@@ -1072,15 +1072,46 @@ class OpenAICompatibleAdapter:
                 raise
         if result is None:
             result = {"messages": []}
-        last = result["messages"][-1]
+        all_msgs = result["messages"]
+        last = all_msgs[-1]
 
         # Extract token usage from LangChain response metadata.
-        meta = getattr(last, "usage_metadata", None) or {}
+        #
+        # ``all_msgs`` is the WHOLE graph state, i.e. the input messages we
+        # passed in (``lc_msgs``) followed by everything the agent loop
+        # generated this call. The model is invoked once per tool-calling
+        # round trip, so a strategizer turn that loops several times before
+        # its final reply produces several AI messages, each carrying its
+        # own ``usage_metadata`` — reading only ``last`` (the old behaviour)
+        # silently dropped every intermediate call's tokens.
+        #
+        # Summing must stop at the input boundary: ``thread_id`` is fresh
+        # per invoke (see above), so the graph never carries earlier turns'
+        # messages into this call, and ``lc_msgs`` is exactly the prefix the
+        # graph started from — the reducer only ever appends. Slicing at
+        # ``len(lc_msgs)`` therefore counts exactly the messages this
+        # invocation produced, never the history that seeded it; summing
+        # over all of ``all_msgs`` instead would double-count that history
+        # on every call and inflate every total.
+        #
+        # Only AI messages carry usage_metadata (tool/human messages don't),
+        # so anything without it contributes zero rather than raising.
+        new_msgs = all_msgs[len(lc_msgs):]
+        total_in = total_out = total_cache_read = total_cache_creation = 0
+        for _m in new_msgs:
+            meta = getattr(_m, "usage_metadata", None)
+            if not meta:
+                continue
+            total_in += meta.get("input_tokens", 0) or 0
+            total_out += meta.get("output_tokens", 0) or 0
+            details = meta.get("input_token_details") or {}
+            total_cache_read += details.get("cache_read", 0) or 0
+            total_cache_creation += details.get("cache_creation", 0) or 0
         self.last_usage = {
-            "input_tokens": meta.get("input_tokens", 0),
-            "output_tokens": meta.get("output_tokens", 0),
-            "cache_read_input_tokens": meta.get("input_token_details", {}).get("cache_read", 0),
-            "cache_creation_input_tokens": meta.get("input_token_details", {}).get("cache_creation", 0),
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "cache_read_input_tokens": total_cache_read,
+            "cache_creation_input_tokens": total_cache_creation,
             "total_cost_usd": None,  # not available from open-weight/self-hosted
         }
 
