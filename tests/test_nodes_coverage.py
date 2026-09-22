@@ -885,7 +885,7 @@ def test_delegate_no_worker_adapter_returns_error():
 
 
 # ---------------------------------------------------------------------------
-# Node: _make_recall_history with None delegation_log
+# Node: RecallHistory with None delegation_log
 # ---------------------------------------------------------------------------
 
 
@@ -898,6 +898,62 @@ def test_worker_node_recall_history_none_log(tmp_path):
 
     # RecallHistory should NOT be injected when delegation_log is None
     assert "RecallHistory" not in adapter.closure_tools
+
+
+# ---------------------------------------------------------------------------
+# One implementation per tool, not one per node kind (leaf vs. orchestrating)
+#
+# Write / ReportEvals / RecallHistory used to have TWO implementations each
+# — one closed over in nodes/leaf.py, one in
+# nodes/tools/routing/delegation.py — which produced the same bug four
+# times (a capability added to one path silently missing from the other).
+# Both paths now call the SAME builder in delegation.py; these tests fail
+# a future re-fork of either tool.
+# ---------------------------------------------------------------------------
+
+
+def test_write_report_evals_recall_history_have_one_implementation():
+    """No nested ``def Write`` / ``def ReportEvals`` left in leaf.py, and
+    exactly one such def lives in delegation.py (inside the shared
+    builder). RecallHistory has no closure body of its own anywhere in
+    leaf.py — it is a call to the shared ``build_recall_history``."""
+    import ast
+    import inspect
+
+    from adda._src.nodes import leaf
+    from adda._src.nodes.tools.routing import delegation
+
+    def count_nested_defs(module, name: str) -> int:
+        tree = ast.parse(inspect.getsource(module))
+        return sum(
+            1
+            for n in ast.walk(tree)
+            if isinstance(n, ast.FunctionDef) and n.name == name
+        )
+
+    for tool_name in ("Write", "ReportEvals"):
+        assert count_nested_defs(delegation, tool_name) == 1, (
+            f"{tool_name} must have exactly one implementation, in "
+            "delegation.py's shared builder"
+        )
+        assert count_nested_defs(leaf, tool_name) == 0, (
+            f"{tool_name} was re-implemented in leaf.py — collapse back "
+            "to the shared builder in delegation.py"
+        )
+
+    # RecallHistory's real body lives once, on DelegationTools; leaf.py must
+    # not define a closure for it (nor keep the retired factory around).
+    assert count_nested_defs(delegation, "RecallHistory") == 1
+    assert count_nested_defs(leaf, "RecallHistory") == 0
+    assert not hasattr(leaf.LeafMixin, "_make_recall_history")
+
+    # Both paths route through the same three builders — verified by name,
+    # not just by absence of a re-fork, so an import that quietly swaps in
+    # a look-alike local helper also fails this test.
+    leaf_src = inspect.getsource(leaf)
+    assert "build_sandboxed_write" in leaf_src
+    assert "build_report_evals" in leaf_src
+    assert "build_recall_history" in leaf_src
 
 
 # ---------------------------------------------------------------------------

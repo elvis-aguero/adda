@@ -1501,6 +1501,61 @@ def test_worker_write_strips_redundant_delegation_prefix(tmp_path):
     assert written[1].replace("\\", "/").endswith("/D001/b.csv")
 
 
+def test_worker_report_evals_credits_the_right_delegation(tmp_path):
+    """ReportEvals(n) on one delegation must not bleed into another's count.
+
+    Regression scaffolding for the leaf/delegation ReportEvals merge: both
+    paths now build their closure from the same
+    ``tools.routing.delegation.build_report_evals``, but the SCOPE (which
+    delegation's ``claimed_evals`` gets written) must stay per-delegation.
+    Two delegations, run one after another with distinct counts, must each
+    log their OWN count — not the other's or a stale one."""
+    from adda._src.infra.delegation_log import DelegationLog
+    from adda._src.nodes import Node
+
+    class DelegateAdapter(StubAdapter):
+        def invoke(self, messages):
+            self.closure_tools["HypothesisPropose"](
+                statement="ReportEvals scoping test",
+                falsification_criterion="c", prediction="p", prior=0.5)
+            self.closure_tools["Delegate"](
+                target="implementer", intent="first", expected_report="",
+                hypothesis_ids=["H1"], wait=True)
+            self.closure_tools["Delegate"](
+                target="implementer", intent="second", expected_report="",
+                hypothesis_ids=["H1"], wait=True)
+            self.closure_tools["Done"](summary="done")
+            return "Done."
+
+    study_tmp = tmp_path / "study"
+    study_tmp.mkdir()
+    log = DelegationLog(tmp_path / "delegation_log.jsonl")
+
+    counts = iter([11, 42])
+
+    class SwappingWorker(StubAdapter):
+        """A fresh worker_template.copy() isn't needed here (sequential,
+        wait=True) — reuse the same adapter but change its claim per call."""
+
+        def invoke(self, messages):
+            self.closure_tools["ReportEvals"](next(counts))
+            return ("## Report\n\n### Actions taken\n- reported evals\n\n"
+                    "### Files touched\n- none\n\n### Conclusions\nok\n\n"
+                    "### Numbers\nevals: 0")
+
+    node = Node(
+        DelegateAdapter(), name="strategizer", outgoing=["implementer"],
+        spec=_ledger_spec(), worker_adapters={"implementer": SwappingWorker()},
+        notes_dir=tmp_path, study_dir=study_tmp, delegation_log=log,
+    )
+    node(make_state(study_dir=str(study_tmp)))
+
+    records = log.query_all()
+    by_task = {r["task"]: r["evals"] for r in records}
+    assert by_task["first"] == 11
+    assert by_task["second"] == 42
+
+
 # ---------------------------------------------------------------------------
 # Blindspot 1: _accumulate_usage() unit tests
 # ---------------------------------------------------------------------------

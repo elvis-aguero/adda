@@ -58,7 +58,8 @@ class LeafMixin:
         self._setup_sandboxed_write()
         self.adapter.closure_tools.update(self._build_eval_closures())
         if delegation_log is not None:
-            self.adapter.closure_tools["RecallHistory"] = self._make_recall_history()
+            from .tools.routing import build_recall_history
+            self.adapter.closure_tools["RecallHistory"] = build_recall_history(self)
         # Declaration-gated read-only ledger/store tools — the SAME builder the
         # orchestrating nodes use, so a leaf worker (e.g. the critic) gets an
         # identical, working RecallStore/QueryStore/HypothesisList/Get surface
@@ -68,36 +69,15 @@ class LeafMixin:
         self.adapter.closure_tools.update(
             build_declared_shared_closures(self, self._agent_tools))
 
-    def _make_recall_history(self) -> Any:
-        """Build the RecallHistory closure for this worker node."""
-        node = self
-
-        def RecallHistory(n: int = 5) -> str:
-            """Return the last n delegations received by this node as (task, deliverable) pairs.
-            Call at the start of a delegation to recall prior work. Returns oldest-first."""
-            if node._delegation_log is None:
-                return "No delegation log available."
-            records = node._delegation_log.query_received(node._name, n)
-            if not records:
-                return "No prior delegations found."
-            parts = []
-            for i, r in enumerate(records, 1):
-                parts.append(
-                    f"== Prior delegation {i} ==\n"
-                    f"Task: {r['task']}\n\n"
-                    f"Deliverable:\n{r['deliverable']}"
-                )
-            return "\n\n---\n\n".join(parts)
-
-        return RecallHistory
-
     def _setup_sandboxed_write(self) -> None:
         """Replace native Write with a workspace-sandboxed closure.
 
         Removes 'Write' from native_tools so the SDK doesn't expose it,
-        then injects a closure that hard-rejects any path that resolves
-        outside the workspace.  Path.resolve() collapses '..' and symlinks,
-        so traversal attacks are blocked at the tool level, not just the prompt.
+        then installs the same builder an orchestrating node's dispatched
+        worker gets (:func:`build_sandboxed_write`), scoped to this leaf's
+        whole workspace instead of one delegation's subfolder — a leaf
+        reached via real graph routing (see module docstring) has no
+        delegation_id of its own to scope tighter than that.
 
         Bash is kept native but cwd is already set to study_dir by the adapter;
         the prompt further constrains it to the workspace.
@@ -105,47 +85,31 @@ class LeafMixin:
         if self._workspace_dir is None:
             return  # no sandboxing if study_dir unknown (e.g. tests)
 
-        workspace = self._workspace_dir.resolve()
-
         # Remove native Write so the SDK doesn't expose an unrestricted version
         if hasattr(self.adapter, "native_tools") and "Write" in self.adapter.native_tools:
             self.adapter.native_tools = [
                 t for t in self.adapter.native_tools if t != "Write"
             ]
 
-        def Write(path: str, body: str) -> str:
-            """Write a file.  Restricted to workspace — no exceptions."""
-            try:
-                # Resolve against workspace so relative paths land there
-                candidate = (workspace / path).resolve()
-            except Exception as exc:  # noqa: BLE001
-                return f"ERROR: invalid path {path!r}: {exc}"
+        from .tools.routing import build_sandboxed_write
 
-            # Reject anything that escapes the delegations tree
-            try:
-                candidate.relative_to(workspace)
-            except ValueError:
-                return (
-                    f"ERROR: write rejected — path resolves to {candidate}, "
-                    f"which is outside the workspace ({workspace}). "
-                    "Only paths inside the workspace are permitted."
-                )
-
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            candidate.write_text(body, encoding="utf-8")
-            return f"Written: {candidate}"
-
+        # Bound to a plain name (not inlined into the assignment) so
+        # internal/tools/promptmap.py's injected_tool_docs() scanner — which
+        # resolves a closure_tools["Write"] = <name> rebind to the function
+        # <name> refers to — can still find this tool's docstring after the
+        # move into the shared builder.
+        Write = build_sandboxed_write(self._workspace_dir)
         self.adapter.closure_tools["Write"] = Write
 
     def _build_eval_closures(self) -> dict:
+        from .tools.routing import build_report_evals
+
         evals = self._evals_reported
-
-        def ReportEvals(count: int) -> str:
-            """Report the number of function evaluations used in this task."""
-            evals["count"] = int(count)
-            return f"Recorded {count} evaluations."
-
-        return {"ReportEvals": ReportEvals}
+        return {
+            "ReportEvals": build_report_evals(
+                record=lambda n: evals.__setitem__("count", n)
+            )
+        }
 
     def _budget_wrapup_message(self, state: AgenticState) -> str | None:
         """The same escalating wrap-up ladder an orchestrating node's own

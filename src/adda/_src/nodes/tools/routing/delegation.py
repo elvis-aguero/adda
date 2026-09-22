@@ -104,6 +104,93 @@ def resolve_target(
     return None
 
 
+def build_sandboxed_write(
+    root: Path,
+    *,
+    strip_prefix: str | None = None,
+    scope_label: str | None = None,
+) -> Any:
+    """Build a ``Write`` closure hard-sandboxed to ``root``.
+
+    One implementation, two scopes: an orchestrating node's dispatched
+    worker gets ``root`` set to that ONE delegation's ``{delegation_id}/``
+    subfolder (``strip_prefix=delegation_id`` also absorbs the redundant
+    ``{delegation_id}/…`` prefix agents naturally type, since the prompt
+    calls it "your D### subfolder" even though the sandbox is already
+    rooted there); a leaf reached via real graph routing (no delegation_id
+    of its own) gets ``root`` set to its whole workspace instead, with no
+    prefix to strip. Both reject, via ``Path.resolve()`` + ``relative_to``,
+    any path that escapes ``root`` — collapsing '..' and symlinks so
+    traversal is blocked at the tool level, not just the prompt.
+    """
+    _root = root.resolve()
+    _label = scope_label or f"the workspace ({_root})"
+
+    def Write(path: str, body: str) -> str:
+        """Write a file. Restricted to your own workspace — no exceptions."""
+        _norm = (path or "").strip()
+        if strip_prefix:
+            _first, _sep, _rest = _norm.partition("/")
+            if _first == strip_prefix and _rest:
+                _norm = _rest
+        try:
+            candidate = (_root / _norm).resolve()
+        except Exception as exc:  # noqa: BLE001
+            return f"ERROR: invalid path {path!r}: {exc}"
+        try:
+            candidate.relative_to(_root)
+        except ValueError:
+            return (
+                f"ERROR: write rejected — path resolves to {candidate}, "
+                f"which is outside {_label}. Only paths inside it are "
+                "permitted."
+            )
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_text(body, encoding="utf-8")
+        return f"Written: {candidate}"
+
+    return Write
+
+
+def build_report_evals(
+    record: Any,
+    drain: Any = None,
+) -> Any:
+    """Build a ``ReportEvals`` closure, one implementation for both scopes.
+
+    ``record(count)`` writes the self-reported count wherever its caller's
+    accounting expects it — a leaf's own per-turn dict, or one delegation's
+    ``claimed_evals`` (reconciled against the provenance-stamped ledger
+    before it is believed). ``drain``, when given, returns a text prefix
+    from that scope's queued messages (a delegation's budget-warning
+    queue, popped on the worker's next tool call) — a leaf reached via
+    real graph routing has no such queue, so it is omitted there.
+    """
+
+    def ReportEvals(count: int) -> str:
+        """Report the total ground-truth evaluations you performed this
+        task. Call once per task, ALWAYS — even if 0. When you use
+        get_evaluator() the canonical ledger is authoritative for the
+        count, but this call also ARMS the unledgered-evals safety check,
+        so never skip it."""
+        n = int(count)
+        record(n)
+        prefix = drain() if drain is not None else ""
+        return prefix + f"Recorded {n} evaluations."
+
+    return ReportEvals
+
+
+def build_recall_history(node: Any) -> Any:
+    """Build the ``RecallHistory`` closure for ``node`` — the one
+    implementation used whether ``node`` reaches it as an orchestrating
+    node's declared tool or a leaf's default. Delegates to
+    :class:`DelegationTools` so the entry-node guard and the str/int-n
+    coercion (both regression fixes) are not reimplemented per node kind.
+    """
+    return DelegationTools(node).RecallHistory
+
+
 class ConferTools:
     """Confer, bound to one sender node.
 
@@ -262,19 +349,12 @@ class WorkerSession:
 
     # ── The tools the WORKER itself is handed ────────────────────────────────
 
-    def ReportEvals(self, count: int) -> str:
-        """Report the total ground-truth evaluations you performed this
-        task. Call once per task, ALWAYS — even if 0. When you use
-        get_evaluator() the canonical ledger is authoritative for the
-        count, but this call also ARMS the unledgered-evals safety check,
-        so never skip it."""
+    def _drain_pending_msgs(self) -> str:
+        """Pop and render this delegation's queued budget-warning messages."""
         node = self.node
-        self.claimed_evals = int(count)
-        # Drain any queued budget warnings for this delegation.
         with node._pending_worker_msgs_lock:
             msgs = node._pending_worker_msgs.pop(self.delegation_id, [])
-        prefix = wrap_notice("\n".join(msgs))
-        return prefix + f"Recorded {count} evaluations."
+        return wrap_notice("\n".join(msgs))
 
     def FollowUp(self, question: str) -> str:
         """Ask your delegating party one clarifying question before proceeding.
@@ -330,7 +410,10 @@ class WorkerSession:
     def install_worker_tools(self) -> None:
         """Grant this delegation's worker its own per-delegation tools."""
         node, worker, target = self.node, self.worker, self.target
-        worker.closure_tools["ReportEvals"] = self.ReportEvals  # never errors
+        worker.closure_tools["ReportEvals"] = build_report_evals(
+            record=lambda n: setattr(self, "claimed_evals", n),
+            drain=self._drain_pending_msgs,
+        )  # never errors
         worker.closure_tools["ReportProgress"] = self.ReportProgress
         worker.closure_tools["FollowUp"] = node._wrap_closure(
             self.FollowUp, target)
@@ -1482,34 +1565,15 @@ class DelegationTools:
         )
         _delegation_ws = (_workspace / delegation_id).resolve()
 
-        def Write(path: str, body: str, _ws=_delegation_ws, _did=delegation_id) -> str:
-            """Write a file. Restricted to your own {delegation_id}/ folder."""
-            # Absorb a redundant leading "{delegation_id}/": the sandbox is
-            # ALREADY rooted at {delegation_id}/, but the prompt calls it
-            # "your D### subfolder", so agents naturally prefix paths with it
-            # — which would nest D###/D###/. Strip one leading D### component
-            # (only when a real filename remains after it). Do NOT lstrip
-            # "/": an absolute path must stay absolute so the relative_to
-            # boundary check below still rejects it.
-            _norm = (path or "").strip()
-            _first, _sep, _rest = _norm.partition("/")
-            if _first == _did and _rest:
-                _norm = _rest
-            try:
-                candidate = (_ws / _norm).resolve()
-            except Exception as exc:  # noqa: BLE001
-                return f"ERROR: invalid path {path!r}: {exc}"
-            try:
-                candidate.relative_to(_ws)
-            except ValueError:
-                return (
-                    f"ERROR: write rejected — {candidate} is outside "
-                    f"{_ws}. Write only to {_did}/."
-                )
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            candidate.write_text(body, encoding="utf-8")
-            return f"Written: {candidate}"
-
+        # Strip prefix absorbs a redundant leading "{delegation_id}/": the
+        # sandbox is ALREADY rooted at {delegation_id}/, but the prompt calls
+        # it "your D### subfolder", so agents naturally prefix paths with it
+        # — which would nest D###/D###/ without this.
+        Write = build_sandboxed_write(
+            _delegation_ws,
+            strip_prefix=delegation_id,
+            scope_label=f"{delegation_id}/ ({_delegation_ws})",
+        )
         worker.closure_tools["Write"] = node._wrap_closure(Write, target)
 
     # ── Polling, waiting, cancelling ─────────────────────────────────────────

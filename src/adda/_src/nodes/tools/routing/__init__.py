@@ -11,7 +11,13 @@ as the original single-file implementation, so tool_catalog.py's rendered
 """
 from __future__ import annotations
 
-from .delegation import build_delegation_closures, resolve_target
+from .delegation import (
+    build_delegation_closures,
+    build_recall_history,
+    build_report_evals,
+    build_sandboxed_write,
+    resolve_target,
+)
 from .feedback import (
     _EXIT_INTERVIEW,
     _FAILED_RETROSPECTIVE,
@@ -36,6 +42,12 @@ __all__ = [
     "resolve_target",
     "_select_best_index",
     "_strip_leading_md_header",
+    # One implementation per tool, not one per node kind (leaf vs.
+    # orchestrating) — these are the shared builders nodes/leaf.py and
+    # nodes/tools/routing/delegation.py both call.
+    "build_recall_history",
+    "build_report_evals",
+    "build_sandboxed_write",
 ]
 
 
