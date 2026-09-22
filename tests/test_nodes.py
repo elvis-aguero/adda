@@ -95,7 +95,6 @@ def make_state(
     last_report=None,
     total_delegations=0,
     budget_seconds=None,
-    return_to=None,
 ):
     from adda._src.runtime.graph_state import AgenticState
 
@@ -106,7 +105,6 @@ def make_state(
         last_report=last_report,
         total_delegations=total_delegations,
         budget_seconds=budget_seconds,
-        return_to=return_to,
     )
 
 
@@ -317,62 +315,21 @@ def test_strategizer_delegate_invalid_target_returns_error():
 
 # ---------------------------------------------------------------------------
 # Node tests
+#
+# The four tests that used to live here (test_implementer_returns_to_caller,
+# test_implementer_stores_response_as_last_report,
+# test_implementer_accumulates_evals_when_report_evals_called,
+# test_implementer_evals_zero_when_report_evals_not_called) drove a bare
+# `Node(adapter)` (no spec, no outgoing edges) through `_respond` — the
+# single-turn "answer and hand back to return_to" behaviour, reachable in
+# production only for a single-agent study, and even there via
+# `goto=state["return_to"]`, which `agent_runtime.py` sets to None (never
+# "strategizer" — only test fixtures did that). `_respond` and `return_to`
+# are gone (STEP 3 of the leaf/orchestration merge); real eval-accumulation
+# coverage for a dispatched worker lives in
+# test_worker_report_evals_credits_the_right_delegation and the
+# _resolve_delegation_evals family further down this file.
 # ---------------------------------------------------------------------------
-
-
-def test_implementer_returns_to_caller():
-    """Node routes back to return_to from state."""
-    from adda._src.nodes import Node
-
-    adapter = StubAdapter(response="## Report\nDone. Results: 42.")
-    node = Node(adapter)
-    cmd = node(make_state(return_to="strategizer"))
-
-    assert cmd.goto == "strategizer"
-    assert "## Report" in cmd.update.get("last_report", "")
-
-
-def test_implementer_stores_response_as_last_report():
-    """Node stores full response text in last_report."""
-    from adda._src.nodes import Node
-
-    response = "## Report\n### Actions taken\nRan code.\n### Conclusions\nResult: 3.14"
-    adapter = StubAdapter(response=response)
-    node = Node(adapter)
-    cmd = node(make_state(return_to="strategizer"))
-
-    assert cmd.update["last_report"] == response
-
-
-def test_implementer_accumulates_evals_when_report_evals_called():
-    """Node adds ReportEvals count to state evals_used."""
-    from adda._src.nodes import Node
-
-    class ReportEvalsCallingAdapter(StubAdapter):
-        def invoke(self, messages):
-            self.closure_tools["ReportEvals"](count=1500)
-            return "## Report\n### Actions taken\nDone.\n### Files touched\n(none)\n### Conclusions\nOK\n### Numbers\nn: 1500"
-
-    adapter = ReportEvalsCallingAdapter()
-    node = Node(adapter)
-    state = make_state(return_to="strategizer")
-    state["evals_used"] = 100
-    cmd = node(state)
-
-    assert cmd.update["evals_used"] == 1600
-
-
-def test_implementer_evals_zero_when_report_evals_not_called():
-    """Node adds 0 to evals_used when ReportEvals is not called."""
-    from adda._src.nodes import Node
-
-    adapter = StubAdapter(response="## Report\n### Actions taken\nDone.\n### Files touched\n(none)\n### Conclusions\nOK\n### Numbers\nn: 0")
-    node = Node(adapter)
-    state = make_state(return_to="strategizer")
-    state["evals_used"] = 42
-    cmd = node(state)
-
-    assert cmd.update["evals_used"] == 42
 
 
 def test_strategizer_delegate_includes_expected_report_in_message():
@@ -3979,3 +3936,44 @@ def test_notifications_drained_mid_wait_keep_their_notice_marker():
         "the tool's own output instead of as adda speaking"
     )
     assert NOTICE_OPEN
+
+
+# ---------------------------------------------------------------------------
+# Single-node graph (STEP 3 of the leaf/orchestration merge)
+#
+# A single-agent study — an entry node with no outgoing edges — used to run
+# through `_respond`. That behaviour is gone: every node now runs
+# `_orchestrate`, the same delegate-or-close loop an orchestrating node
+# runs, just with nowhere to `Delegate()` to. The maintainer accepts that
+# this changes what a lone node does (it must now reach an accepted Done()
+# to close, same as any other node) — this only guards that it does not
+# explode.
+# ---------------------------------------------------------------------------
+
+
+def test_single_node_graph_takes_a_turn_without_crashing():
+    """An entry node with no outgoing edges still constructs and takes a
+    turn via the unified loop, whatever the turn's outcome."""
+    from adda._src.nodes import Node
+
+    class Solo(Agent):
+        role = "strategizer"
+        tools = frozenset({"Done"})
+        description = "The only node in this graph."
+
+    spec = Graph(nodes={"solo": Solo()}, edges=(), entry="solo")
+
+    class DoneAdapter(StubAdapter):
+        def invoke(self, messages):
+            self.closure_tools["Done"](summary="Finished.")  # WARNING (1st)
+            self.closure_tools["Done"](summary="Finished.")  # close (2nd)
+            return "Done."
+
+    node = Node(
+        DoneAdapter(), name="solo", outgoing=[], spec=spec,
+        study_dir=str(_default_study_dir()),
+    )
+
+    result = node(make_state())  # must not raise
+
+    assert isinstance(result, Command)

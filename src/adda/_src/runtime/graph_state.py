@@ -25,7 +25,6 @@ class AgenticState(MessagesState):
     evals_used: int              # running count across delegations
     # time.time() at run start, for budget enforcement
     start_time: float | None
-    return_to: str | None
     # paths relative to study_dir; checked before Done accepted
     required_deliverables: list | None
     # Token usage accumulated across all agents; set by the entry node on Done

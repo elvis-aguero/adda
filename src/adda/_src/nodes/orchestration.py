@@ -1,10 +1,9 @@
-"""The behaviour of a node that HAS outgoing edges: it delegates.
+"""The one turn behaviour every :class:`~.node.Node` runs.
 
-One of the two behaviours :class:`~.node.Node` dispatches between, and the
-only one that runs a multi-turn loop: it reads Reports, decides the next
-delegation, and owns the run's gates (budget, critic, reproduction). A node
-has this behaviour because of its TOPOLOGY, not its role — any node with an
-outgoing edge orchestrates, whatever it is called.
+It reads Reports, decides the next delegation (if it has anywhere to
+delegate to), and owns the run's gates (budget, critic, reproduction). A node
+with outgoing edges can act on that in ``Delegate()``; a node with none just
+never has a valid target — the loop itself does not fork on that.
 
 ``inspect.getsource(Node._orchestrate)`` reads the full routing logic.
 """
@@ -29,7 +28,7 @@ from .parsing import _to_adapter_messages
 
 
 class OrchestrationMixin:
-    """Delegating behaviour, engaged when a node has outgoing edges."""
+    """The turn loop and its setup — run by every node, delegation-capable or not."""
 
     def _init_orchestration(
         self,
@@ -45,10 +44,23 @@ class OrchestrationMixin:
         workspace_dir: Any = None,
         delegation_log: DelegationLog | None = None,
     ) -> None:
-        """Set up the delegation registry, the ledgers and the routing tools."""
+        """Set up the delegation registry, the ledgers and the routing tools.
+
+        Runs for every node (``Node.__init__`` no longer branches on
+        ``outgoing``). The registry/routing state below is inert when
+        ``outgoing`` is empty — ``Delegate()`` just has no valid target — so
+        there is no harm running it unconditionally. Epistemic OWNERSHIP is
+        the one thing that must stay gated on having outgoing edges (see
+        ``_owns_epistemics`` below): ``notes_dir`` is passed identically to
+        every node by ``graph_builder.py``, and a node with nobody to
+        delegate to must never acquire the hypothesis/milestone ledgers just
+        because it was handed a path.
+
+        ``study_dir``/``workspace_dir``/``delegation_log`` are already set by
+        :meth:`Node._init_capabilities`, which runs first for every node —
+        not re-set here.
+        """
         self._route: dict = {}
-        self._study_dir = study_dir
-        self._workspace_dir = Path(workspace_dir) if workspace_dir is not None else None
         self._interactive = interactive
         self._max_ask = max_ask
         self._ask_count = 0
@@ -89,8 +101,6 @@ class OrchestrationMixin:
         self._confer_seq: int = 0
         self._confer_inbox: dict[str, list[str]] = {}
         self._confer_inbox_lock = threading.Lock()
-        # Graph-wide delegation log (demand-driven episodic memory)
-        self._delegation_log: DelegationLog | None = delegation_log
         # Whether THIS node owns the run's epistemic ledgers. Decided once,
         # here, from what graph_builder passed: it hands the real notes_dir
         # to every orchestrating node (any node with outgoing edges), not
@@ -99,8 +109,12 @@ class OrchestrationMixin:
         # monitor / hypothesis-ledger READ access matter for every role.
         # WRITE access (HypothesisPropose/Update, Milestone*) is gated
         # separately, by each Agent's own declared `tools`. Ownership is
-        # never acquired later — see _install_epistemics.
-        self._owns_epistemics: bool = notes_dir is not None
+        # never acquired later — see _install_epistemics. Gated on `outgoing`
+        # (not just `notes_dir is not None`) because graph_builder passes
+        # the same notes_dir to every node's constructor, including a node
+        # with no outgoing edges — that node must not acquire ledger
+        # ownership merely because a path was handed to it.
+        self._owns_epistemics: bool = bool(outgoing) and notes_dir is not None
         self._install_epistemics()
         # Running total of delegations at the START of the current __call__
         # Used as a seed for the delegation sequence counter.

@@ -49,7 +49,6 @@ def make_initial_state(problem="Test problem") -> AgenticState:
         last_report=None,
         total_delegations=0,
         budget_seconds=None,
-        return_to=None,
     )
 
 
@@ -406,11 +405,13 @@ def test_build_graph_non_entry_node_has_no_undeclared_write_path(monkeypatch, tm
 
 def test_build_graph_single_tier_graph_unaffected(monkeypatch, tmp_path):
     """Regression guard: every shipped graph today is single-tier (entry +
-    leaves only). A leaf's constructor never even reads notes_dir
-    (Node.__init__ forwards it only to _init_orchestration, never to
-    _init_leaf) — so passing the real notes_dir to a leaf changes nothing.
-    Only the entry node should own ledgers; a leaf never sets `_ledger` at
-    all (it resolves reads through the delegation-log fallback instead)."""
+    leaves only). Node has one init path used by every node (STEP 3 of the
+    leaf/orchestration merge), so a leaf's constructor DOES read notes_dir
+    now — but `_owns_epistemics` stays gated on having outgoing edges
+    (Node._init_orchestration), so a leaf never ACQUIRES the ledgers just
+    because a path was handed to it: `_ledger` exists (unlike before the
+    merge) but is None, and reads still resolve through the delegation-log
+    fallback (Node._read_ledger)."""
     from adda._src.infra.delegation_log import DelegationLog
 
     built = _capture_nodes(monkeypatch)
@@ -429,7 +430,8 @@ def test_build_graph_single_tier_graph_unaffected(monkeypatch, tmp_path):
     entry, worker = built["orch"], built["worker"]
     assert entry._owns_epistemics is True
     assert entry._ledger is not None
-    assert not hasattr(worker, "_ledger")
+    assert worker._owns_epistemics is False
+    assert worker._ledger is None
 
 
 def test_to_mermaid_styles_nodes_and_edges():

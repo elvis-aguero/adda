@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 from langchain_core.messages import HumanMessage
-from langgraph.graph import END
 
 from adda._src.backends.base import Agent, Edge, Graph
 
@@ -45,7 +44,6 @@ def _make_state(study_dir=None, **kwargs):
         last_report=None,
         total_delegations=0,
         budget_seconds=kwargs.pop("budget_seconds", None),
-        return_to=kwargs.pop("return_to", None),
         **kwargs,
     )
 
@@ -69,79 +67,41 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
 
 # ---------------------------------------------------------------------------
 # Node basic invocation
+#
+# test_worker_node_returns_command and test_worker_node_retry_on_malformed_
+# response used to drive a bare `Node(adapter, name="implementer")` (no
+# outgoing edges) through `_respond` — the single-turn "answer once, hand
+# back to return_to" behaviour. `_respond` and `return_to` are gone (STEP 3
+# of the leaf/orchestration merge): every node now runs the same
+# delegate-or-close loop, which does not accept a bare text reply as a
+# finished report at all (it requires an accepted Done()). Both tests
+# asserted a routing model production never used (return_to is always
+# None — agent_runtime.py sets it that way; the tests supplied "strategizer"
+# or END by hand), so they are deleted rather than forced onto the unified
+# loop. The real per-delegation retry-on-malformed-report path
+# (WorkerSession._invoke_with_report_retry, delegation.py) is unchanged by
+# this refactor; _classify_response's own behaviour (what "malformed" means)
+# is unit-tested directly further down this file.
 # ---------------------------------------------------------------------------
 
 
-def test_worker_node_returns_command(tmp_path):
-    """Node.__call__ returns a Command with last_report set."""
-    from adda._src.nodes import Node
-    from langgraph.types import Command
-
-    (tmp_path / "pipeline.py").write_text("# r\n")
-    report = (
-        "## Report\n### Actions taken\nComputed stuff.\n"
-        "### Files touched\n(none)\n### Conclusions\nOK\n### Numbers\nn: 5"
-    )
-    adapter = StubAdapter(response=report)
-    node = Node(adapter, name="implementer")
-    state = _make_state(study_dir=tmp_path, return_to=END)
-
-    result = node(state)
-
-    assert isinstance(result, Command)
-    assert result.update["last_report"] == report
-
-
-def test_worker_node_retry_on_malformed_response(tmp_path):
-    """Node retries once when response is malformed."""
-    from adda._src.nodes import Node
-
-    (tmp_path / "pipeline.py").write_text("# r\n")
-    good_report = (
-        "## Report\n### Actions taken\nDone.\n"
-        "### Files touched\n(none)\n### Conclusions\nOK\n### Numbers\nn: 0"
-    )
-    call_count = [0]
-
-    class RetryAdapter(StubAdapter):
-        def invoke(self, messages):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return "too short"
-            return good_report
-
-    adapter = RetryAdapter()
-    node = Node(adapter, name="implementer")
-    state = _make_state(study_dir=tmp_path, return_to=END)
-
-    result = node(state)
-
-    assert call_count[0] == 2
-    assert result.update["last_report"] == good_report
-
-
 def test_worker_node_reports_evals(tmp_path):
-    """Node.ReportEvals closure records evaluation count."""
+    """Node's ReportEvals closure records the count, callable directly.
+
+    Construction wires this closure onto the node's adapter for every node,
+    delegation-capable or not (Node._init_capabilities) — a dispatched
+    worker's closure_tools IS this same dict (ClaudeAdapter.copy() returns
+    self; see nodes/node.py's module docstring), so this closure's behaviour
+    matters independently of whichever node happens to invoke it.
+    """
     from adda._src.nodes import Node
 
-    (tmp_path / "pipeline.py").write_text("# r\n")
-    good_report = (
-        "## Report\n### Actions taken\nDone.\n"
-        "### Files touched\n(none)\n### Conclusions\nOK\n### Numbers\nn: 42"
-    )
+    node = Node(StubAdapter(), name="implementer")
 
-    class EvalAdapter(StubAdapter):
-        def invoke(self, messages):
-            self.closure_tools["ReportEvals"](42)
-            return good_report
+    result = node.adapter.closure_tools["ReportEvals"](42)
 
-    adapter = EvalAdapter()
-    node = Node(adapter, name="implementer")
-    state = _make_state(study_dir=tmp_path, return_to=END)
-
-    result = node(state)
-
-    assert result.update["evals_used"] == 42
+    assert "ERROR" not in result
+    assert node._evals_reported.get("count") == 42
 
 
 # ---------------------------------------------------------------------------
@@ -150,30 +110,17 @@ def test_worker_node_reports_evals(tmp_path):
 
 
 def test_worker_node_sandboxed_write_allows_workspace(tmp_path):
-    """Node Write closure allows writes inside workspace_dir."""
+    """Node Write closure allows writes inside workspace_dir, callable directly."""
     from adda._src.nodes import Node
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
-    write_results = []
+    node = Node(StubAdapter(), name="implementer", workspace_dir=workspace)
 
-    class WriteAdapter(StubAdapter):
-        def invoke(self, messages):
-            result = self.closure_tools["Write"]("output.txt", "hello")
-            write_results.append(result)
-            return (
-                "## Report\n### Actions taken\nWrote.\n"
-                "### Files touched\noutput.txt\n### Conclusions\nOK\n### Numbers\nn: 0"
-            )
+    result = node.adapter.closure_tools["Write"]("output.txt", "hello")
 
-    adapter = WriteAdapter()
-    node = Node(adapter, name="implementer", workspace_dir=workspace)
-    state = _make_state(study_dir=tmp_path, return_to=END)
-    node(state)
-
-    assert write_results
-    assert "ERROR" not in write_results[0]
+    assert "ERROR" not in result
     assert (workspace / "output.txt").exists()
 
 
@@ -184,25 +131,12 @@ def test_worker_node_sandboxed_write_rejects_escape(tmp_path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
 
-    write_results = []
+    node = Node(StubAdapter(), name="implementer", workspace_dir=workspace)
 
-    class EscapeAdapter(StubAdapter):
-        def invoke(self, messages):
-            result = self.closure_tools["Write"]("../../etc/passwd", "hack")
-            write_results.append(result)
-            return (
-                "## Report\n### Actions taken\nTried to escape.\n"
-                "### Files touched\nnone\n### Conclusions\nOK\n### Numbers\nn: 0"
-            )
+    result = node.adapter.closure_tools["Write"]("../../etc/passwd", "hack")
 
-    adapter = EscapeAdapter()
-    node = Node(adapter, name="implementer", workspace_dir=workspace)
-    state = _make_state(study_dir=tmp_path, return_to=END)
-    node(state)
-
-    assert write_results
-    assert "ERROR" in write_results[0]
-    assert "outside" in write_results[0].lower() or "rejected" in write_results[0].lower()
+    assert "ERROR" in result
+    assert "outside" in result.lower() or "rejected" in result.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +145,7 @@ def test_worker_node_sandboxed_write_rejects_escape(tmp_path):
 
 
 def test_worker_node_recall_history_with_delegation_log(tmp_path):
-    """Node.RecallHistory returns prior delegations from the log."""
+    """Node.RecallHistory returns prior delegations from the log, callable directly."""
     from adda._src.nodes import Node
     from adda._src.infra.delegation_log import DelegationLog
 
@@ -229,24 +163,11 @@ def test_worker_node_recall_history_with_delegation_log(tmp_path):
         status="DONE",
     )
 
-    recall_results = []
+    node = Node(StubAdapter(), name="implementer", delegation_log=log)
 
-    class RecallAdapter(StubAdapter):
-        def invoke(self, messages):
-            result = self.closure_tools["RecallHistory"](5)
-            recall_results.append(result)
-            return (
-                "## Report\n### Actions taken\nRecalled.\n"
-                "### Files touched\nnone\n### Conclusions\nOK\n### Numbers\nn: 0"
-            )
+    result = node.adapter.closure_tools["RecallHistory"](5)
 
-    adapter = RecallAdapter()
-    node = Node(adapter, name="implementer", delegation_log=log)
-    state = _make_state(study_dir=tmp_path, return_to=END)
-    node(state)
-
-    assert recall_results
-    assert "First task" in recall_results[0]
+    assert "First task" in result
 
 
 def test_worker_node_recall_history_empty(tmp_path):
@@ -257,24 +178,11 @@ def test_worker_node_recall_history_empty(tmp_path):
     log_path = tmp_path / "delegation_log.jsonl"
     log = DelegationLog(log_path)
 
-    recall_results = []
+    node = Node(StubAdapter(), name="implementer", delegation_log=log)
 
-    class RecallAdapter(StubAdapter):
-        def invoke(self, messages):
-            result = self.closure_tools["RecallHistory"](5)
-            recall_results.append(result)
-            return (
-                "## Report\n### Actions taken\nDone.\n"
-                "### Files touched\nnone\n### Conclusions\nOK\n### Numbers\nn: 0"
-            )
+    result = node.adapter.closure_tools["RecallHistory"](5)
 
-    adapter = RecallAdapter()
-    node = Node(adapter, name="implementer", delegation_log=log)
-    state = _make_state(study_dir=tmp_path, return_to=END)
-    node(state)
-
-    assert recall_results
-    assert "No prior" in recall_results[0]
+    assert "No prior" in result
 
 
 # ---------------------------------------------------------------------------
@@ -901,26 +809,29 @@ def test_worker_node_recall_history_none_log(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# One implementation per tool, not one per node kind (leaf vs. orchestrating)
+# One implementation per tool, not one per call site
 #
 # Write / ReportEvals / RecallHistory used to have TWO implementations each
-# — one closed over in nodes/leaf.py, one in
+# — one closed over in the now-deleted nodes/leaf.py, one in
 # nodes/tools/routing/delegation.py — which produced the same bug four
 # times (a capability added to one path silently missing from the other).
-# Both paths now call the SAME builder in delegation.py; these tests fail
-# a future re-fork of either tool.
+# leaf.py is gone (STEP 3 of the leaf/orchestration merge: Node has one init
+# path, used by every node); node.py's own capability setup
+# (Node._setup_sandboxed_write / _build_eval_closures / _init_capabilities)
+# must still call the SAME shared builders rather than re-forking a nested
+# `def Write` / `def ReportEvals` of its own.
 # ---------------------------------------------------------------------------
 
 
 def test_write_report_evals_recall_history_have_one_implementation():
-    """No nested ``def Write`` / ``def ReportEvals`` left in leaf.py, and
-    exactly one such def lives in delegation.py (inside the shared
-    builder). RecallHistory has no closure body of its own anywhere in
-    leaf.py — it is a call to the shared ``build_recall_history``."""
+    """No nested ``def Write`` / ``def ReportEvals`` in node.py, and exactly
+    one such def lives in delegation.py (inside the shared builder).
+    RecallHistory has no closure body of its own anywhere in node.py — it is
+    a call to the shared ``build_recall_history``."""
     import ast
     import inspect
 
-    from adda._src.nodes import leaf
+    from adda._src.nodes import node as node_module
     from adda._src.nodes.tools.routing import delegation
 
     def count_nested_defs(module, name: str) -> int:
@@ -936,24 +847,23 @@ def test_write_report_evals_recall_history_have_one_implementation():
             f"{tool_name} must have exactly one implementation, in "
             "delegation.py's shared builder"
         )
-        assert count_nested_defs(leaf, tool_name) == 0, (
-            f"{tool_name} was re-implemented in leaf.py — collapse back "
+        assert count_nested_defs(node_module, tool_name) == 0, (
+            f"{tool_name} was re-implemented in node.py — collapse back "
             "to the shared builder in delegation.py"
         )
 
-    # RecallHistory's real body lives once, on DelegationTools; leaf.py must
-    # not define a closure for it (nor keep the retired factory around).
+    # RecallHistory's real body lives once, on DelegationTools; node.py must
+    # not define a closure for it.
     assert count_nested_defs(delegation, "RecallHistory") == 1
-    assert count_nested_defs(leaf, "RecallHistory") == 0
-    assert not hasattr(leaf.LeafMixin, "_make_recall_history")
+    assert count_nested_defs(node_module, "RecallHistory") == 0
 
-    # Both paths route through the same three builders — verified by name,
-    # not just by absence of a re-fork, so an import that quietly swaps in
-    # a look-alike local helper also fails this test.
-    leaf_src = inspect.getsource(leaf)
-    assert "build_sandboxed_write" in leaf_src
-    assert "build_report_evals" in leaf_src
-    assert "build_recall_history" in leaf_src
+    # node.py routes through the same three builders — verified by name, not
+    # just by absence of a re-fork, so an import that quietly swaps in a
+    # look-alike local helper also fails this test.
+    node_src = inspect.getsource(node_module)
+    assert "build_sandboxed_write" in node_src
+    assert "build_report_evals" in node_src
+    assert "build_recall_history" in node_src
 
 
 # ---------------------------------------------------------------------------

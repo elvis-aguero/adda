@@ -1,7 +1,7 @@
 """Read-only ledger/store query tools: RecallStore, OracleStatus, QueryStore,
 HypothesisList, HypothesisGet, ReadProblemStatement. Declaration-gated and
-shared verbatim between an orchestrating node and a leaf (see
-nodes/leaf.py) via build_declared_shared_closures()."""
+shared verbatim across every node (see nodes/node.py::Node._init_capabilities)
+via build_declared_shared_closures()."""
 from __future__ import annotations
 
 import re

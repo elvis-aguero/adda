@@ -1,11 +1,22 @@
 """Tests for the shared time-budget wrap-up ladder (nodes/_constants.py:
 budget_band_due / budget_wrapup_message).
 
-CLAUDE.md "all nodes are equal": a worker (leaf node / WorkerSession) must
-get the same escalating past-budget signal an orchestrating node's own turn
-gets, worded for what IT can actually do (no Done()). Each 10% band (100,
-110, 120, …) fires once, not every turn, and the 1.5x band agrees with the
-Delegate() refusal introduced alongside it.
+CLAUDE.md "all nodes are equal": a dispatched worker (WorkerSession, in
+nodes/tools/routing/delegation.py) must get the same escalating past-budget
+signal an orchestrating node's own turn gets, worded for what IT can
+actually do (no Done()). Each 10% band (100, 110, 120, …) fires once, not
+every turn, and the 1.5x band agrees with the Delegate() refusal introduced
+alongside it.
+
+A standalone leaf node (no outgoing edges, driven directly through
+Node.__call__ rather than dispatched) used to get this same signal through
+its own single-turn `_respond` path — deleted along with `_respond` (STEP 3
+of the leaf/orchestration merge): every node now runs the same
+delegate-or-close loop, whose own wrap-up ladder is `_budget_warnings`
+below, worded with `can_call_done=True` since that loop is exactly what
+lets a node call Done(). The real "worker, no Done()" wording is exercised
+below only via the actual dispatched-worker mechanism
+(test_budget_broadcast_worker_message_never_mentions_done).
 """
 from __future__ import annotations
 
@@ -125,88 +136,17 @@ def test_orchestrating_node_band_escalates_at_1_5x():
 
 
 # ---------------------------------------------------------------------------
-# Leaf (worker) node: gets the same signal, worded for what it can do
-# ---------------------------------------------------------------------------
-
-
-class _CapturingAdapter:
-    def __init__(self) -> None:
-        self.closure_tools: dict = {}
-        self.last_usage: dict = {}
-        self.model = "m"
-        self.seen_messages: list = []
-
-    def invoke(self, messages):
-        self.seen_messages.append(messages)
-        return (
-            "## Report\n"
-            "### Actions taken\nDid a thing, in some detail so the report "
-            "clears the minimum-length check.\n"
-            "### Conclusions\nIt worked out fine, more filler text here.\n"
-            "### Numbers\nn/a, nothing numeric to report this time.\n"
-        )
-
-
-def _leaf_node(adapter):
-    class C(Agent):
-        role = "critic"
-        description = "critic"
-
-    return Node(adapter, name="critic", outgoing=[], spec=Graph(
-        nodes={"critic": C()}, edges=(), entry="critic"))
-
-
-def test_leaf_worker_gets_wrapup_message_past_budget():
-    from langchain_core.messages import HumanMessage
-
-    adapter = _CapturingAdapter()
-    node = _leaf_node(adapter)
-    state = {
-        "messages": [HumanMessage(content="do the thing")],
-        "budget_seconds": 100.0,
-        "start_time": time.time() - 120.0,  # 120% -> band 100
-        "return_to": "strategizer",
-        "evals_used": 0,
-    }
-    node(state)
-
-    assert adapter.seen_messages, "adapter.invoke was never called"
-    all_text = " ".join(
-        m.get("content", "") for m in adapter.seen_messages[0]
-        if isinstance(m, dict)
-    )
-    assert "Time budget at" in all_text
-    assert "Finish the step you are on" in all_text
-    assert "Done()" not in all_text
-
-
-def test_leaf_worker_band_fires_once():
-    from langchain_core.messages import HumanMessage
-
-    adapter = _CapturingAdapter()
-    node = _leaf_node(adapter)
-    base_state = {
-        "messages": [HumanMessage(content="do the thing")],
-        "budget_seconds": 100.0,
-        "start_time": time.time() - 120.0,
-        "return_to": "strategizer",
-        "evals_used": 0,
-    }
-    node(dict(base_state))
-    node(dict(base_state))  # same band, second task
-
-    first = " ".join(
-        m.get("content", "") for m in adapter.seen_messages[0]
-        if isinstance(m, dict)
-    )
-    second = " ".join(
-        m.get("content", "") for m in adapter.seen_messages[1]
-        if isinstance(m, dict)
-    )
-    assert "Time budget at" in first
-    assert "Time budget at" not in second
-
-
+# A standalone leaf node's own wrap-up signal used to be tested here, driven
+# through the now-deleted `_respond` (test_leaf_worker_gets_wrapup_message_
+# past_budget, test_leaf_worker_band_fires_once, test_leaf_worker_no_budget_
+# configured_no_crash — the last of these lived further down this file).
+# Every node now runs the unified `_orchestrate` loop (STEP 3 of the
+# leaf/orchestration merge), whose own budget ladder is exactly
+# test_orchestrating_node_band_fires_once_not_every_turn /
+# test_orchestrating_node_band_escalates_at_1_5x above — there is no
+# separate "leaf's own turn" signal left to test. The real worker-facing
+# wording (no Done() mention) is covered below via the actual
+# dispatched-worker mechanism, delegation.py's own broadcast.
 # ---------------------------------------------------------------------------
 # delegation.py's own worker-broadcast: strategizer text vs worker text
 # ---------------------------------------------------------------------------
@@ -235,19 +175,3 @@ def test_budget_broadcast_worker_message_never_mentions_done():
     assert worker_text
     assert "Done()" not in worker_text[0]
     assert "Finish the step you are on" in worker_text[0]
-
-
-def test_leaf_worker_no_budget_configured_no_crash():
-    from langchain_core.messages import HumanMessage
-
-    adapter = _CapturingAdapter()
-    node = _leaf_node(adapter)
-    state = {
-        "messages": [HumanMessage(content="do the thing")],
-        "budget_seconds": None,
-        "start_time": None,
-        "return_to": "strategizer",
-        "evals_used": 0,
-    }
-    node(state)  # must not raise
-    assert adapter.seen_messages

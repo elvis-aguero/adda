@@ -442,7 +442,6 @@ def test_ghost_delegation_flushed_interrupted_at_run_close(tmp_path):
         "eval_budget": None,
         "evals_used": 0,
         "start_time": _t.time(),
-        "return_to": None,
         "required_deliverables": None,
         "experiment_data_dir": str(run_dir / "experiment_data"),
         "token_totals": None,

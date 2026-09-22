@@ -546,11 +546,12 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   `nodes/tools/routing/delegation.py::DelegationTools._check_delegate_cutoff`
   (called first thing in `Delegate()`); the shared ladder
   (`budget_band_due`, `budget_wrapup_message`) in `nodes/_constants.py`,
-  called from `orchestration.py::_budget_warnings` (strategizer),
-  `leaf.py::_respond` (a leaf node reached via real graph routing), and
-  `delegation.py::_budget_broadcast` (the WorkerSession path a `Delegate()`
-  worker actually runs through in the built-in graph); the misconfiguration
-  warning in `runtime/agent_runtime.py::_warn_if_delegate_cutoff_unreachable`.
+  called from `orchestration.py::_budget_warnings` (every node's own turn —
+  `_respond`/`leaf.py` are gone; every node now runs the same
+  `_orchestrate` loop) and `delegation.py::_budget_broadcast` (the
+  WorkerSession path a `Delegate()` worker actually runs through in the
+  built-in graph); the misconfiguration warning in
+  `runtime/agent_runtime.py::_warn_if_delegate_cutoff_unreachable`.
   Diagnostic: `DELEGATE_CUTOFF` via the existing `_record_intervention`
   mechanism (`diagnostics.jsonl`), the same channel `MILESTONE_BLOCK` uses.
 - **Status:** done, headless-tested (`tests/test_delegate_time_cutoff.py`,

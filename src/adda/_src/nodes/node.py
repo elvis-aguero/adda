@@ -1,11 +1,21 @@
 """``Node`` — the one kind of thing the agent graph is made of.
 
-There is no hierarchy of node types here, and deliberately so. A node has
-outgoing edges or it does not, and that single fact decides everything that
-differs between two nodes:
+There is no hierarchy of node types here, and deliberately so. Every node
+runs the same loop:
 
     def __call__(self, state):
-        return self._orchestrate(state) if self._outgoing else self._respond(state)
+        return self._orchestrate(state)
+
+A node with outgoing edges has somewhere to delegate; a node with none does
+not (``Delegate()`` simply has no valid target) — that is the only thing
+``self._outgoing`` decides. There used to be a second behaviour
+(``_respond``, in a now-deleted ``leaf.py``) for a node with no outgoing
+edges, reachable only for a single-agent study (every other node is dispatched
+via ``Delegate()`` on a worker thread, never invoked as a graph node at all —
+see ``runtime/graph_builder.py``). Single-agent studies are the exception, not
+the rule, so that second behaviour is gone: a lone entry node now runs the
+same delegate-or-close loop everyone else does, just with nobody to delegate
+to.
 
 Everything else a node can do comes from what its ``Agent`` DECLARES in
 ``tools`` (see ``nodes/tools/routing``), never from what it is. The
@@ -13,12 +23,23 @@ strategizer, the implementer and the critic are all this class; they differ by
 the name they are registered under, the prompt they carry, and the tools they
 declare — which is exactly how a reader should think about them.
 
-The two behaviours live in ``orchestration`` and ``leaf``; the remaining
-mixins are per-concern, not per-type: ``recording`` (notes, retrospectives),
+The turn behaviour lives in ``orchestration``; the remaining mixins are
+per-concern, not per-type: ``recording`` (notes, retrospectives),
 ``critic_gate`` (the adversarial review), ``lifecycle`` (budget/backstop
 halts), ``reproduction_gate`` (the notebook's lazy-reproduction
 check). The ledger tools are a tool family like any other and live in
 ``nodes/tools/routing/ledger.py``.
+
+Construction installs the same capability closures on every node's adapter
+regardless of ``outgoing`` — sandboxed ``Write``, ``ReportEvals``,
+``RecallHistory``, and the declaration-gated read-only store/ledger tools
+(:meth:`Node._init_capabilities`). This matters even for a node that never
+takes a turn of its own: ``runtime/graph_builder.py`` hands every named node's
+adapter to whichever OTHER node may ``Delegate()`` to it
+(``worker_adapters``), and ``ClaudeAdapter.copy()`` returns ``self`` — so a
+dispatched worker's ``closure_tools`` dict IS the same one this construction-
+time setup populated. Losing it here would be a silent regression for every
+delegated specialist, not just the rare standalone leaf.
 """
 
 from __future__ import annotations
@@ -33,7 +54,6 @@ if TYPE_CHECKING:
 
 from ..infra.delegation_log import DelegationLog
 from .critic_gate import CriticGateMixin
-from .leaf import LeafMixin
 from .lifecycle import LifecycleMixin
 from .orchestration import OrchestrationMixin
 from .recording import RecordingMixin
@@ -46,11 +66,11 @@ class Node(
     LifecycleMixin,
     ReproductionGateMixin,
     OrchestrationMixin,
-    LeafMixin,
 ):
     """One node in the agent graph.
 
-    ``inspect.getsource(Node.__call__)`` reads the routing topology.
+    ``inspect.getsource(Node._orchestrate)`` reads the routing logic every
+    node runs.
 
     Parameters
     ----------
@@ -60,16 +80,16 @@ class Node(
         The node's name in the graph. This is what distinguishes one agent
         from another — there is no per-agent node class.
     outgoing
-        Names of the nodes this one may delegate to. Non-empty makes this an
-        orchestrating node; empty makes it a leaf. That is the only structural
-        choice in the node layer.
+        Names of the nodes this one may delegate to. Empty means ``Delegate()``
+        has nowhere to send work — the only thing that differs structurally.
     spec
         The whole :class:`~..backends.base.Graph`, so a node can read its
         peers' roles and descriptions.
     report_sections, agent_tools
-        This agent's own declared report contract and toolset, used to
-        validate its reports and to gate which capability closures it is
-        granted.
+        This agent's own declared report contract and toolset. ``agent_tools``
+        gates which capability closures :meth:`_init_capabilities` grants;
+        ``report_sections`` is retained for callers that validate a worker's
+        report against its own contract (``parsing._classify_response``).
     """
 
     def __init__(
@@ -94,29 +114,29 @@ class Node(
         self._outgoing = list(outgoing)
         self._spec = spec
         self._init_recording()
-        # Only one of the two initialisers runs: a leaf never allocates the
-        # delegation registry, its locks or its ledgers, and an orchestrating
-        # node never installs the leaf's single-turn report contract.
-        if self._outgoing:
-            self._init_orchestration(
-                name=name, outgoing=self._outgoing, spec=spec,
-                study_dir=study_dir, interactive=interactive, max_ask=max_ask,
-                worker_adapters=worker_adapters, notes_dir=notes_dir,
-                workspace_dir=workspace_dir, delegation_log=delegation_log,
-            )
-        else:
-            self._init_leaf(
-                study_dir=study_dir, workspace_dir=workspace_dir,
-                delegation_log=delegation_log, name=name,
-                report_sections=report_sections, agent_tools=agent_tools,
-            )
+        # Universal capability setup — every node's adapter, regardless of
+        # whether it has outgoing edges (see the module docstring for why
+        # this matters even for a node that never takes a turn of its own).
+        self._init_capabilities(
+            study_dir=study_dir, workspace_dir=workspace_dir,
+            delegation_log=delegation_log,
+            report_sections=report_sections, agent_tools=agent_tools,
+        )
+        # Delegation registry, ledgers and routing closures. Harmless for a
+        # node with no outgoing edges (Delegate() simply has no valid
+        # target); epistemic OWNERSHIP still requires outgoing edges (see
+        # _init_orchestration / _install_epistemics) — a leaf never acquires
+        # the ledgers just because notes_dir was passed to every node.
+        self._init_orchestration(
+            name=name, outgoing=self._outgoing, spec=spec,
+            study_dir=study_dir, interactive=interactive, max_ask=max_ask,
+            worker_adapters=worker_adapters, notes_dir=notes_dir,
+            workspace_dir=workspace_dir, delegation_log=delegation_log,
+        )
 
     def __call__(self, state: AgenticState) -> Any:
-        """Take one turn. Which turn depends only on whether this node can delegate."""
-        return (
-            self._orchestrate(state) if self._outgoing
-            else self._respond(state)
-        )
+        """Take one turn. Every node runs the same delegate-or-close loop."""
+        return self._orchestrate(state)
 
     def _init_recording(self) -> None:
         """Establish the state ``RecordingMixin`` writes to, on EVERY node.
@@ -149,6 +169,96 @@ class Node(
         # escalating message fires once per band whether this node
         # orchestrates or answers — a property of any node, like recording.
         self._budget_bands_fired: set[int] = set()
+
+    def _init_capabilities(
+        self,
+        *,
+        study_dir: Any = None,
+        workspace_dir: Any = None,
+        delegation_log: DelegationLog | None = None,
+        report_sections: tuple[str, ...] | None = None,
+        agent_tools: frozenset[str] | None = None,
+    ) -> None:
+        """Wire this node's sandboxed Write and its declared read-only tools.
+
+        Runs for EVERY node, not only one reachable as a standalone entry
+        point — see the module docstring: whichever node ends up as someone
+        else's ``Delegate()`` target is dispatched through THIS SAME adapter
+        object (``ClaudeAdapter.copy()`` returns ``self``), so this is where a
+        dispatched specialist's baseline capabilities actually come from,
+        before ``WorkerSession.install_worker_tools``/``_sandbox_worker_writes``
+        layer the per-delegation overrides (ReportEvals's own record callback,
+        a delegation-scoped Write) on top.
+        """
+        self._study_dir = study_dir
+        self._workspace_dir = Path(workspace_dir) if workspace_dir else None
+        # The agent's declared tools — the single source of truth for which
+        # capability closures this node is granted (read-only ledger/store
+        # tools). Kept as a frozenset for membership checks.
+        self._agent_tools: frozenset[str] = frozenset(agent_tools or ())
+        # This agent's declared report sections (e.g. the critic's
+        # Findings/Verdict, not the implementer's Conclusions/Files touched).
+        # Used to validate a worker's report against ITS OWN contract instead
+        # of the implementer-shaped default — otherwise a correct critic or
+        # literature report is wrongly flagged malformed (audit BF-10/O40).
+        self._report_sections = report_sections
+        self._delegation_log = delegation_log
+        self._evals_reported: dict = {}
+        self._setup_sandboxed_write()
+        self.adapter.closure_tools.update(self._build_eval_closures())
+        if delegation_log is not None:
+            from .tools.routing import build_recall_history
+            self.adapter.closure_tools["RecallHistory"] = build_recall_history(self)
+        # Declaration-gated read-only ledger/store tools — the SAME builder
+        # every node uses, so a specialist (e.g. the critic) gets an
+        # identical, working RecallStore/QueryStore/HypothesisList/Get
+        # surface whenever it declares them. Resolves the run via the shared
+        # Node._resolve_run_dir (delegation-log path).
+        from .tools.routing import build_declared_shared_closures
+        self.adapter.closure_tools.update(
+            build_declared_shared_closures(self, self._agent_tools))
+
+    def _setup_sandboxed_write(self) -> None:
+        """Replace native Write with a workspace-sandboxed closure.
+
+        Removes 'Write' from native_tools so the SDK doesn't expose it,
+        then installs the same builder a dispatched worker gets
+        (:func:`build_sandboxed_write`), scoped to this node's whole
+        workspace instead of one delegation's subfolder — a node reached via
+        real graph routing (the module docstring) has no delegation_id of
+        its own to scope tighter than that.
+
+        Bash is kept native but cwd is already set to study_dir by the adapter;
+        the prompt further constrains it to the workspace.
+        """
+        if self._workspace_dir is None:
+            return  # no sandboxing if study_dir unknown (e.g. tests)
+
+        # Remove native Write so the SDK doesn't expose an unrestricted version
+        if hasattr(self.adapter, "native_tools") and "Write" in self.adapter.native_tools:
+            self.adapter.native_tools = [
+                t for t in self.adapter.native_tools if t != "Write"
+            ]
+
+        from .tools.routing import build_sandboxed_write
+
+        # Bound to a plain name (not inlined into the assignment) so
+        # internal/tools/promptmap.py's injected_tool_docs() scanner — which
+        # resolves a closure_tools["Write"] = <name> rebind to the function
+        # <name> refers to — can still find this tool's docstring after the
+        # move into the shared builder.
+        Write = build_sandboxed_write(self._workspace_dir)
+        self.adapter.closure_tools["Write"] = Write
+
+    def _build_eval_closures(self) -> dict:
+        from .tools.routing import build_report_evals
+
+        evals = self._evals_reported
+        return {
+            "ReportEvals": build_report_evals(
+                record=lambda n: evals.__setitem__("count", n)
+            )
+        }
 
     # ── Run-context resolution (shared by every node) ────────────────────────
     # The read tools (RecallStore/QueryStore/HypothesisList/Get) may be granted
@@ -184,11 +294,13 @@ class Node(
     def _resolve_run_dir(self) -> Path | None:
         """Best-effort run_dir, valid on any node.
 
-        An orchestrating node sets _current_notes_dir (=run_dir/debug/
-        strategizer_notes) inside its turn; a leaf never takes that path, so it
-        stays unset. Every node DOES hold the shared delegation log at
-        run_dir/debug/delegation_log.jsonl, so derive run_dir from that when
-        the notes dir is unavailable.
+        Every node's ``_current_notes_dir`` is set at construction (from
+        ``notes_dir``, passed to every node — see ``graph_builder.py``) and
+        re-pointed each turn by ``_absorb_state`` if the run's real notes dir
+        differs. It can still be ``None`` (e.g. a bare ``Node()`` built
+        without one, as in unit tests) — every node DOES hold the shared
+        delegation log at run_dir/debug/delegation_log.jsonl, so derive
+        run_dir from that when the notes dir is unavailable.
         """
         notes = getattr(self, "_current_notes_dir", None)
         if notes is not None:

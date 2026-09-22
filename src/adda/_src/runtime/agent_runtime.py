@@ -542,7 +542,6 @@ class AgenticRun:
             eval_budget=getattr(self, "_eval_budget", None),
             evals_used=0,
             start_time=start_time,
-            return_to=None,
             required_deliverables=(
                 getattr(self, "_required_deliverables", None) or None
             ),

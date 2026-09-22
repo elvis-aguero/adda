@@ -394,9 +394,9 @@ def test_the_injected_tool_carries_its_real_docstring(data):
 
 
 def test_a_per_delegation_rebind_is_not_treated_as_universal():
-    """leaf.py rebinds closure_tools["Write"] per delegation. That is not a
-    universal injection, and adding it would put Write in the strategizer's
-    catalog -- a tool it does not have."""
+    """delegation.py's _sandbox_worker_writes rebinds closure_tools["Write"]
+    per delegation. That is not a universal injection, and adding it would
+    put Write in the strategizer's catalog -- a tool it does not have."""
     import sys
     from pathlib import Path
 

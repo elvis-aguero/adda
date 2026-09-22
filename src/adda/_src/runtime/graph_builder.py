@@ -55,20 +55,22 @@ def build_graph(
         adapter = node_adapters[name]  # shared instance, NOT make_adapter() again
         outgoing = spec.outgoing(name)
 
-        # ONE node class. Whether it orchestrates or answers follows from
-        # `outgoing`, and what it may DO follows from what its Agent declares
-        # in `tools` — never from its type. notes_dir is passed to every node:
-        # a delegating node is simply a node that needs help from another
-        # node (CLAUDE.md "all nodes are equal"), and telemetry / the
-        # science monitor / hypothesis-ledger READ access matter for every
-        # role, not only the entry node. WRITE access (HypothesisPropose/
-        # Update, Milestone*) stays gated separately, by each Agent's own
-        # declared `tools` (see nodes/tools/routing/__init__.py) — passing
-        # notes_dir here grants no capability a node has not already
-        # declared. A leaf node (no outgoing edges) never even reads this
-        # argument — Node.__init__ forwards notes_dir only to
-        # _init_orchestration, never to _init_leaf — so this only takes
-        # effect for a non-entry node that itself has outgoing edges.
+        # ONE node class; every node runs the same turn loop
+        # (Node._orchestrate). What a node may DO follows from what its
+        # Agent declares in `tools` — never from its topology. notes_dir is
+        # passed to every node: a delegating node is simply a node that needs
+        # help from another node (CLAUDE.md "all nodes are equal"), and
+        # telemetry / the science monitor / hypothesis-ledger READ access
+        # matter for every role, not only the entry node. WRITE access
+        # (HypothesisPropose/Update, Milestone*) stays gated separately, by
+        # each Agent's own declared `tools` (see
+        # nodes/tools/routing/__init__.py) — passing notes_dir here grants no
+        # capability a node has not already declared. A node with no
+        # outgoing edges still receives this argument (Node.__init__ has one
+        # init path for every node), but never ACQUIRES ledger ownership from
+        # it — Node._init_orchestration gates `_owns_epistemics` on having
+        # outgoing edges, not merely on notes_dir being set, so this only
+        # takes effect for a node that itself has outgoing edges.
         node = Node(
             adapter,
             name=name,

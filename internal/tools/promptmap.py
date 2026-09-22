@@ -784,10 +784,11 @@ def universal_tool_names() -> list[str]:
     """Tools no agent declares but every adapter is given at construction.
 
     Scoped to the one construction site that runs for every node. Not every
-    assignment is universal: ``leaf.py`` rebinds ``closure_tools["Write"]`` to
-    a freshly-sandboxed closure before EACH delegation, which is a per-worker
-    rebind of a tool those agents already declare — adding it to every role
-    would put Write in the strategizer's catalog, which does not have it.
+    assignment is universal: ``delegation.py``'s ``_sandbox_worker_writes``
+    rebinds ``closure_tools["Write"]`` to a freshly-sandboxed closure before
+    EACH delegation, which is a per-worker rebind of a tool those agents
+    already declare — adding it to every role would put Write in the
+    strategizer's catalog, which does not have it.
     """
     return sorted(
         t for t, d in injected_tool_docs().items()

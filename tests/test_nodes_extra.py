@@ -66,7 +66,6 @@ def _make_state(study_dir=None, **kwargs):
         last_report=None,
         total_delegations=0,
         budget_seconds=kwargs.pop("budget_seconds", None),
-        return_to=kwargs.pop("return_to", None),
         **kwargs,
     )
 

@@ -42,9 +42,9 @@ __all__ = [
     "resolve_target",
     "_select_best_index",
     "_strip_leading_md_header",
-    # One implementation per tool, not one per node kind (leaf vs.
-    # orchestrating) — these are the shared builders nodes/leaf.py and
-    # nodes/tools/routing/delegation.py both call.
+    # One implementation per tool, not one per call site — these are the
+    # shared builders both nodes/node.py (every node's own capabilities) and
+    # nodes/tools/routing/delegation.py (a dispatched worker's) call.
     "build_recall_history",
     "build_report_evals",
     "build_sandboxed_write",
@@ -145,9 +145,9 @@ def build_routing_tools(node) -> dict:
     for _t, _fn in build_ledger_closures(node).items():
         if _t in _agent_tools:
             closures[_t] = _fn
-    # Read-only ledger/store tools — declaration-gated and shared verbatim with
-    # leaf nodes (see nodes/leaf.py), so the exposure surface is
-    # identical across node types.
+    # Read-only ledger/store tools — declaration-gated and shared verbatim
+    # across every node (Node._init_capabilities calls the same builder), so
+    # the exposure surface is identical regardless of a node's outgoing edges.
     closures.update(build_declared_shared_closures(node, _agent_tools))
 
     # AskForFeedback is only injected when a critic node is
