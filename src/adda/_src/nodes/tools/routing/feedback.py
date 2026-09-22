@@ -584,12 +584,16 @@ class FeedbackTools:
 
     # ── Mid-run consultation ─────────────────────────────────────────────────
 
-    def AskForFeedback(self, hypothesis_ids: list | None = None) -> str:
+    def AskForFeedback(self, hypothesis_ids: list | str | None = None) -> str:
         """Synchronous find-only audit by the connected critic.
 
         Replaced per node by :meth:`askforfeedback_doc`, which names the
         connected critic. PASS is not a valid verdict here — REVISE, REJECT, or
         NOTED (no CRITICAL/MAJOR issue found; not an acceptance).
+
+        hypothesis_ids should be a list, e.g. hypothesis_ids=['H1','H2'] — a
+        string is accepted too (JSON/Python-repr/comma-joined/bare) and
+        decoded the same way, defensively, for a model that emits one.
         """
         from ....runtime.constraint_snapshot import snapshot_for_node
         node = self.node

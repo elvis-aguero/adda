@@ -333,13 +333,14 @@ class StoreTools:
                 filtered, filtered_in, output_name, n_best, minimize, columns)
         return _default_listing(filtered, filtered_in, limit, columns)
 
-    def HypothesisList(self, hypothesis_ids: list | None = None) -> str:
+    def HypothesisList(self, hypothesis_ids: list | str | None = None) -> str:
         """List all hypotheses with id, status, belief, statement.
 
         Takes no real arguments — it always lists ALL hypotheses. The
-        optional `hypothesis_ids` is accepted-and-ignored so a stray kwarg
-        (agents confuse this with Delegate/AskForFeedback) returns the list
-        instead of crashing the turn with a TypeError.
+        optional `hypothesis_ids` (a list, or a string a model may emit
+        instead) is accepted-and-ignored so a stray kwarg (agents confuse
+        this with Delegate/AskForFeedback) returns the list instead of
+        crashing the turn with a TypeError or a schema validation error.
         """
         led = self.node._read_ledger()
         if led is None:

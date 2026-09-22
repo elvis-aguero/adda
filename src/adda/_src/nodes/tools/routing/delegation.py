@@ -1066,13 +1066,17 @@ class DelegationTools:
         target: str,
         intent: str,
         expected_report: str,
-        hypothesis_ids: list | None = None,
+        hypothesis_ids: list | str | None = None,
         wait: bool = False,
         is_falsification_attempt: bool = False,
         phase: str | None = None,
         namespace: str | None = None,
     ) -> str:
         """Fire a task to a connected agent.
+
+        hypothesis_ids should be a list, e.g. hypothesis_ids=['H1','H2'] — a
+        string is accepted too (JSON/Python-repr/comma-joined/bare) and
+        decoded the same way, defensively, for a model that emits one.
 
         Replaced per node by :meth:`delegate_doc`, which appends this node's
         own connected targets. This text is the fallback when a node is built
@@ -1147,7 +1151,7 @@ class DelegationTools:
 
         task_msg = self._compose_task_message(
             delegation_id, target, intent, expected_report,
-            hypothesis_ids, is_falsification_attempt, _snapshot,
+            h_ids, is_falsification_attempt, _snapshot,
         )
 
         # Each delegation gets its OWN adapter copy (D1/D2 concurrency fix).
