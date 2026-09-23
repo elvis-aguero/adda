@@ -613,3 +613,45 @@ def test_embed_with_spec_has_an_upper_bound():
 def test_s2_paper_id_namespacing(given, expected):
     from adda._src.agents.literature_tools.semantic_scholar import _s2_paper_id
     assert _s2_paper_id(given) == expected
+
+
+# ---------------------------------------------------------------------------
+# The embed worker names its own thread count
+#
+# Left to decide for itself, onnxruntime pins worker threads to CPU indices
+# derived from the machine's CPU count, not from the set the cgroup granted.
+# Under Slurm those differ and pthread_setaffinity_np fails with EINVAL,
+# which blocks every cgroup-limited allocation — i.e. every cluster run.
+# Observed: bioreactor-2d__critic__20260921T211633, delegation D002.
+# ---------------------------------------------------------------------------
+
+def test_thread_count_follows_the_cpus_we_actually_own(monkeypatch):
+    import os
+
+    from adda._src.literature import _embed_worker
+
+    monkeypatch.delenv("OMP_NUM_THREADS", raising=False)
+    monkeypatch.setattr(os, "sched_getaffinity", lambda _pid: {0, 1, 2, 3},
+                        raising=False)
+    monkeypatch.setattr(os, "cpu_count", lambda: 64)
+
+    assert _embed_worker._thread_count() == 4, (
+        "thread count came from the machine, not from the cgroup's mask"
+    )
+
+
+def test_thread_count_honours_an_explicit_omp_setting(monkeypatch):
+    from adda._src.literature import _embed_worker
+
+    monkeypatch.setenv("OMP_NUM_THREADS", "2")
+    assert _embed_worker._thread_count() == 2
+
+
+def test_thread_count_is_never_zero(monkeypatch):
+    import os
+
+    from adda._src.literature import _embed_worker
+
+    monkeypatch.setenv("OMP_NUM_THREADS", "0")   # ignored: not a usable count
+    monkeypatch.setattr(os, "sched_getaffinity", lambda _pid: set(), raising=False)
+    assert _embed_worker._thread_count() >= 1
