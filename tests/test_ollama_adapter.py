@@ -9,6 +9,21 @@ from unittest.mock import MagicMock, patch
 _OLLAMA_TEST_MODEL = "qwen2.5:0.5b"
 
 
+def _fake_agent() -> MagicMock:
+    """A stand-in compiled graph.
+
+    The adapter drives the graph with ``stream(stream_mode="values")`` — a
+    compiled LangGraph's ``invoke`` IS that loop, returning the final yielded
+    state — so tests configure ``.invoke`` as before and ``.stream`` replays
+    it as a one-state stream.
+    """
+    fake = MagicMock()
+    fake.stream.side_effect = (
+        lambda state, config=None, stream_mode=None:
+        iter([fake.invoke(state, config=config)]))
+    return fake
+
+
 def _ollama_available() -> bool:
     try:
         import urllib.request
@@ -153,7 +168,7 @@ def test_invoke_uses_fresh_thread_id_each_call():
         thread_ids.append(config["configurable"]["thread_id"])
         return fake_result
 
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.side_effect = fake_invoke
 
     adapter = _make_adapter()
@@ -172,7 +187,7 @@ def test_invoke_uses_fresh_thread_id_each_call():
 
 
 def test_invoke_returns_last_message_content():
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {
         "messages": [
             MagicMock(content="intermediate"),
@@ -195,7 +210,7 @@ def test_agent_built_lazily():
     assert adapter._agent is None
     adapter.closure_tools["Done"] = lambda summary: "done"
 
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [MagicMock(content="ok")]}
 
     with patch.object(adapter, "_build_agent", return_value=fake_agent) as mock_build:
@@ -322,7 +337,7 @@ def test_last_usage_populated_from_usage_metadata():
 
     # Realistic shape: the graph returns the input messages followed by
     # what this call generated — usage is summed only over the latter.
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {
         "messages": [HumanMessage(content="go"), fake_msg],
     }
@@ -348,7 +363,7 @@ def test_last_usage_empty_when_no_metadata():
     else:
         fake_msg.usage_metadata = None
 
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [fake_msg]}
 
     adapter = _make_adapter()

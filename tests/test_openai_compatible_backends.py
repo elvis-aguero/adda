@@ -18,6 +18,21 @@ from adda._src.backends.vllm import VLLMAdapter
 # Endpoint + auth resolution: explicit > env > class default
 # --------------------------------------------------------------------------
 
+def _fake_agent() -> MagicMock:
+    """A stand-in compiled graph.
+
+    The adapter drives the graph with ``stream(stream_mode="values")`` — a
+    compiled LangGraph's ``invoke`` IS that loop, returning the final yielded
+    state — so tests configure ``.invoke`` as before and ``.stream`` replays
+    it as a one-state stream.
+    """
+    fake = MagicMock()
+    fake.stream.side_effect = (
+        lambda state, config=None, stream_mode=None:
+        iter([fake.invoke(state, config=config)]))
+    return fake
+
+
 def test_openrouter_defaults(monkeypatch):
     monkeypatch.delenv("OPENROUTER_BASE_URL", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
@@ -90,7 +105,7 @@ def test_invoke_returns_content_and_populates_usage():
     # it never replaces. Here that's the input HumanMessage plus one AI reply.
     msg = AIMessage(content="the answer")
     msg.usage_metadata = {"input_tokens": 11, "output_tokens": 7}
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {
         "messages": [HumanMessage(content="go"), msg],
     }
@@ -132,7 +147,7 @@ def test_usage_sums_across_every_ai_message_this_invocation():
     message's value alone."""
     from langchain_core.messages import HumanMessage, ToolMessage
 
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [
         HumanMessage(content="go"),           # input, excluded
         _ai("call a tool", 10, 5),
@@ -159,7 +174,7 @@ def test_input_history_usage_metadata_is_not_double_counted():
     from langchain_core.messages import HumanMessage
 
     stale_input_ai = _ai("previous turn's reply", 999, 999)
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [
         HumanMessage(content="earlier turn"),
         stale_input_ai,                      # part of the input, must be excluded
@@ -187,7 +202,7 @@ def test_input_history_usage_metadata_is_not_double_counted():
 def test_tool_and_human_messages_are_skipped_without_usage_metadata():
     from langchain_core.messages import HumanMessage, ToolMessage
 
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [
         HumanMessage(content="go"),
         ToolMessage(content="result", tool_call_id="t1"),
@@ -206,7 +221,7 @@ def test_ai_message_with_no_usage_metadata_contributes_zero():
     from langchain_core.messages import AIMessage, HumanMessage
 
     no_meta_ai = AIMessage(content="call a tool")  # no usage_metadata set
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [
         HumanMessage(content="go"),
         no_meta_ai,
@@ -234,7 +249,7 @@ def test_streaming_and_non_streaming_branches_agree_on_totals(monkeypatch):
     ]
 
     # Non-streaming branch.
-    fake_agent_a = MagicMock()
+    fake_agent_a = _fake_agent()
     fake_agent_a.invoke.return_value = {"messages": list(msgs)}
     a = VLLMAdapter(model="m", system_prompt="s")
     a._agent = fake_agent_a
@@ -269,7 +284,7 @@ def test_streaming_and_non_streaming_branches_agree_on_totals(monkeypatch):
 def test_total_cost_usd_stays_none_never_zero():
     from langchain_core.messages import HumanMessage
 
-    fake_agent = MagicMock()
+    fake_agent = _fake_agent()
     fake_agent.invoke.return_value = {"messages": [
         HumanMessage(content="go"), _ai("final answer", 10, 5),
     ]}
@@ -341,9 +356,9 @@ def test_a_normal_payload_still_passes_the_guard():
     a = VLLMAdapter(model="m", system_prompt="s")
 
     class _Fake:
-        def invoke(self, state, config=None):
+        def stream(self, state, config=None, stream_mode=None):
             from langchain_core.messages import AIMessage
-            return {"messages": [AIMessage(content="fine")]}
+            yield {"messages": [AIMessage(content="fine")]}
 
     a._agent = _Fake()
     assert a.invoke([{"role": "user", "content": "go"}]) == "fine"
@@ -454,3 +469,67 @@ def test_an_empty_user_turn_does_not_satisfy_the_guard():
     # the ai turn survives; the empty user turn does not, which is the point
     assert "1 survived" in str(exc.value)
     assert "empty after flattening" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# A turn that RAISES has still spent tokens
+#
+# Observed on the qwen drop-rebound baseline (run 20260922T211717): three of
+# five delegations died inside a tool (NotImplementedError from Glob, an NFS
+# temp-dir cleanup OSError, a FileNotFoundError from download_paper). Every
+# token the server generated for those turns was invisible to telemetry,
+# because usage was only ever read on the success path. On a run whose
+# delegations fail, that is most of the run.
+# ---------------------------------------------------------------------------
+
+def test_usage_is_captured_when_the_turn_raises():
+    from langchain_core.messages import HumanMessage
+
+    generated = [
+        HumanMessage(content="go"),
+        _ai("call a tool", 10, 5),
+        _ai("call another", 20, 8),
+    ]
+
+    class _DyingAgent:
+        def stream(self, state, config=None, stream_mode=None):
+            acc = list(state["messages"])
+            for m in generated[len(state["messages"]):]:
+                acc = acc + [m]
+                yield {"messages": list(acc)}
+            raise NotImplementedError("Non-relative patterns are unsupported")
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = _DyingAgent()
+
+    with pytest.raises(NotImplementedError):
+        a.invoke([{"role": "user", "content": "go"}])
+
+    assert a.last_usage["input_tokens"] == 10 + 20
+    assert a.last_usage["output_tokens"] == 5 + 8
+
+
+def test_a_turn_that_dies_before_any_model_call_reports_zero_not_stale():
+    """The failure path must not leave the PREVIOUS turn's numbers standing —
+    that would double-count them on the next record."""
+    from langchain_core.messages import HumanMessage
+
+    a = VLLMAdapter(model="m", system_prompt="s")
+    a._agent = _fake_agent()
+    a._agent.invoke.return_value = {"messages": [
+        HumanMessage(content="go"), _ai("final answer", 10, 5),
+    ]}
+    a.invoke([{"role": "user", "content": "go"}])
+    assert a.last_usage["output_tokens"] == 5
+
+    class _InstantlyDyingAgent:
+        def stream(self, state, config=None, stream_mode=None):
+            raise RuntimeError("connection refused")
+            yield  # pragma: no cover - makes this a generator
+
+    a._agent = _InstantlyDyingAgent()
+    with pytest.raises(RuntimeError):
+        a.invoke([{"role": "user", "content": "go"}])
+
+    assert a.last_usage["input_tokens"] == 0
+    assert a.last_usage["output_tokens"] == 0

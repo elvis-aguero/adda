@@ -1053,50 +1053,63 @@ class OpenAICompatibleAdapter:
                 })
             seen = max(seen, len(msgs))
 
-        if not _debug:
-            result = self._agent.invoke({"messages": lc_msgs}, config=cfg)
-        else:
-            try:
-                # stream_mode="values" yields the whole state after each
-                # step, so the last one seen is the final state invoke()
-                # would have returned.
-                for state in self._agent.stream(
-                    {"messages": lc_msgs}, config=cfg, stream_mode="values",
-                ):
-                    result = state
+        # stream_mode="values" yields the whole state after each step, so the
+        # last one seen is the final state invoke() would have returned — the
+        # compiled graph's invoke() is itself that loop. Streaming is used on
+        # BOTH paths (not just under --debug) so that a turn which dies
+        # mid-loop still leaves its partial state behind: invoke() raises with
+        # nothing in hand, and the tokens the server already generated for that
+        # turn would be unrecoverable.
+        try:
+            for state in self._agent.stream(
+                {"messages": lc_msgs}, config=cfg, stream_mode="values",
+            ):
+                result = state
+                if _debug:
                     _flush(state)
-            except Exception:
-                # A failed turn keeps everything captured up to the failure.
-                if result is not None:
-                    _flush(result)
-                raise
+        except Exception:
+            # A failed turn keeps everything captured up to the failure.
+            if _debug and result is not None:
+                _flush(result)
+            self._capture_usage(lc_msgs, result)
+            raise
         if result is None:
             result = {"messages": []}
         all_msgs = result["messages"]
         last = all_msgs[-1]
 
-        # Extract token usage from LangChain response metadata.
-        #
-        # ``all_msgs`` is the WHOLE graph state, i.e. the input messages we
-        # passed in (``lc_msgs``) followed by everything the agent loop
-        # generated this call. The model is invoked once per tool-calling
-        # round trip, so a strategizer turn that loops several times before
-        # its final reply produces several AI messages, each carrying its
-        # own ``usage_metadata`` — reading only ``last`` (the old behaviour)
-        # silently dropped every intermediate call's tokens.
-        #
-        # Summing must stop at the input boundary: ``thread_id`` is fresh
-        # per invoke (see above), so the graph never carries earlier turns'
-        # messages into this call, and ``lc_msgs`` is exactly the prefix the
-        # graph started from — the reducer only ever appends. Slicing at
-        # ``len(lc_msgs)`` therefore counts exactly the messages this
-        # invocation produced, never the history that seeded it; summing
-        # over all of ``all_msgs`` instead would double-count that history
-        # on every call and inflate every total.
-        #
-        # Only AI messages carry usage_metadata (tool/human messages don't),
-        # so anything without it contributes zero rather than raising.
-        new_msgs = all_msgs[len(lc_msgs):]
+        self._capture_usage(lc_msgs, result)
+
+        return str(last.content)
+
+    def _capture_usage(self, lc_msgs: list, result: dict | None) -> None:
+        """Set ``last_usage`` from every model call this turn produced.
+
+        Called on the success path AND from the failure path, because a turn
+        that raises has still spent whatever the server generated before it
+        died — dropping it undercounts by the whole turn, which on a run whose
+        delegations fail is most of the run.
+
+        ``result["messages"]`` is the WHOLE graph state, i.e. the input
+        messages we passed in (``lc_msgs``) followed by everything the agent
+        loop generated this call. The model is invoked once per tool-calling
+        round trip, so a strategizer turn that loops several times before its
+        final reply produces several AI messages, each carrying its own
+        ``usage_metadata`` — reading only the last one silently dropped every
+        intermediate call's tokens.
+
+        Summing must stop at the input boundary: ``thread_id`` is fresh per
+        invoke, so the graph never carries earlier turns' messages into this
+        call, and ``lc_msgs`` is exactly the prefix the graph started from —
+        the reducer only ever appends. Slicing at ``len(lc_msgs)`` therefore
+        counts exactly the messages this invocation produced, never the
+        history that seeded it; summing over the whole state instead would
+        double-count that history on every call and inflate every total.
+
+        Only AI messages carry usage_metadata (tool/human messages don't), so
+        anything without it contributes zero rather than raising.
+        """
+        new_msgs = ((result or {}).get("messages") or [])[len(lc_msgs):]
         total_in = total_out = total_cache_read = total_cache_creation = 0
         for _m in new_msgs:
             meta = getattr(_m, "usage_metadata", None)
@@ -1114,5 +1127,3 @@ class OpenAICompatibleAdapter:
             "cache_creation_input_tokens": total_cache_creation,
             "total_cost_usd": None,  # not available from open-weight/self-hosted
         }
-
-        return str(last.content)
