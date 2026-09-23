@@ -317,8 +317,17 @@ class LiteratureCorpus:
         # --- fast path: in-process fastembed ---
         try:
             from fastembed import TextEmbedding
+
+            # Same reason as the subprocess worker (see _embed_worker):
+            # unless the thread count is named, onnxruntime pins its workers
+            # to CPU indices taken from the machine rather than from the
+            # cgroup's mask, and pthread_setaffinity_np fails with EINVAL on
+            # every Slurm allocation. The worker's own copy of _thread_count
+            # has to stay standalone (it runs in an isolated uv env that
+            # cannot import adda), but this path can just use it.
+            from ._embed_worker import _thread_count
             self._embedding_model = TextEmbedding(
-                "BAAI/bge-small-en-v1.5"
+                "BAAI/bge-small-en-v1.5", threads=_thread_count()
             )
             return self._embedding_model
         except ImportError:

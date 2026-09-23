@@ -746,3 +746,33 @@ def test_an_off_topic_query_still_returns_passages_and_says_so(tmp_path):
     )
     assert "NOT necessarily an answer" in result
     assert "may simply not cover it" in result
+
+
+def test_the_in_process_embedder_also_names_its_thread_count(tmp_path):
+    """The twin of the worker's fix. onnxruntime pins threads to CPU indices
+    the cgroup may not own unless the count is given, and that blocks every
+    Slurm allocation — on this path as much as in the subprocess worker."""
+    import sys
+    import types
+
+    seen = {}
+
+    class _FakeTextEmbedding:
+        def __init__(self, model_name, threads=None, **kw):
+            seen["threads"] = threads
+
+    fake = types.ModuleType("fastembed")
+    fake.TextEmbedding = _FakeTextEmbedding
+    old = sys.modules.get("fastembed")
+    sys.modules["fastembed"] = fake
+    try:
+        corpus = _make_corpus(tmp_path)
+        corpus._embedding_model = None
+        corpus._get_embedding_model()
+    finally:
+        if old is None:
+            del sys.modules["fastembed"]
+        else:
+            sys.modules["fastembed"] = old
+
+    assert seen.get("threads") is not None and seen["threads"] >= 1
