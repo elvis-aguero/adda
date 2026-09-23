@@ -652,6 +652,7 @@ def test_read_paper_survives_a_temp_dir_that_will_not_delete(monkeypatch):
     """The NFS failure mode itself: cleanup fails, the text still comes back."""
     import os
     import shutil
+    import sys
     import types
 
     class _Page:
@@ -673,14 +674,23 @@ def test_read_paper_survives_a_temp_dir_that_will_not_delete(monkeypatch):
     )
 
     # Faithful to the real path: shutil.rmtree REPORTS the failure through
-    # the onexc hook tempfile installs, and it is that hook which honours
+    # the hook tempfile installs, and it is that hook which honours
     # ignore_cleanup_errors. Raising straight out of rmtree instead would
     # test a mechanism the failure never went through.
-    def _boom(path, onexc=None, **k):
+    #
+    # tempfile passes onerror= up to 3.11 and onexc= from 3.12 on, with
+    # different third arguments (an exc_info triple vs the exception). Accept
+    # whichever this interpreter installs: a stub written to one spelling
+    # calls None on the other, which is a failure of the test and says
+    # nothing about the code under it.
+    def _boom(path, onexc=None, onerror=None, **k):
         try:
             raise OSError(39, "Directory not empty")
         except OSError as exc:
-            onexc(os.rmdir, path, exc)
+            if onexc is not None:
+                onexc(os.rmdir, path, exc)
+            else:
+                onerror(os.rmdir, path, sys.exc_info())
 
     monkeypatch.setattr(shutil, "rmtree", _boom)
     assert closures["arxiv_read_paper"]("2505.00902") == "body text"
