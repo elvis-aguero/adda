@@ -147,7 +147,23 @@ def _make_glob_tool(cwd: Path | None) -> Any:
 
     def glob_files(pattern: str) -> str:
         """Find files matching a glob pattern relative to the workspace."""
-        matches = sorted(str(p) for p in base.glob(pattern))
+        # An ABSOLUTE pattern is anchored at its own root rather than refused:
+        # the SDK's Glob accepts one, so a model that has seen absolute paths
+        # in its own transcript will hand one over, and Path.glob raises
+        # NotImplementedError on it. Any other bad pattern comes back as an
+        # error STRING the agent can read and correct — a malformed tool
+        # argument is a message to the caller, never the end of the run. The
+        # sibling Grep tool already had that containment; this one did not.
+        try:
+            p = Path(pattern)
+            if p.is_absolute():
+                anchor = Path(p.anchor)
+                hits = anchor.glob(str(p.relative_to(anchor)))
+            else:
+                hits = base.glob(pattern)
+            matches = sorted(str(m) for m in hits)
+        except Exception as exc:  # noqa: BLE001
+            return f"ERROR: {type(exc).__name__}: {exc}"
         return "\n".join(matches) if matches else "(no matches)"
 
     return StructuredTool.from_function(glob_files, name="Glob")

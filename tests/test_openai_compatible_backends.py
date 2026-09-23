@@ -533,3 +533,42 @@ def test_a_turn_that_dies_before_any_model_call_reports_zero_not_stale():
 
     assert a.last_usage["input_tokens"] == 0
     assert a.last_usage["output_tokens"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Glob: a model-supplied pattern must never end the run
+#
+# Run 20260922T211717, D001: the model passed an absolute pattern, Path.glob
+# raised NotImplementedError("Non-relative patterns are unsupported"), and the
+# whole literature_reviewer delegation died. A tool given a bad argument owes
+# its caller an error it can read, not a crash — which the sibling Grep tool
+# already did and this one did not.
+# ---------------------------------------------------------------------------
+
+def test_glob_accepts_an_absolute_pattern(tmp_path):
+    from adda._src.backends.openai_compatible import _make_glob_tool
+
+    (tmp_path / "a.pdf").write_text("x")
+    tool = _make_glob_tool(tmp_path)
+
+    out = tool.invoke({"pattern": str(tmp_path / "*.pdf")})
+    assert str(tmp_path / "a.pdf") in out
+
+
+def test_glob_finds_relative_patterns_under_the_workspace(tmp_path):
+    from adda._src.backends.openai_compatible import _make_glob_tool
+
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "b.txt").write_text("x")
+    tool = _make_glob_tool(tmp_path)
+
+    assert "b.txt" in tool.invoke({"pattern": "sub/*.txt"})
+    assert tool.invoke({"pattern": "sub/*.md"}) == "(no matches)"
+
+
+def test_glob_returns_an_error_string_it_never_raises(tmp_path):
+    from adda._src.backends.openai_compatible import _make_glob_tool
+
+    tool = _make_glob_tool(tmp_path)
+    out = tool.invoke({"pattern": ""})  # Path("") -> ValueError inside glob
+    assert out.startswith("ERROR:") or out == "(no matches)"
