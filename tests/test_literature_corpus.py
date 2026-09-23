@@ -655,3 +655,29 @@ def test_thread_count_is_never_zero(monkeypatch):
     monkeypatch.setenv("OMP_NUM_THREADS", "0")   # ignored: not a usable count
     monkeypatch.setattr(os, "sched_getaffinity", lambda _pid: set(), raising=False)
     assert _embed_worker._thread_count() >= 1
+
+
+def test_worker_stderr_tail_says_how_much_it_dropped():
+    from adda._src.literature.embedder import _STDERR_TAIL, _tail
+
+    short = "boom"
+    assert _tail(short) == short
+
+    long = "x" * (_STDERR_TAIL + 250)
+    out = _tail(long)
+    assert "250 earlier chars of stderr omitted" in out
+    assert out.endswith("x" * 50)
+
+
+def test_worker_failure_names_the_exit_code(monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+
+    from adda._src.literature.embedder import _SubprocessEmbedder
+
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *a, **k: SimpleNamespace(returncode=3, stdout="", stderr="the cause"),
+    )
+    with pytest.raises(RuntimeError, match=r"exit 3.*the cause"):
+        _SubprocessEmbedder().embed(["hello"])

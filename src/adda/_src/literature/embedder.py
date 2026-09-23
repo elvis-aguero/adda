@@ -40,6 +40,29 @@ _EMBED_WITH = "fastembed>=0.3,<0.9"
 _EMBED_PYTHON = "3.12"
 
 
+_STDERR_TAIL = 4000
+
+
+def _tail(stderr: str) -> str:
+    """The last ``_STDERR_TAIL`` chars of the worker's stderr, truncation named.
+
+    500 chars was too narrow to diagnose with. onnxruntime's C++ layer logs
+    from its own threads, so a Python traceback is not reliably the last thing
+    on stderr — a 500-char window can show nothing but that async noise while
+    the actual cause scrolls out of view. That is exactly what happened on
+    run 20260922T011639 (D002): the affinity errors were all that survived,
+    and whether they were the fatal error could not be decided from the
+    record. An error message that cannot distinguish the cause from the noise
+    is not evidence, so say how much was dropped rather than dropping it
+    silently.
+    """
+    stderr = stderr or ""
+    if len(stderr) <= _STDERR_TAIL:
+        return stderr
+    dropped = len(stderr) - _STDERR_TAIL
+    return f"[... {dropped} earlier chars of stderr omitted ...]\n{stderr[-_STDERR_TAIL:]}"
+
+
 class _SubprocessEmbedder:
     """.embed(texts) via _embed_worker.py in an ephemeral uv env.
 
@@ -69,6 +92,7 @@ class _SubprocessEmbedder:
         )
         if proc.returncode != 0:
             raise RuntimeError(
-                f"embed worker failed: {proc.stderr[-500:]}"
+                f"embed worker failed (exit {proc.returncode}): "
+                f"{_tail(proc.stderr)}"
             )
         return _json.loads(proc.stdout)["vectors"]
