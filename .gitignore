@@ -61,3 +61,15 @@ dist/
 # without it a `git add -A` here would absorb that nested repo as a gitlink
 # and commit a broken submodule reference into adda.
 studies/*/runs/
+
+# A study's outputs. runs/ is above; these are the rest of what a run writes
+# into the study dir. The one thing kept from workspace/ is the oracle the
+# study is DEFINED by -- everything else there is written by the agents, which
+# is what a workspace is for (studies/example_study is the reference layout:
+# PROBLEM_STATEMENT.md + config.yaml + run.py + workspace/evaluator.py).
+studies/*/workspace/*
+!studies/*/workspace/evaluator.py
+studies/*/surrogates/
+studies/*/pipeline*.ipynb
+studies/*/*.log
+studies/*/test_summary.json

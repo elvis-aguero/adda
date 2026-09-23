@@ -1,0 +1,12 @@
+model: claude-haiku-4-5-20251001
+backend: claude
+
+# 1 hour. _parse_budget_str takes seconds or HH:MM:SS.
+budget: "01:00:00"
+
+runtime:
+  # ON: without it debug/transcripts/ is never created and the viewer's
+  # Chat tab has nothing to show.
+  debug: true
+  # Answers from the viewer are only waited for while somebody is watching.
+  followup_wait_s: 600

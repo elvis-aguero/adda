@@ -1,0 +1,19 @@
+model: claude-haiku-4-5-20251001
+backend: claude
+
+# Analytic oracle: 300 points is ample for a four-factor screen with
+# interaction structure, and cheap enough that the budget is not the
+# interesting constraint.
+eval_budget: 300
+
+# Wall-clock ceiling. _parse_budget_str takes seconds or HH:MM:SS.
+budget: "01:00:00"
+
+evaluator:
+  entrypoint: "workspace/evaluator.py:evaluate"
+  output_names: [P_cr]
+
+runtime:
+  # Without it debug/transcripts/ is never written and there is nothing to
+  # read afterwards about which tools were called.
+  debug: true
