@@ -681,3 +681,68 @@ def test_worker_failure_names_the_exit_code(monkeypatch):
     )
     with pytest.raises(RuntimeError, match=r"exit 3.*the cause"):
         _SubprocessEmbedder().embed(["hello"])
+
+
+# ---------------------------------------------------------------------------
+# Search results state their own boundary
+#
+# Every other knowledge tool says what a miss MEANS -- ConsultBasilisk's miss
+# is "not a Basilisk concept", ConsultF3dasm's is "not an f3dasm symbol".
+# Literature search had no equivalent, so the best of a bad corpus rendered
+# identically to a strong hit. This is the one-hop tool: its text goes
+# straight into the agent's reasoning with no second call at which a mismatch
+# might be noticed.
+# ---------------------------------------------------------------------------
+
+def test_search_results_declare_what_they_are(tmp_path):
+    corpus = _make_corpus(tmp_path)
+    _inject_paper(
+        corpus, "arxiv_0000_00001", title="Honeycomb Cell Wall Collapse",
+        text="The cell wall buckles inward under compressive load.\n" * 5,
+    )
+
+    result = corpus.search("cell wall collapse", top_k=3)
+
+    assert "--- Honeycomb Cell Wall Collapse" in result
+    head = result.split("---")[0]
+    assert "1 full-text paper" in head, (
+        "the header must say how much corpus these passages are the best of"
+    )
+    assert "NOT necessarily an answer" in head
+
+
+def test_the_header_counts_papers_not_passages(tmp_path):
+    corpus = _make_corpus(tmp_path)
+    for i in (1, 2):
+        _inject_paper(
+            corpus, f"arxiv_0000_0000{i}", title=f"Paper {i}",
+            text="keyword here on every line\n" * 6,
+        )
+
+    head = corpus.search("keyword", top_k=6).split("---")[0]
+    assert "2 full-text papers" in head, (
+        "plural and count both come from the paper set, not the passage list"
+    )
+
+
+def test_an_off_topic_query_still_returns_passages_and_says_so(tmp_path):
+    """The failure the header exists for, demonstrated.
+
+    A query the corpus cannot answer does NOT come back as "No results
+    found." -- ranking returns the least-bad passage it has, and the prose
+    reads exactly as confidently as a real hit. The header is the only thing
+    in the output that lets a reader tell the two apart.
+    """
+    corpus = _make_corpus(tmp_path)
+    _inject_paper(
+        corpus, "arxiv_0000_00001", title="Honeycomb Cell Wall Collapse",
+        text="The cell wall buckles inward under compressive load.\n" * 5,
+    )
+
+    result = corpus.search("cavitation bubble collapse near a rigid wall", top_k=3)
+
+    assert "--- Honeycomb Cell Wall Collapse" in result, (
+        "premise of this test: an off-topic query is answered anyway"
+    )
+    assert "NOT necessarily an answer" in result
+    assert "may simply not cover it" in result

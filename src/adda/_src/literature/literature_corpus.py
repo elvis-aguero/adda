@@ -500,7 +500,32 @@ class LiteratureCorpus:
                 f"{chunk['text']}\n"
             )
 
-        return "\n".join(passages) if passages else "No results found."
+        if not passages:
+            return "No results found."
+        return self._coverage_header(len(meta)) + "\n".join(passages)
+
+    @staticmethod
+    def _coverage_header(n_papers: int) -> str:
+        """One line saying what these passages ARE, before the agent reads them.
+
+        Every other knowledge tool states its boundary -- ConsultBasilisk says
+        a miss means "not a Basilisk concept", ConsultF3dasm says "not an
+        f3dasm symbol". This one had no equivalent, and it renders the best of
+        a bad corpus identically to a strong hit: asked what happens when a
+        bubble collapses near a wall, a corpus with no bubble papers returned
+        confident prose about honeycomb cell walls and silo buckling. Nothing
+        in the output let the reader tell those apart.
+
+        That matters more here than elsewhere because this is the one-hop
+        tool: its text goes straight into reasoning, with no second call at
+        which a mismatch might be noticed.
+        """
+        return (
+            f"(closest matches in a corpus of {n_papers} full-text paper"
+            f"{'s' if n_papers != 1 else ''} -- these are the nearest "
+            "passages available, NOT necessarily an answer; if none is on "
+            "topic the corpus may simply not cover it)\n\n"
+        )
 
     def search_chunk_scores(
         self, query: str, top_k: int = 10
