@@ -328,8 +328,10 @@ class TestEmbedWorkerMain:
         fake_fastembed = types.ModuleType("fastembed")
 
         class FakeTextEmbedding:
-            def __init__(self, model_name):
-                pass
+            def __init__(self, model_name, threads=None):
+                # threads is passed explicitly so onnxruntime does not pin
+                # worker threads to CPU indices the cgroup does not own.
+                assert threads is not None and threads >= 1
 
             def embed(self, texts):
                 for _ in texts:
