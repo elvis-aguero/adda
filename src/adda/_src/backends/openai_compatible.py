@@ -516,7 +516,13 @@ def _build_arxiv_closures() -> dict:
     def download_paper(paper_id: str, output_dir: str = ".") -> str:
         """Download a paper PDF from arxiv by its ID (direct URL)."""
         pid = paper_id.strip().rstrip("/").split("/")[-1]
-        dest = str(Path(output_dir) / f"{pid}.pdf")
+        out = Path(output_dir)
+        # The agent names where it wants the paper; a directory it has not
+        # created yet is an ordinary thing to name, not an error. Without
+        # this the open() below raises FileNotFoundError on the DIRECTORY and
+        # the message blames the file, which reads as a failed download.
+        out.mkdir(parents=True, exist_ok=True)
+        dest = str(out / f"{pid}.pdf")
         _fetch_pdf(paper_id, dest)
         return f"Downloaded: {dest}"
 

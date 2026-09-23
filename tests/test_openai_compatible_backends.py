@@ -698,3 +698,32 @@ class _FakeResponse:
 
     def __exit__(self, *exc):
         return False
+
+
+# ---------------------------------------------------------------------------
+# download_paper: the output directory is created, not assumed
+#
+# Run 20260922T211717, D003: the model asked for the paper under "D003/",
+# its own delegation namespace, which did not exist relative to the process
+# cwd. open() then raised FileNotFoundError naming the PDF, so the failure
+# read as a bad download rather than a missing directory.
+# ---------------------------------------------------------------------------
+
+def test_download_paper_creates_a_missing_output_dir(monkeypatch, tmp_path):
+    import types
+
+    closures = _arxiv_closures(monkeypatch, types.SimpleNamespace(open=None))
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *a, **k: _FakeResponse(b"%PDF-1.4"),
+    )
+
+    dest_dir = tmp_path / "D003" / "papers"
+    assert not dest_dir.exists()
+
+    out = closures["arxiv_download_paper"]("2505.00902", str(dest_dir))
+
+    written = dest_dir / "2505.00902.pdf"
+    assert written.exists()
+    assert written.read_bytes() == b"%PDF-1.4"
+    assert str(written) in out
