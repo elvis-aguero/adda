@@ -572,3 +572,129 @@ def test_glob_returns_an_error_string_it_never_raises(tmp_path):
     tool = _make_glob_tool(tmp_path)
     out = tool.invoke({"pattern": ""})  # Path("") -> ValueError inside glob
     assert out.startswith("ERROR:") or out == "(no matches)"
+
+
+# ---------------------------------------------------------------------------
+# read_paper: the PDF handle is closed before the temp dir goes away
+#
+# Run 20260922T211717, D002 died with OSError [Errno 39] Directory not empty
+# on the TemporaryDirectory teardown — after the paper's text had already
+# been extracted. fitz.open() left the file open; on NFS, unlinking an open
+# file silly-renames it to .nfsXXXX, so the following rmdir finds the
+# directory non-empty.
+# ---------------------------------------------------------------------------
+
+def _arxiv_closures(monkeypatch, fake_fitz):
+    """Build the arxiv tool closures with a stubbed fitz and no network."""
+    import sys
+
+    from adda._src.backends import openai_compatible as oc
+
+    monkeypatch.setitem(sys.modules, "fitz", fake_fitz)
+    closures = oc._build_arxiv_closures()
+    if not closures:
+        pytest.skip("arxiv not installed")
+    return closures
+
+
+def test_read_paper_closes_the_pdf_before_cleanup(monkeypatch):
+    import types
+
+    closed = []
+
+    class _Page:
+        def get_text(self):
+            return "body text"
+
+    class _Doc:
+        def __iter__(self):
+            return iter([_Page()])
+
+        def close(self):
+            closed.append(True)
+
+    fake_fitz = types.SimpleNamespace(open=lambda path: _Doc())
+    closures = _arxiv_closures(monkeypatch, fake_fitz)
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *a, **k: _FakeResponse(b"%PDF-1.4"),
+    )
+
+    assert closures["arxiv_read_paper"]("2505.00902") == "body text"
+    assert closed == [True], "PDF handle left open at temp-dir teardown"
+
+
+def test_read_paper_closes_the_pdf_even_when_extraction_raises(monkeypatch):
+    import types
+
+    closed = []
+
+    class _Doc:
+        def __iter__(self):
+            raise RuntimeError("corrupt page tree")
+
+        def close(self):
+            closed.append(True)
+
+    fake_fitz = types.SimpleNamespace(open=lambda path: _Doc())
+    closures = _arxiv_closures(monkeypatch, fake_fitz)
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *a, **k: _FakeResponse(b"%PDF-1.4"),
+    )
+
+    with pytest.raises(RuntimeError):
+        closures["arxiv_read_paper"]("2505.00902")
+    assert closed == [True]
+
+
+def test_read_paper_survives_a_temp_dir_that_will_not_delete(monkeypatch):
+    """The NFS failure mode itself: cleanup fails, the text still comes back."""
+    import os
+    import shutil
+    import types
+
+    class _Page:
+        def get_text(self):
+            return "body text"
+
+    class _Doc:
+        def __iter__(self):
+            return iter([_Page()])
+
+        def close(self):
+            pass
+
+    fake_fitz = types.SimpleNamespace(open=lambda path: _Doc())
+    closures = _arxiv_closures(monkeypatch, fake_fitz)
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *a, **k: _FakeResponse(b"%PDF-1.4"),
+    )
+
+    # Faithful to the real path: shutil.rmtree REPORTS the failure through
+    # the onexc hook tempfile installs, and it is that hook which honours
+    # ignore_cleanup_errors. Raising straight out of rmtree instead would
+    # test a mechanism the failure never went through.
+    def _boom(path, onexc=None, **k):
+        try:
+            raise OSError(39, "Directory not empty")
+        except OSError as exc:
+            onexc(os.rmdir, path, exc)
+
+    monkeypatch.setattr(shutil, "rmtree", _boom)
+    assert closures["arxiv_read_paper"]("2505.00902") == "body text"
+
+
+class _FakeResponse:
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+
+    def read(self) -> bytes:
+        return self._data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False

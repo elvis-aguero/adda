@@ -523,13 +523,23 @@ def _build_arxiv_closures() -> dict:
     def read_paper(paper_id: str) -> str:
         """Download (direct URL) and extract text from an arxiv paper."""
         import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
+        # The PDF handle MUST be closed before the temp dir is torn down.
+        # fitz.open() holds the file open, and on NFS (every cluster scratch)
+        # deleting a still-open file silly-renames it to .nfsXXXX instead of
+        # unlinking it, so the rmdir that follows fails with ENOTEMPTY and
+        # takes the whole delegation down AFTER the text was already
+        # extracted. ignore_cleanup_errors is the second belt: a leaked temp
+        # dir is a janitor's problem, never a reason to lose a run's work.
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             path = str(Path(tmp) / "paper.pdf")
             _fetch_pdf(paper_id, path)
             try:
                 import fitz
                 doc = fitz.open(path)
-                return "\n".join(page.get_text() for page in doc)
+                try:
+                    return "\n".join(page.get_text() for page in doc)
+                finally:
+                    doc.close()
             except ImportError:
                 import subprocess
                 result = subprocess.run(
