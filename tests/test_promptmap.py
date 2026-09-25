@@ -440,7 +440,9 @@ def test_no_piece_is_offered_without_somewhere_to_write_it(data):
     never asserted. A box with no span behind it is the failure being avoided."""
     for role_id, _sec, pc in _all_pieces(data):
         assert pc["edit"]["ok"] and pc["edit"].get("key"), role_id
-        assert pc["edit"]["mode"] in ("span", "literal")
+        # A docstring is its own kind of home: one literal, indented in the
+        # source, whose cleaned text is what the model reads.
+        assert pc["edit"]["mode"] in ("span", "literal", "docstring")
         assert pc["edit"]["file"] and pc["edit"]["line"]
 
 
@@ -460,6 +462,16 @@ def test_every_pieces_citation_actually_holds_its_text(data):
             held = pm.containing_literal(text, [root / pc["edit"]["file"]])
             assert held is not None, f"{role_id}: {pc['label']!r} no longer resolves"
             assert held["file"] == pc["edit"]["file"]
+        elif pc["edit"]["mode"] == "docstring":
+            import ast
+            import inspect
+            tree = ast.parse((root / pc["edit"]["file"]).read_text(encoding="utf-8"))
+            docs = [inspect.cleandoc(n.value) for n in ast.walk(tree)
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                    and n.lineno == pc["edit"]["line"]
+                    and n.end_lineno == pc["edit"]["line_end"]]
+            assert text in docs, (
+                f"{role_id}: {pc['label']!r} is not the docstring at its citation")
         else:
             src = (root / pc["edit"]["file"]).read_text(encoding="utf-8")
             assert text in src, f"{role_id}: {pc['label']!r} is not in its cited file"
@@ -648,3 +660,32 @@ def test_the_two_hashes_see_different_halves_of_the_page(tmp_path):
         "chrome_hash moved on a prompt edit -- it is reading the DATA block")
     assert sync.content_hash(data_of(copy.read_text(encoding="utf-8"))) != \
         sync.content_hash(data_of(html))
+
+
+def test_every_tool_written_in_this_repository_is_editable():
+    """A tool whose description lives in this repository can be edited from
+    the map -- whole, or as the pieces it is assembled from.
+
+    Refusal used to be the default for anything the name scan could not pin
+    down: a closure registered under a name its function does not have, a
+    name defined twice. Adding the tools agents build for themselves to the
+    map turned a dozen entries into "not editable from this page" at once.
+    Only tools the backend SDK supplies have no source here to edit.
+    """
+    import json
+
+    html = (_ROOT / "internal" / "promptmap.html").read_text(encoding="utf-8")
+    data = json.loads(re.search(r"const DATA = (\{.*?\});\n", html, re.S).group(1))
+    refused = []
+    for role in data["roles"]:
+        for layer in role["layers"]:
+            if layer["kind"] != "catalog":
+                continue
+            for sec in layer["sections"]:
+                ok = (sec.get("edit") or {}).get("ok")
+                pieces_ok = sec.get("pieces") and all(
+                    p["edit"]["ok"] for p in sec["pieces"])
+                if not (ok or pieces_ok or sec.get("external")):
+                    refused.append((role["id"], sec.get("label"),
+                                    (sec.get("edit") or {}).get("why", "")[:80]))
+    assert not refused, refused

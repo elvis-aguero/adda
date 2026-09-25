@@ -803,13 +803,28 @@ def universal_tool_names() -> list[str]:
 _PER_NODE_DOC = ("Delegate", "AskForFeedback")
 
 
-def catalog_sections(tool_names: list[str]) -> list[dict]:
+def catalog_sections(tool_names: list[str], live: dict | None = None) -> list[dict]:
     """The ``<tools>`` catalog as readable, citable sections — one per tool.
 
     Mirrors ``render_tool_catalog``'s own formatting so the text here is the
     text the model reads, and cites each entry to the docstring it comes from.
+    ``live`` maps a name to the function object this agent is actually given,
+    where one could be built; it is cited from the object itself (see
+    ``live_tool_doc``) in preference to a name scan.
     """
+    import inspect
     docs = {**tool_docs(), **injected_tool_docs()}
+    # What the agent actually reads, for a live tool whose description is
+    # its docstring PLUS something a wrapper appended (the literature search
+    # tools get an ASYNC note from async_pool.py).
+    assembled: dict[str, str] = {}
+    for _name, _fn in (live or {}).items():
+        _spec = live_tool_doc(_fn)
+        if _spec is not None:
+            docs[_name] = _spec
+            _read_by_agent = inspect.cleandoc(getattr(_fn, "__doc__", None) or "")
+            if _read_by_agent and _read_by_agent != _spec["doc"]:
+                assembled[_name] = _read_by_agent
     header = (
         "Your available tools, generated from the live tool set (AUTHORITATIVE "
         "— these exact names are the ones you call; anything not listed here is "
@@ -845,12 +860,42 @@ def catalog_sections(tool_names: list[str]) -> list[dict]:
                                              "this repository."},
             })
             continue
-        body = f"### {name}\n{spec['doc']}"
+        body = f"### {name}\n{assembled.get(name, spec['doc'])}"
         if spec["examples"]:
             body += "\nExamples:\n" + "\n".join(f"  - {e}" for e in spec["examples"])
         source = {"file": spec["file"], "line": spec["line"],
                   "line_end": spec["line_end"], "match": "docstring", "span": True}
-        if spec["ambiguous"]:
+        pieces = []
+        if name in assembled:
+            own = {"ok": True, "mode": "docstring",
+                   "key": "{}:{}-{}".format(spec["file"].replace("/", "~"),
+                                            spec["line"], spec["line_end"]),
+                   "file": spec["file"], "line": spec["line"],
+                   "line_end": spec["line_end"]}
+            pieces.append({"label": name, "text": spec["doc"], "source": source,
+                           "edit": own})
+            added = assembled[name][len(spec["doc"]):].strip() \
+                if assembled[name].startswith(spec["doc"]) else ""
+            held = containing_literal(added, None) if added else None
+            if held is not None:
+                pieces.append({
+                    "label": added.split("\n")[0][:60], "text": added,
+                    "source": {"file": held["file"], "line": held["line"],
+                               "line_end": held["line_end"], "match": "literal",
+                               "span": False},
+                    "edit": {"ok": True, "mode": "literal",
+                             "key": "{}:{}-{}".format(held["file"].replace("/", "~"),
+                                                      held["line"], held["line_end"]),
+                             "file": held["file"], "line": held["line"],
+                             "line_end": held["line_end"],
+                             "literal_chars": held["chars"]},
+                })
+        if pieces:
+            edit = {"ok": False, "why": "Assembled at run time: the tool's own "
+                                        "docstring plus a note a wrapper appends. "
+                                        "Both are written down, and each is "
+                                        "editable on its own below."}
+        elif spec["ambiguous"]:
             edit = {"ok": False, "why": "This name is defined more than once — "
                                         + " and ".join(spec["ambiguous"])
                                         + " — and which one binds depends on the node, "
@@ -870,9 +915,11 @@ def catalog_sections(tool_names: list[str]) -> list[dict]:
                 "file": spec["file"], "line": spec["line"],
                 "line_end": spec["line_end"],
             }
-        sections.append({"tag": None, "label": name, "chars": len(body),
-                         "text": body, "source": source, "edit": edit,
-                         "doc": spec["doc"]})
+        entry = {"tag": None, "label": name, "chars": len(body),
+                 "text": body, "source": source, "edit": edit, "doc": spec["doc"]}
+        if pieces:
+            entry["pieces"] = pieces
+        sections.append(entry)
     return sections
 
 
@@ -1092,19 +1139,64 @@ def annotate_edits(roles: list[dict]) -> None:
                             "as a verbatim span of any file.")}
 
 
-def _self_built_tool_names(agent) -> list[str]:
-    """Names of the closures ``agent.build_closure_tools`` binds, built in a
-    throwaway study directory. Empty if the agent builds none, or if building
-    them needs something this machine does not have."""
+def _self_built_tools(agent) -> dict:
+    """The closures ``agent.build_closure_tools`` binds, by registered name,
+    built in a throwaway study directory. Empty if the agent builds none, or
+    if building them needs something this machine does not have."""
     import tempfile
     build = getattr(agent, "build_closure_tools", None)
     if build is None:
-        return []
+        return {}
     with tempfile.TemporaryDirectory() as tmp:
         try:
-            return sorted((build(Path(tmp)) or {}).keys())
+            return dict(build(Path(tmp)) or {})
         except Exception:  # noqa: BLE001 — the map must still build
-            return []
+            return {}
+
+
+def live_tool_doc(fn) -> dict | None:
+    """Where a LIVE tool function's docstring is written, read off the object.
+
+    ``tool_docs`` finds a tool by scanning for a ``def`` with its name, which
+    cannot work for a closure registered under a name its function does not
+    have (``arxiv_search`` and friends), and cannot choose between two
+    definitions of one name (``ConsultLiterature`` is written once for the
+    literature reviewer and once, read-only, for everyone else). The function
+    object answers both: its code object says which file and line it came
+    from, so the citation is the definition this agent actually holds.
+    """
+    import inspect
+    fn = inspect.unwrap(fn)
+    code = getattr(fn, "__code__", None)
+    if code is None:
+        return None
+    try:
+        path = Path(inspect.getsourcefile(fn)).resolve()
+    except (TypeError, OSError):
+        return None
+    if REPO not in path.parents:
+        return None
+    tree = ast.parse(_read(path))
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        first = min([node.lineno] + [d.lineno for d in node.decorator_list])
+        if code.co_firstlineno not in (first, node.lineno):
+            continue
+        doc = ast.get_docstring(node)
+        if not doc:
+            return None
+        examples: list[str] = []
+        for dec in node.decorator_list:
+            if (isinstance(dec, ast.Call)
+                    and getattr(dec.func, "id", getattr(dec.func, "attr", ""))
+                    == "tool_examples"):
+                examples = [a.value for a in dec.args if isinstance(a, ast.Constant)]
+        lit = node.body[0]
+        return {"doc": doc, "examples": examples, "file": _rel(path),
+                "line": lit.lineno, "line_end": lit.end_lineno,
+                "def_line": node.lineno, "ambiguous": []}
+    return None
 
 
 def build_roles(shared: list[dict]) -> list[dict]:
@@ -1210,7 +1302,17 @@ def build_roles(shared: list[dict]) -> list[dict]:
         # corpus) are not in agent.tools either -- build_closure_tools binds
         # them per adapter. They were missing from every role's view, so their
         # descriptions could not be reviewed here at all.
-        tools += [t for t in _self_built_tool_names(agent) if t not in tools]
+        built = _self_built_tools(agent)
+        tools += [t for t in built if t not in tools]
+        # FollowUp is written twice because it is two tools: the entry node's
+        # asks the operator, a worker's asks whoever delegated to it. Which
+        # one a role holds is a fact of the graph, so the map can say.
+        from adda._src.nodes.tools.routing.delegation import (
+            DelegationTools,
+            WorkerSession,
+        )
+        built = {"FollowUp": (DelegationTools.FollowUp if is_entry
+                              else WorkerSession.FollowUp), **built}
         layers.append({
             "kind": "catalog",
             "label": "<tools> catalog",
@@ -1223,7 +1325,7 @@ def build_roles(shared: list[dict]) -> list[dict]:
             "assembled_at": locate("system_prompt=system_prompt_with_catalog("),
             "chars": None,
             "tools": sorted(tools),
-            "sections": catalog_sections(sorted(tools)),
+            "sections": catalog_sections(sorted(tools), live=built),
         })
 
         roles.append({

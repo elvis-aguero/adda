@@ -241,7 +241,6 @@ def test_strategizer_no_builtin_gp_claim(tmp_path):
     from adda._src.agents.strategizer import StrategizerAgent
     lower = STRATEGIZER_SYSTEM_PROMPT.lower()
     assert "no built-in gp" in lower
-    assert "<f3dasm_api_lookup>" in lower
     tools = StrategizerAgent().build_closure_tools(tmp_path)
     assert "ConsultF3dasm" in tools
 

@@ -71,6 +71,11 @@ def _make_search_async_pool():
                     "then CollectSearches() to get all results before using them.")
 
         wrapper.__name__ = getattr(fn, "__name__", "tool")
+        # Lets a reader find the tool's own definition (the prompt map cites
+        # its docstring from here). Safe for the schema: __signature__ is set
+        # below, and inspect.signature stops unwrapping at an object that
+        # carries one, so the added `wait` parameter is kept.
+        wrapper.__wrapped__ = fn
         _doc = inspect.cleandoc(fn.__doc__ or "")
         wrapper.__doc__ = _doc + (
             "\n\nASYNC: pass wait=False to run this in the background and get a "

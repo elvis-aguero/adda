@@ -160,14 +160,6 @@ name it gives, never by a class name or a role named only in this
 section.
 </f3dasm_architecture>
 
-<f3dasm_api_lookup>
-The signature, docstring and source of any f3dasm symbol — samplers,
-optimizers, the ExperimentData and Domain surface — is served on demand by
-the f3dasm lookup tool in your <tools> catalog, read off the f3dasm this run
-executes against. Look a symbol up before naming it in a delegation; never
-guess what f3dasm provides natively.
-</f3dasm_api_lookup>
-
 <scientific_process>
 The scientific discipline is important to produce good outcomes.
 The value of decisions is heavy-tailed: the best one is often worth many

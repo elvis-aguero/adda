@@ -733,7 +733,8 @@ function piecesBlock(sec, key){
           ${pc.field ? `<code>${esc(pc.field)}</code>` : ""}
           <span class="src">${esc(srcOf(pc.source))}</span>
           <span class="chip k-fmt">${pc.edit.mode === "literal"
-            ? "inside a larger literal" : "verbatim span"}</span>
+            ? "inside a larger literal"
+            : pc.edit.mode === "docstring" ? "docstring" : "verbatim span"}</span>
           <button class="editbtn" type="button" data-edit="${pk}">propose an edit</button>
           <span data-editchip="${esc(pc.edit.key)}" data-row="${pk}">${
             editChip(pc.edit.key, pk)}</span>
