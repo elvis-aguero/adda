@@ -256,8 +256,17 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   experiment before the baseline study adopts it.
 
 ### Literature reviewer
-- **What:** a specialist agent that searches papers (arXiv / Semantic Scholar) and
-  returns findings; degrades to lexical search without the heavy extras. Its
+- **What:** a specialist agent that searches papers (arXiv / Semantic Scholar /
+  OpenAlex) and returns findings; degrades to lexical search without the heavy
+  extras. It holds six tools: `ConsultLiterature` and `CorpusAdd` (the corpus;
+  `CorpusAdd` also takes a PDF URL), `SearchPapers` (all three databases in
+  parallel, the same paper merged into one entry, and a first line saying how
+  each provider did — so a throttled or failing provider is visible without
+  being a separate tool), `CitationGraph` (citing / references / similar,
+  OpenAlex first with Semantic Scholar as fallback), `PaperDetails`, and
+  `arxiv_read_paper`. These replaced thirteen per-provider tools and the
+  `wait=False` / `CollectSearches` async pool the agent used to fan them out by
+  hand; the per-provider calls stay as plain functions with their own tests. Its
   corpus (`runs/lit_reviewer_notes/`) is STUDY-scoped, not per-run — it
   persists across every run of a study, since a paper's relevance to a
   domain doesn't go stale between runs the way scientific findings can
@@ -268,8 +277,8 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   since two runs of the same study are now real, separate processes that can
   overlap and both write to it.
 - **Where:** `agents/literature.py` (prompt + agent), `agents/literature_tools/`
-  (one module per provider: `corpus.py`, `semantic_scholar.py`, `openalex.py`,
-  `async_pool.py`, `throttle.py`), `literature/` (`literature_corpus.py` —
+  (`discovery.py` — the three discovery tools; one module per provider:
+  `corpus.py`, `semantic_scholar.py`, `openalex.py`; `throttle.py`), `literature/` (`literature_corpus.py` —
   the on-disk corpus; `http_client.py` — the shared per-domain rate limiter,
   circuit breaker, GET cache and `_robust_get`/`_robust_post`; `embedder.py`
   + `_embed_worker.py` — the out-of-process dense embedder),
@@ -642,7 +651,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   runtime-injected closures (`Agent.build_closure_tools()`), not just its
   statically declared `.tools` — LiteratureReviewAgent declares only
   `{Read, Grep, Glob, ReadProblemStatement}`; every actual capability
-  (CorpusAdd, ConsultLiterature, arXiv/OpenAlex/Semantic Scholar search) is
+  (CorpusAdd, ConsultLiterature, SearchPapers, CitationGraph, PaperDetails) is
   injected at runtime, and a first draft that only read `.tools` silently
   showed it as having almost no tools. Every edge renders identically — one
   delegation mechanism (`Delegate`) exists in the code, so there is no

@@ -117,7 +117,7 @@ what is measured, say so and explain why the comparison still holds.
 
 SPECIALIST AGENT MAPPING:
 Route each block to the agent that owns it. The EXACT target names to
-pass to Delegate(target=...) are in <delegation_roster> above, which is
+pass to Delegate(target=...) are in <team> above, which is
 generated from this run's actual wiring — use those names verbatim. NEVER
 pass a class name or a guessed name.
 
@@ -155,7 +155,7 @@ reshape, not a reason to name an agent the roster does not have.
     implementer role WHEN PRESENT.
 
 Do NOT assume a specialist is wired — verify against
-<delegation_roster> before routing block-specific work, and route by the
+<team> before routing block-specific work, and route by the
 name it gives, never by a class name or a role named only in this
 section.
 </f3dasm_architecture>

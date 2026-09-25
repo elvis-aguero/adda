@@ -904,7 +904,7 @@ class TestListPapers:
 
 
 # ---------------------------------------------------------------------------
-# Test: search_openalex includes OA PDF URL (in agent tools)
+# Test: search_openalex includes OA PDF URL
 # ---------------------------------------------------------------------------
 
 class TestOpenAlexPdfUrl:
@@ -913,14 +913,7 @@ class TestOpenAlexPdfUrl:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
         _reset_rate_state("api.openalex.org")
 
-        from adda._src.agents.literature import (
-            LiteratureReviewAgent,
-        )
-        agent = LiteratureReviewAgent()
-        tools = agent.build_closure_tools(
-            study_dir=tmp_path,
-            lit_reviewer_notes_dir=tmp_path / "lit",
-        )
+        tools = _make_tools(tmp_path)
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status.return_value = None
@@ -957,13 +950,10 @@ class TestOpenAlexPdfUrl:
 # ---------------------------------------------------------------------------
 
 def _make_tools(tmp_path):
-    """Helper: build closure tools for an agent, returning the tools dict."""
-    from adda._src.agents.literature import LiteratureReviewAgent
-    agent = LiteratureReviewAgent()
-    return agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=tmp_path / "lit",
-    )
+    """Helper: the per-provider calls the reviewer's discovery tools are built
+    from (they are not agent tools themselves)."""
+    from adda._src.agents.literature_tools import build_literature_providers
+    return build_literature_providers(tmp_path, tmp_path / "lit")
 
 
 def _work_payload(**overrides):
@@ -1248,15 +1238,11 @@ class TestGetOpenAlexReferences:
 # ---------------------------------------------------------------------------
 
 def _make_s2_tools(tmp_path, monkeypatch=None):
-    """Helper: build closure tools for an agent."""
-    from adda._src.agents.literature import LiteratureReviewAgent
+    """Helper: the per-provider calls (Semantic Scholar among them)."""
+    from adda._src.agents.literature_tools import build_literature_providers
     if monkeypatch is not None:
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
-    agent = LiteratureReviewAgent()
-    return agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=tmp_path / "lit",
-    )
+    return build_literature_providers(tmp_path, tmp_path / "lit")
 
 
 class TestS2EventLoopSafety:

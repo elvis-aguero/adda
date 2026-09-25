@@ -95,7 +95,7 @@ __all__ = [
     "ADVERSARIAL_CRITIQUE_SYSTEM_PROMPT",
     "CHECKPOINT_STRATEGIZER_PROMPT",
     "IMPLEMENTER_RESET_PROMPT_TEMPLATE",
-    "DELEGATION_ROSTER_TEMPLATE",
+    "TEAM_ROSTER_TEMPLATE",
     "RUN_PATHS_PREAMBLE_TEMPLATE",
     "WORKSPACE_PREAMBLE_TEMPLATE",
     "IMPLEMENTER_REPORT_RETRY_PROMPT",
@@ -180,18 +180,28 @@ the prior session — check before recomputing anything.
 
 # =============================================================================
 
-DELEGATION_ROSTER_TEMPLATE = """\
-<delegation_roster>
-THIS RUN'S GRAPH — generated from the live wiring, AUTHORITATIVE. These are
-the only agents that exist; any other name is not merely wrong, it is a target
-that cannot be created. Pass these names to Delegate(target=...) verbatim.
-{targets}
-A role described anywhere in this prompt but absent from this list IS NOT
-WIRED in this run. Do that work yourself or reshape it to fit the agents above
-— there is no general-purpose fallback agent beyond what is listed.
-</delegation_roster>
+TEAM_ROSTER_TEMPLATE = """\
+<team>
+THIS RUN'S AGENTS — generated from the live wiring, AUTHORITATIVE. These are
+the only agents that exist; use their names verbatim wherever a tool takes an
+agent's name.
+{members}
+A role described anywhere in your prompt but absent from this list IS NOT
+WIRED in this run — there is no general-purpose fallback agent beyond what is
+listed.
+You are {name}.
+</team>
 """
-"""The entry node's real delegation targets, injected per run.
+"""Every agent of this run, the same list for every one of them, injected per
+run.
+
+It used to be the entry node's delegation targets alone. Workers were told
+nothing about the team -- their preamble named "the Strategizer" by hand, and
+every worker holds Confer, which takes an agent's name -- so a worker could
+only address names that happened to appear in its brief, and a graph whose
+entry node is named otherwise contradicted the preamble outright. Now every
+agent reads one generated roster, and which of those names it can hand work
+to is in its own Delegate tool.
 
 The static prompt describes a full cast — an implementer, a literature
 reviewer, a datagenerator — because that is the shape of the graph it was
@@ -231,7 +241,7 @@ canonical_store       = {experiment_data_dir}
   parametrizations), each its own store at a nested path — to load them all,
   use `from adda import load_experiments; experiments = load_experiments()`
   (returns {{name: ExperimentData}}; {{'default': ...}} for a single-experiment run).
-{roster}workspace_dir         = {debug_dir}/delegations
+workspace_dir         = {debug_dir}/delegations
 Use these absolute paths when calling Read() and WriteNote().
 Read() reads FILES, not directories — calling it on a folder fails with EISDIR.
 To see what is INSIDE a directory (e.g. the store layout), use Glob('<dir>/*')
@@ -240,7 +250,7 @@ WriteNote also accepts a bare filename such as 'meta_errors.md',
 which is anchored under strategizer_notes_dir automatically.
 Workers write exclusively inside workspace_dir/D###/.
 {resources}</run_paths>
-{knowledge}
+{roster}{knowledge}
 """
 """Run-paths preamble injected at the head of the Strategizer system
 prompt for every new run.
@@ -272,14 +282,14 @@ You may Read() files from other delegations' subfolders but may NOT
 write outside your own — the Write tool will reject it.
 To access study assets (evaluator, lookup pools, etc.) use study_dir.
 Do NOT write to /tmp or any path outside workspace_dir — files there
-will be lost and are invisible to the Strategizer.
+will be lost and are invisible to {entry}.
 Evaluate designs ONLY through the instrumented evaluator: \
 `from adda import get_evaluator; gen = get_evaluator()` \
 — results are recorded in the run's canonical evaluation store \
 automatically. Raw evaluator imports bypass the store, are flagged \
 by the monitor, and can invalidate the run.
 {resources}</workspace>
-{knowledge}
+{roster}{knowledge}
 """
 """Workspace preamble injected at the head of worker system prompts.
 
@@ -289,6 +299,10 @@ study_dir : str or Path
     Absolute path to the study root (evaluator, lookup pools, etc. live here).
 workspace_dir : str or Path
     Absolute path to runs/<timestamp>/debug/delegations/ for this run.
+entry : str
+    The entry node's name, read off the graph rather than typed.
+roster : str
+    TEAM_ROSTER_TEMPLATE, formatted for this agent.
 """
 
 # =============================================================================

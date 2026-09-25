@@ -1,7 +1,7 @@
 """LiteratureReviewAgent — specialist for scientific literature.
 
 The prompt and the agent declaration live here; the runtime tool
-closures (corpus, Semantic Scholar, OpenAlex, arXiv, async pool) live
+closures (corpus, and discovery over Semantic Scholar, OpenAlex, arXiv) live
 in ``literature_tools/``.
 """
 
@@ -64,12 +64,10 @@ redundant download/embedding work.
 1. Expand the question into 3-5 domain keywords and SEARCH all three literature
    databases (arXiv, Semantic Scholar, OpenAlex — OpenAlex indexes journals
    and conference venues arXiv does not cover; prefer it whenever the
-   field's key venues are non-preprint journals). These are SLOW
-   external calls, so fan them out CONCURRENTLY: fire each provider's search
-   with wait=False (returns a handle immediately) so different providers run in
-   parallel, then gather all results in one collect step before reading them
-   (the collect tool and exact names are in the <tools> catalog). Only
-   same-provider calls serialize. Note any pdf_url.
+   field's key venues are non-preprint journals). One search asks all three
+   at once and merges the results; its first line says how each provider
+   did, and a provider that failed says nothing about whether a paper
+   exists. Note any pdf_url.
 2. For each relevant paper, ACQUIRE its full text — read it directly, or
    download the PDF — then ADD it to the corpus. Until a paper is in the corpus
    from full text (>5000 chars), you may not quote it.

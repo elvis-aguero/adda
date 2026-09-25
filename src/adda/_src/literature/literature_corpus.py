@@ -179,8 +179,8 @@ class LiteratureCorpus:
         file_path:
             Absolute or relative path to a PDF (``.pdf``) or extracted
             text (``.md`` / ``.txt``) file already on disk.  A path, not
-            a provider name and not a paper id.  Download the file first
-            with ``arxiv_download_paper`` or write the text returned by
+            a provider name and not a paper id.  The ``CorpusAdd`` tool
+            downloads a PDF URL to disk first; or write the text returned by
             ``arxiv_read_paper`` via the Write tool.
         title, authors, year, doi, arxiv_id, venue, abstract:
             Optional metadata.  Pass values obtained from the MCP

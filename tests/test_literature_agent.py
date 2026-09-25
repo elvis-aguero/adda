@@ -86,35 +86,21 @@ def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
             )
 
 
-def test_async_wrapped_discovery_tools_produce_typed_json_schema(tmp_path):
-    """The `asyncable()` wrapper (adds a `wait=` kwarg to every external
-    discovery tool -- search_semantic_scholar, search_openalex,
-    arxiv_search_papers, etc.) sets `wrapper.__signature__` by hand but never
-    set `wrapper.__annotations__` to match. `inspect.signature()` (which
-    StructuredTool.from_function's underlying pydantic schema builder uses
-    for parameter NAMES) follows the hand-set `__signature__`, but
-    `typing.get_type_hints()` (used for parameter TYPES) reads
-    `__annotations__` directly and ignores `__signature__` entirely -- so
-    every wrapped tool's real params were invisible to get_type_hints, and
-    pydantic's `type_hints[name]` lookup raised a bare KeyError for the
-    first param name on EVERY async-wrapped tool. This aborted the entire
-    OpenAI-compatible (Ollama/vLLM) tool-build loop before any tool
-    (including ConsultLiterature/CorpusAdd, BACKLOG #32) could be reached at
-    all -- confirmed for real via a literature_reviewer delegation on a
-    local Ollama model."""
+def test_discovery_tools_produce_typed_json_schema(tmp_path):
+    """Every parameter of the reviewer's discovery tools needs a JSON-schema
+    "type", or StructuredTool.from_function (the OpenAI-compatible backends'
+    schema builder) omits it -- and a union annotation has no single type.
+    The async wrapper these replaced once aborted the whole Ollama tool-build
+    loop the same way (a KeyError on its hand-set signature), confirmed on a
+    local model."""
     from langchain_core.tools import StructuredTool
 
     agent = _make_agent()
     tools = agent.build_closure_tools(
         study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit",
     )
-    async_wrapped = (
-        "search_semantic_scholar", "get_semantic_scholar_paper_details",
-        "search_openalex", "get_openalex_citations", "get_openalex_references",
-        "get_semantic_scholar_recommendations",
-        "arxiv_search_papers", "arxiv_download_paper", "arxiv_read_paper",
-    )
-    for name in async_wrapped:
+    for name in ("SearchPapers", "CitationGraph", "PaperDetails",
+                 "arxiv_read_paper"):
         assert name in tools, f"expected {name!r} among literature closures"
         tool = StructuredTool.from_function(tools[name], name=name)
         for param_name, schema in tool.args.items():
@@ -122,6 +108,15 @@ def test_async_wrapped_discovery_tools_produce_typed_json_schema(tmp_path):
                 f"{name}'s parameter {param_name!r} has no 'type' key in "
                 f"its generated JSON schema ({schema})."
             )
+
+
+def test_the_reviewer_holds_the_merged_tools_only(tmp_path):
+    """Thirteen per-provider tools and an async collect step became three:
+    the provider calls stay, but not as tools."""
+    tools = _make_agent().build_closure_tools(
+        study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit")
+    assert set(tools) == {"ConsultLiterature", "CorpusAdd", "SearchPapers",
+                          "CitationGraph", "PaperDetails", "arxiv_read_paper"}
 
 
 def test_corpus_add_closure_works(tmp_path):
@@ -221,10 +216,8 @@ def test_search_openalex_returns_results_on_success(tmp_path):
     """search_openalex returns JSON results when requests.get succeeds."""
     agent = _make_agent()
     lit_dir = tmp_path / "lit"
-    tools = agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=lit_dir,
-    )
+    from adda._src.agents.literature_tools import build_literature_providers
+    tools = build_literature_providers(tmp_path, lit_dir)
 
     # search_openalex is unconditional once the literature stack imports
     # (build_openalex_closures gates on nothing else) -- semanticscholar,
@@ -271,10 +264,8 @@ def test_search_openalex_returns_error_on_failure(tmp_path):
     """search_openalex returns ERROR when requests.get raises."""
     agent = _make_agent()
     lit_dir = tmp_path / "lit"
-    tools = agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=lit_dir,
-    )
+    from adda._src.agents.literature_tools import build_literature_providers
+    tools = build_literature_providers(tmp_path, lit_dir)
 
     # search_openalex is unconditional once the literature stack imports
     # (build_openalex_closures gates on nothing else) -- semanticscholar,
@@ -300,10 +291,8 @@ def test_get_ss_recommendations_returns_json(tmp_path):
     """get_semantic_scholar_recommendations returns JSON on success."""
     agent = _make_agent()
     lit_dir = tmp_path / "lit"
-    tools = agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=lit_dir,
-    )
+    from adda._src.agents.literature_tools import build_literature_providers
+    tools = build_literature_providers(tmp_path, lit_dir)
 
     # get_semantic_scholar_recommendations comes from
     # build_recommendations_closure(), which imports no optional client
@@ -347,10 +336,8 @@ def test_get_ss_recommendations_returns_error_on_failure(tmp_path):
     """get_semantic_scholar_recommendations returns ERROR on network failure."""
     agent = _make_agent()
     lit_dir = tmp_path / "lit"
-    tools = agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=lit_dir,
-    )
+    from adda._src.agents.literature_tools import build_literature_providers
+    tools = build_literature_providers(tmp_path, lit_dir)
 
     # get_semantic_scholar_recommendations comes from
     # build_recommendations_closure(), which imports no optional client

@@ -173,8 +173,9 @@ def test_text_built_elsewhere_is_cited_to_the_code_that_builds_it(data):
     searching for it will ever find it. The preamble stays ONE readable block,
     so the attribution lives in its parts.
 
-    ``{roster}`` is entry-only: it lists the delegation targets read off the
-    live graph, and a worker has none.
+    ``{roster}`` is in every preamble: one team roster, the same for every
+    agent (it was the entry node's delegation targets alone, and workers were
+    told nothing about the team).
     """
     for role in data["roles"]:
         preamble = role["layers"][0]
@@ -182,10 +183,7 @@ def test_text_built_elsewhere_is_cited_to_the_code_that_builds_it(data):
             f"{role['id']}: the preamble is one prompt and must read as one block")
         parts = preamble["sections"][0]["parts"]
         fields = {part["field"]: part for part in parts if part.get("field")}
-        expected = {"{resources}", "{knowledge}"}
-        if preamble["label"] == "RUN_PATHS_PREAMBLE_TEMPLATE":
-            expected.add("{roster}")
-        assert set(fields) == expected, role["id"]
+        assert set(fields) == {"{resources}", "{knowledge}", "{roster}"}, role["id"]
         for field, part in fields.items():
             assert part["source"]["file"].endswith("runtime/agent_runtime.py"), field
 
@@ -342,7 +340,7 @@ def test_a_computed_block_is_never_silently_reported_as_absent(data):
         assert not roster["empty"], (
             f"{role['id']}: the roster rendered empty — the builder is broken, "
             "since the default graph wires four delegation targets")
-        assert "<delegation_roster>" in roster["text"]
+        assert "<team>" in roster["text"]
 
 
 def test_the_rendered_roster_matches_the_graph_it_claims_to_describe(data):

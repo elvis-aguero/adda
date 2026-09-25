@@ -867,6 +867,7 @@ def test_workspace_preamble_template_placeholder_and_no_tmp():
         resources="",
         knowledge="",
         roster="",
+        entry="strategizer",
     )
     assert "/a/workspace" in result, (
         "workspace_dir substitution not found in result"

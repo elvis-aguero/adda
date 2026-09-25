@@ -1,4 +1,4 @@
-"""The strategizer is told which agents EXIST, from the live graph.
+"""Every agent is told which agents EXIST, from the live graph.
 
 A campaign on a 2- and 3-node graph logged 17 delegations to agents that were
 not wired: 15 to 'implementer', 2 to 'literature_reviewer'. The cause was not
@@ -17,6 +17,11 @@ one name accounts for 15 of the 17 and the qualified roles for 2.
 
 So the fix is topology, not emphasis: the run's real roster is generated into
 the prompt, and the prose stops asserting that any particular agent exists.
+
+It was the entry node's alone at first. Workers were told nothing about the
+team -- their preamble named "the Strategizer" by hand -- while every worker
+holds Confer, which takes an agent's name. Now it is one list, the same for
+every agent.
 """
 from __future__ import annotations
 
@@ -40,7 +45,7 @@ def _roster(graph, name="strategizer") -> str:
 
     run = AgenticRun.__new__(AgenticRun)
     run._graph_spec = graph
-    return run._delegation_roster(name)
+    return run._team_roster(name)
 
 
 def test_the_roster_names_only_the_agents_that_exist():
@@ -52,7 +57,7 @@ def test_the_roster_names_only_the_agents_that_exist():
 
 
 def test_the_roster_is_read_from_the_edges_not_the_node_dict():
-    """A node declared but not wired to the entry is NOT a delegation target.
+    """A node declared but not wired from the entry is NOT on the team.
 
     Keying off `graph.nodes` would list it and reintroduce the bug in a new
     form: a name the agent can see but cannot reach.
@@ -71,8 +76,8 @@ def test_the_roster_is_read_from_the_edges_not_the_node_dict():
     assert "orphan" not in out
 
 
-def test_a_node_with_no_outgoing_edges_gets_no_roster():
-    """It has no Delegate tool either; an empty roster would be noise."""
+def test_a_one_node_graph_gets_no_roster():
+    """There is no one else to name; an empty roster would be noise."""
     g = Graph(nodes={"strategizer": StrategizerAgent()}, edges=(),
               entry="strategizer")
 
@@ -102,4 +107,38 @@ def test_the_prompt_designates_no_unconditional_fallback_agent():
 def test_the_prompt_points_at_the_roster_for_names():
     p = StrategizerAgent().system_prompt
 
-    assert "<delegation_roster>" in p
+    assert "<team>" in p
+
+
+def test_every_agent_reads_the_same_list():
+    """One roster, not one per viewer: only the closing line differs."""
+    g = _two_node_graph()
+    lead, worker = _roster(g, "strategizer"), _roster(g, "critic")
+    assert lead.endswith("You are strategizer.\n</team>\n")
+    assert worker.endswith("You are critic.\n</team>\n")
+    strip = lambda r: r.rsplit("You are ", 1)[0]
+    assert strip(lead) == strip(worker)
+
+
+def test_the_roster_says_who_hands_each_agent_work():
+    """The wiring, not just the cast: a worker that delegates onward shows up
+    as a sender, so an agent can see who may message it and why."""
+    from adda._src.agents.literature import LiteratureReviewAgent
+    g = Graph(
+        nodes={"lead": StrategizerAgent(), "critic": AdversarialCritiqueAgent(),
+               "lit": LiteratureReviewAgent()},
+        edges=(Edge("lead", "critic"), Edge("lead", "lit"),
+               Edge("critic", "lit")),
+        entry="lead")
+    out = _roster(g, "lit")
+    assert "lead  (role: strategizer; entry)" in out
+    assert "lit  (role: literature_reviewer; tasks from lead, critic)" in out
+
+
+def test_the_worker_preamble_names_the_entry_from_the_graph():
+    """It said "the Strategizer" by hand; an entry node named otherwise made
+    the preamble name an agent that does not exist."""
+    from adda._src.prompts.agent_prompts import WORKSPACE_PREAMBLE_TEMPLATE
+    assert "Strategizer" not in WORKSPACE_PREAMBLE_TEMPLATE
+    assert "{entry}" in WORKSPACE_PREAMBLE_TEMPLATE
+    assert "{roster}" in WORKSPACE_PREAMBLE_TEMPLATE

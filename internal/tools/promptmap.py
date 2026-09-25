@@ -465,7 +465,8 @@ def _resources_text(for_worker: bool) -> str:
 
 
 def _roster_text(role: str) -> str:
-    """The delegation roster, built by the live method on the default graph.
+    """The team roster *role* reads, built by the live method on the default
+    graph.
 
     The SAME graph ``build_roles`` enumerates its roles from, so the map's
     roster and the map's role list cannot disagree. Shown against the default
@@ -483,7 +484,7 @@ def _roster_text(role: str) -> str:
     graph = _map_graph()
     run = AgenticRun.__new__(AgenticRun)
     run._graph_spec = graph
-    return run._delegation_roster(graph.entry)
+    return run._team_roster(role)
 
 
 def _knowledge_text(role: str) -> str:
@@ -507,8 +508,9 @@ _BLOCK_SOURCE = {
         "The second paragraph appears for the implementer only.",
     ),
     "roster": (
-        "runtime/agent_runtime.py", "AgenticRun._delegation_roster",
-        "THIS RUN's delegation targets, read off the live graph's edges. The "
+        "runtime/agent_runtime.py", "AgenticRun._team_roster",
+        "THIS RUN's agents, read off the live graph: the same list for every "
+        "agent, then one line naming the reader. The "
         "static prompt below describes a full cast of specialists; a study "
         "runs whatever graph it declares and an ablation arm deliberately runs "
         "a smaller one, so which of those agents actually exist cannot be "
@@ -541,7 +543,8 @@ def preamble_sections(tpl: str, role: str, is_entry: bool,
     which stretch of it came from where. The page renders it as a single
     prompt with the computed stretches marked in place.
     """
-    paths = {k: v for k, v in _PATH_STUB.items() if "{" + k + "}" in tpl}
+    stub = dict(_PATH_STUB, entry=_map_graph().entry)
+    paths = {k: v for k, v in stub.items() if "{" + k + "}" in tpl}
     chunks = re.split(r"(\{(?:" + "|".join(_BLOCK_FIELDS) + r")\})", tpl)
     parts: list[dict] = []
 
@@ -961,7 +964,7 @@ def _resolvable_runs(runs: list[str], prefer) -> list[str]:
     """Each run, or — when the whole run is not one literal — its parts.
 
     A stanza whose variable pieces are NAMES rather than numbers has nothing
-    for the placeholder split to cut on: the delegation roster interleaves
+    for the placeholder split to cut on: the team roster interleaves
     fixed prose with each wired node's own description, so the whole run
     resolves to no single literal. Its fixed header and footer still do, one
     paragraph at a time, and those are the parts worth editing. Falls back
@@ -986,7 +989,7 @@ def _resolvable_runs(runs: list[str], prefer) -> list[str]:
 def _edge_runs(run: str, prefer) -> list[str]:
     """The fixed HEAD and TAIL of a run whose middle is generated.
 
-    The delegation roster is one unbroken block: fixed prose, then a line per
+    The team roster is one unbroken block: fixed prose, then a line per
     wired node built from that node's own description, then fixed prose again.
     No blank line to cut on and no placeholder, so neither split above finds
     anything — but the header is a prefix of one literal and the footer a

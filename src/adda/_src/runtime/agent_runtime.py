@@ -26,8 +26,8 @@ from ..nodes._constants import (
     run_backstop_multiple,
 )
 from ..prompts.agent_prompts import (
-    DELEGATION_ROSTER_TEMPLATE,
     RUN_PATHS_PREAMBLE_TEMPLATE,
+    TEAM_ROSTER_TEMPLATE,
     WORKSPACE_PREAMBLE_TEMPLATE,
 )
 from . import features, settings, terminal
@@ -1312,37 +1312,45 @@ class AgenticRun:
             pass
         return problem + addendum
 
-    def _delegation_roster(self, name: str) -> str:
-        """The entry node's real delegation targets, read off the live graph.
+    def _team_roster(self, name: str) -> str:
+        """This run's agents, read off the live graph: one list, the same for
+        every agent, closed by the one line that differs ("You are <name>").
 
         Generated, not typed — the same reason ``render_tool_catalog`` is
         generated. The static strategizer prompt describes a full cast and
-        designates "the general implementer" as the fallback for any block no
-        specialist matches; run a two-node graph, or an ablation arm that drops
-        a node, and that fallback names an agent which does not exist. A
-        campaign logged 15 delegations to an absent 'implementer'.
+        once designated "the general implementer" as the fallback for any
+        block no specialist matches; run a two-node graph, or an ablation arm
+        that drops a node, and that fallback names an agent which does not
+        exist. A campaign logged 15 delegations to an absent 'implementer'.
 
-        Returns "" when the node has no outgoing edges, so a graph with nothing
-        to delegate to does not get an empty roster telling it so twice — it
-        has no Delegate tool either.
+        Lists the nodes REACHABLE from the entry, in edge-declaration order,
+        each with who hands it work. A node declared but wired to nothing is
+        left out: listing it would be a name an agent can see but not reach.
+        Returns "" for a graph of one node, which has no one to name.
         """
         spec = self._graph_spec
-        targets = [e.target for e in getattr(spec, "edges", ())
-                   if e.source == name]
-        seen: list[str] = []
-        for t in targets:          # declaration order, de-duplicated
-            if t not in seen:
-                seen.append(t)
-        if not seen:
+        entry = getattr(spec, "entry", None)
+        nodes = getattr(spec, "nodes", {}) or {}
+        edges = list(getattr(spec, "edges", ()))
+        order = [entry] if entry in nodes else []
+        for member in order:                  # grows while it is walked: BFS
+            for e in edges:
+                if e.source == member and e.target not in order:
+                    order.append(e.target)
+        if len(order) <= 1:
             return ""
         lines = []
-        for t in seen:
-            agent = spec.nodes.get(t)
+        for n in order:
+            agent = nodes.get(n)
             role = getattr(agent, "role", "") or "worker"
+            senders = list(dict.fromkeys(
+                e.source for e in edges if e.target == n))
+            where = ("entry" if n == entry
+                     else "tasks from " + ", ".join(senders))
             desc = (getattr(agent, "description", "") or "").strip()
-            lines.append(f"  {t}  (role: {role})"
+            lines.append(f"  {n}  (role: {role}; {where})"
                          + (f"\n      {desc}" if desc else ""))
-        return DELEGATION_ROSTER_TEMPLATE.format(targets="\n".join(lines))
+        return TEAM_ROSTER_TEMPLATE.format(members="\n".join(lines), name=name)
 
     def _resource_stanza(self, run_dir, *, for_worker: bool) -> str:
         """The static resource-envelope stanza — "what you HAVE" — injected into a
@@ -1431,7 +1439,7 @@ class AgenticRun:
                 experiment_data_dir=Path(run_dir) / "experiment_data",
                 resources=self._resource_stanza(run_dir, for_worker=False),
                 knowledge=self._kb_menu(_role),
-                roster=self._delegation_roster(name),
+                roster=self._team_roster(name),
             )
             system_prompt = preamble + features.strip_disabled_sections(
                 agent.system_prompt)
@@ -1449,6 +1457,8 @@ class AgenticRun:
             preamble = WORKSPACE_PREAMBLE_TEMPLATE.format(
                 workspace_dir=workspace_dir,
                 study_dir=self.study_dir,
+                entry=getattr(self._graph_spec, "entry", None) or "the entry agent",
+                roster=self._team_roster(name),
                 resources=self._resource_stanza(run_dir, for_worker=_is_campaign),
                 knowledge=self._kb_menu(_role),
             )

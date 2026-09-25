@@ -74,7 +74,7 @@ def test_the_registry_covers_every_builder():
         "build_delegation_closures", "build_ledger_closures",
         "build_notes_closures", "build_feedback_closures",
         "build_notebook_closures", "build_openalex_closures",
-        "build_semantic_scholar_closures",
+        "build_semantic_scholar_closures", "build_discovery_closures",
         # the literature reviewer's full kit; its lookup half is the
         # registered provider, build_corpus_read_closures
         "build_corpus_closures"}

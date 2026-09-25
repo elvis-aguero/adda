@@ -1,10 +1,7 @@
 """Wet integration test: all three literature sources, real network.
 
-Simulates how a real literature-reviewer agent actually calls these tools —
-fire all three searches wait=False (async, fanned out concurrently across
-providers, same-provider calls serialize), then CollectSearches() once to
-gather everything — rather than three independent blocking calls, which is
-not the pattern the agent's own tool docstrings tell it to use.
+Each provider's search on its own, then SearchPapers -- the one call a real
+literature reviewer makes, which asks all three at once and merges them.
 
 Marked `integration` — NOT run in CI (no `SEMANTIC_SCHOLAR_API_KEY` there,
 and CI shouldn't depend on live third-party APIs anyway). Run manually with:
@@ -30,25 +27,24 @@ import pytest
 QUERY = "graph neural network surrogate model"
 
 
-def _build_tools():
-    from adda._src.agents.literature import LiteratureReviewAgent
-    td = tempfile.mkdtemp(prefix="adda_lit_sources_wet_")
-    study = Path(td)
+def _study() -> Path:
+    study = Path(tempfile.mkdtemp(prefix="adda_lit_sources_wet_"))
     (study / "runs").mkdir()
-    agent = LiteratureReviewAgent()
-    return agent.build_closure_tools(study)
+    return study
+
+
+def _build_tools():
+    """The per-provider calls (not agent tools)."""
+    from adda._src.agents.literature_tools import build_literature_providers
+    return build_literature_providers(_study())
 
 
 @pytest.mark.integration
 def test_arxiv_search_returns_real_results():
     tools = _build_tools()
-    out = tools["arxiv_search_papers"](query=QUERY, max_results=3)
-    assert out != "(no results)", f"arxiv returned no results for {QUERY!r}"
-    assert not out.startswith("ERROR"), f"arxiv search failed: {out!r}"
-    # Each hit line starts with an arxiv entry id in brackets.
-    assert "[http://arxiv.org/abs/" in out or "[https://arxiv.org/abs/" in out, (
-        f"arxiv output missing expected entry_id format: {out[:300]!r}"
-    )
+    papers = tools["arxiv_search"](QUERY, 3)
+    assert papers, f"arxiv returned no results for {QUERY!r}"
+    assert all(p["arxiv"] for p in papers), papers
 
 
 @pytest.mark.integration
@@ -83,36 +79,13 @@ def test_semantic_scholar_search_returns_real_results():
 
 
 @pytest.mark.integration
-def test_all_three_sources_via_async_pool_like_a_real_agent():
-    """The actual agent-facing pattern: wait=False on all three (fanned out
-    concurrently, per-provider serialized), then one CollectSearches()."""
-    tools = _build_tools()
-    if "search_semantic_scholar" not in tools:
-        pytest.skip("semanticscholar not installed")
-
-    handles = {}
-    for name, kwargs in (
-        ("arxiv_search_papers", {"query": QUERY, "max_results": 3}),
-        ("search_openalex", {"query": QUERY, "n_results": 3}),
-        ("search_semantic_scholar", {"query": QUERY, "num_results": 3}),
-    ):
-        started = tools[name](wait=False, **kwargs)
-        assert "Started async on" in started, (
-            f"{name} did not enter the async pool: {started!r}"
-        )
-        handles[name] = started
-
-    collected = tools["CollectSearches"]()
-    for name, provider in (
-        ("arxiv_search_papers", "arxiv"),
-        ("search_openalex", "openalex"),
-        ("search_semantic_scholar", "semantic_scholar"),
-    ):
-        assert f"=== {provider}#" in collected, (
-            f"{provider}'s section missing from CollectSearches output: "
-            f"{collected[:500]!r}"
-        )
-    assert "ERROR" not in collected, (
-        f"one or more sources failed in the collected output: {collected!r}"
-    )
-    assert "still running after 600s" not in collected
+def test_search_papers_asks_all_three_like_a_real_agent():
+    """The agent-facing call: one SearchPapers, every provider answering."""
+    from adda._src.agents.literature import LiteratureReviewAgent
+    tools = LiteratureReviewAgent().build_closure_tools(_study())
+    out = tools["SearchPapers"](QUERY, limit=3)
+    header, body = out.split("\n", 1)
+    for provider in ("arxiv", "semantic_scholar", "openalex"):
+        assert f"{provider} " in header and "results" in header, header
+    assert "failed" not in header and "timed out" not in header, header
+    assert json.loads(body), f"no merged results for {QUERY!r}"

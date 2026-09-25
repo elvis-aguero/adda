@@ -1,5 +1,8 @@
-"""Semantic Scholar tools — client-library calls (throttled) and the
-recommendations endpoint (via http_client's _robust_post)."""
+"""Semantic Scholar calls — client-library calls (throttled) and the
+recommendations endpoint (via http_client's _robust_post).
+
+Plain functions, not agent tools: ``discovery.py`` builds the tools the
+reviewer holds on top of them."""
 
 from __future__ import annotations
 
@@ -9,7 +12,6 @@ import os
 import re
 
 from ...literature.http_client import SourceCooldownError, _robust_post
-from ...prompts.tool_catalog import tool_examples
 from .throttle import _throttled_ss
 
 log = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ def _s2_paper_id(paper_id: str) -> str:
 
 
 def build_semantic_scholar_closures() -> dict:
-    """The four semanticscholar-library tools; {} (with a warning) when
+    """The three semanticscholar-library calls; {} (with a warning) when
     the library is not installed."""
     tools: dict = {}
     # Semantic Scholar tools via the semanticscholar library.
@@ -95,9 +97,6 @@ def build_semantic_scholar_closures() -> dict:
                 f"will not help. Use OpenAlex/arXiv instead{hint}."
             )
 
-        @tool_examples(
-            "search_semantic_scholar('physics-informed neural networks', num_results=10)",
-        )
         def search_semantic_scholar(
             query: str, num_results: int = 10
         ) -> str:
@@ -152,10 +151,6 @@ def build_semantic_scholar_closures() -> dict:
                 })
             return _json.dumps(papers, indent=2)
 
-        @tool_examples(
-            "get_semantic_scholar_paper_details('2506.14097')",
-            "get_semantic_scholar_paper_details('10.1016/j.cma.2020.113029')",
-        )
         def get_semantic_scholar_paper_details(
             paper_id: str,
         ) -> str:
@@ -204,47 +199,6 @@ def build_semantic_scholar_closures() -> dict:
                 "externalIds": paper.externalIds or {},
             }, indent=2)
 
-        @tool_examples(
-            "get_semantic_scholar_author_details('<authorId from a paper result>')",
-        )
-        def get_semantic_scholar_author_details(
-            author_id: str,
-        ) -> str:
-            """Get details for an author by their S2 author ID."""
-            try:
-                author = _throttled_ss(
-                    _sch.get_author,
-                    author_id,
-                    fields=[
-                        "name", "affiliations", "paperCount",
-                        "citationCount", "hIndex",
-                    ],
-                )
-            except TimeoutError:
-                return (
-                    "ERROR: Semantic Scholar request timed out"
-                    " after 30s. Try again or use OpenAlex."
-                )
-            except PermissionError:
-                return _ss_forbidden_error()
-            except SourceCooldownError as exc:
-                return f"ERROR: {exc}"
-            except Exception as exc:
-                return (
-                    f"ERROR: Semantic Scholar author details failed: {exc}"
-                )
-            return _json.dumps({
-                "authorId": author.authorId,
-                "name": author.name,
-                "affiliations": author.affiliations,
-                "paperCount": author.paperCount,
-                "citationCount": author.citationCount,
-                "hIndex": author.hIndex,
-            }, indent=2)
-
-        @tool_examples(
-            "get_semantic_scholar_citations_and_references('2506.14097')",
-        )
         def get_semantic_scholar_citations_and_references(
             paper_id: str,
         ) -> str:
@@ -294,9 +248,6 @@ def build_semantic_scholar_closures() -> dict:
             "get_semantic_scholar_paper_details": (
                 get_semantic_scholar_paper_details
             ),
-            "get_semantic_scholar_author_details": (
-                get_semantic_scholar_author_details
-            ),
             "get_semantic_scholar_citations_and_references": (
                 get_semantic_scholar_citations_and_references
             ),
@@ -311,9 +262,6 @@ def build_semantic_scholar_closures() -> dict:
 
 def build_recommendations_closure() -> dict:
     """The recommendations-API tool (no client library involved)."""
-    @tool_examples(
-        "get_semantic_scholar_recommendations('2506.14097', n_results=10)",
-    )
     def get_semantic_scholar_recommendations(
         paper_id: str, n_results: int = 10
     ) -> str:

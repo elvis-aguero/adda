@@ -24,9 +24,9 @@ Checked twice, because either check alone had a hole:
 - off the LIVE function objects the agents are given, because that is what
   the catalog renders. The syntax-tree pass alone let two gaps through: the
   literature reviewer's runtime tools were never in its list of names (so none
-  had examples and nothing noticed), and the async wrapper around them dropped
-  the ``_tool_examples`` attribute, so an example written in the source would
-  still never have reached the agent.
+  had examples and nothing noticed), and a wrapper around them (since
+  removed) dropped the ``_tool_examples`` attribute, so an example written in
+  the source would still never have reached the agent.
 """
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def test_the_held_tools_are_found():
     assert len(_HELD) >= 25, _HELD
     missing = [t for t in _HELD if t not in _DEFS]
     assert not missing, f"held tools with no definition found: {missing}"
-    assert len(_LIVE) >= 15, sorted(_LIVE)
+    assert len(_LIVE) >= 8, sorted(_LIVE)
 
 
 @pytest.mark.parametrize("tool", _HELD)

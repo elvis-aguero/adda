@@ -1,19 +1,22 @@
-"""OpenAlex tools: search and citation-graph traversal."""
+"""OpenAlex calls: search, citation-graph traversal, one work's record.
+
+Plain functions, not agent tools: ``discovery.py`` builds the tools the
+reviewer holds on top of them."""
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 
 from ...literature.http_client import SourceCooldownError, _robust_get
-from ...prompts.tool_catalog import tool_examples
 
 log = logging.getLogger(__name__)
 
 
 def build_openalex_closures(cache_dir) -> dict:
-    """search_openalex + citation/reference traversal, sharing one
-    polite-pool header set."""
+    """search, citations, references, id resolution and one work's record,
+    sharing one polite-pool header set."""
     # OpenAlex headers — polite pool always; Bearer key if available.
     _oa_key = os.environ.get("OPENALEX_API_KEY")
     if not _oa_key:
@@ -26,9 +29,6 @@ def build_openalex_closures(cache_dir) -> dict:
     if _oa_key:
         _oa_headers["Authorization"] = f"Bearer {_oa_key}"
 
-    @tool_examples(
-        "search_openalex('lattice metamaterial buckling', n_results=10)",
-    )
     def search_openalex(
         query: str, n_results: int = 10
     ) -> str:
@@ -48,7 +48,7 @@ def build_openalex_closures(cache_dir) -> dict:
                     "select": (
                         "id,title,authorships,publication_year"
                         ",doi,primary_location,open_access"
-                        ",best_oa_location"
+                        ",best_oa_location,cited_by_count"
                         ",abstract_inverted_index"
                     ),
                 },
@@ -102,12 +102,10 @@ def build_openalex_closures(cache_dir) -> dict:
                 "doi": doi,
                 "pdf_url": pdf_url,
                 "abstract": abstract,
+                "cited_by_count": w.get("cited_by_count"),
             })
         return _j.dumps(out, indent=2)
 
-    @tool_examples(
-        "get_openalex_citations('W2963403868', n_results=20)",
-    )
     def get_openalex_citations(
         work_id: str, n_results: int = 20
     ) -> str:
@@ -170,9 +168,6 @@ def build_openalex_closures(cache_dir) -> dict:
             })
         return _j.dumps(out, indent=2)
 
-    @tool_examples(
-        "get_openalex_references('W2963403868')",
-    )
     def get_openalex_references(work_id: str) -> str:
         """Fetch the reference list of *work_id* hydrated from OpenAlex; citation-graph traversal fallback when S2 is rate-limited.
 
@@ -256,7 +251,76 @@ def build_openalex_closures(cache_dir) -> dict:
             })
         return _j.dumps(out, indent=2)
 
+    def resolve_openalex_id(paper_id: str) -> str:
+        """The OpenAlex W-id for an arXiv id, a DOI, or a W-id / OpenAlex URL
+        (returned as is); ``"ERROR: …"`` when OpenAlex does not know it.
+
+        arXiv papers are indexed under their DataCite DOI, 10.48550/arXiv.<id>,
+        which is how an arXiv id from the search reaches the citation graph.
+        """
+        pid = (paper_id or "").strip()
+        if pid.startswith("https://openalex.org/"):
+            pid = pid[len("https://openalex.org/"):]
+        if re.fullmatch(r"W\d+", pid):
+            return pid
+        if pid.lower().startswith("doi:"):
+            pid = pid[4:]
+        if pid.lower().startswith("arxiv:"):
+            pid = pid[6:]
+        if not pid.startswith("10."):
+            pid = "10.48550/arXiv." + re.sub(r"v\d+$", "", pid)
+        try:
+            resp = _robust_get(
+                f"https://api.openalex.org/works/doi:{pid}",
+                params={"select": "id"}, headers=_oa_headers,
+                cache_dir=cache_dir)
+            wid = (resp.json().get("id") or "").replace(
+                "https://openalex.org/", "")
+        except SourceCooldownError as exc:
+            return f"ERROR: {exc}"
+        except Exception as exc:
+            return f"ERROR: OpenAlex has no work for {paper_id!r} ({exc})"
+        return wid or f"ERROR: OpenAlex has no work for {paper_id!r}"
+
+    def get_openalex_work(paper_id: str) -> str:
+        """One work's record as JSON, for any id resolve_openalex_id takes."""
+        import json as _j
+        wid = resolve_openalex_id(paper_id)
+        if wid.startswith("ERROR"):
+            return wid
+        try:
+            resp = _robust_get(
+                f"https://api.openalex.org/works/{wid}",
+                params={"select": (
+                    "id,title,authorships,publication_year,doi"
+                    ",primary_location,cited_by_count,best_oa_location"
+                    ",open_access,abstract_inverted_index")},
+                headers=_oa_headers, cache_dir=cache_dir)
+            w = resp.json()
+        except SourceCooldownError as exc:
+            return f"ERROR: {exc}"
+        except Exception as exc:
+            return f"ERROR: OpenAlex work lookup failed: {exc}"
+        inv = w.get("abstract_inverted_index") or {}
+        pairs = sorted((pos, word) for word, poss in inv.items() for pos in poss)
+        boa = w.get("best_oa_location") or {}
+        loc = w.get("primary_location") or {}
+        return _j.dumps({
+            "openalex": wid,
+            "title": w.get("title", ""),
+            "year": w.get("publication_year", ""),
+            "authors": [a["author"]["display_name"]
+                        for a in (w.get("authorships") or [])],
+            "venue": ((loc.get("source") or {}).get("display_name") or ""),
+            "doi": (w.get("doi") or "").replace("https://doi.org/", ""),
+            "cited_by_count": w.get("cited_by_count", 0),
+            "pdf_url": boa.get("pdf_url") or (w.get("open_access") or {}).get("oa_url") or "",
+            "abstract": " ".join(word for _, word in pairs),
+        }, indent=2)
+
     return {
+        "resolve_openalex_id": resolve_openalex_id,
+        "get_openalex_work": get_openalex_work,
         "search_openalex": search_openalex,
         "get_openalex_citations": get_openalex_citations,
         "get_openalex_references": get_openalex_references,

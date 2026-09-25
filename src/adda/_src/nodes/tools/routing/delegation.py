@@ -949,12 +949,9 @@ class DelegationTools:
     def delegate_doc(self) -> str:
         """Delegate's model-facing description, with THIS node's targets."""
         node = self.node
-        # Build target hints from each connected agent's description.
-        _target_hints = "\n  ".join(
-            f"{t}: {node._spec.nodes[t].description}"
-            for t in node._outgoing
-            if t in node._spec.nodes
-        )
+        # Names only: what each agent does is in the team roster every agent
+        # reads, so repeating the descriptions here said it twice.
+        _targets = ", ".join(t for t in node._outgoing if t in node._spec.nodes)
         return (
             "Fire a task to a connected agent.\n\n"
             "CHOOSE THE MODE DELIBERATELY — neither is the default-good answer:\n"
@@ -1000,7 +997,7 @@ class DelegationTools:
             " results compare across namespaces only insofar as they share the"
             " objective evaluator. A tool for creativity, not a requirement — open as"
             " many (or as few) as the science needs.\n\n"
-            f"Available targets:\n  {_target_hints}"
+            f"Available targets: {_targets}."
         )
 
     # ── Hypothesis plumbing ──────────────────────────────────────────────────

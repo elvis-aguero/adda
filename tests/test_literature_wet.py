@@ -188,7 +188,6 @@ def test_ss_key_settable_via_config_yaml(monkeypatch):
     import tempfile
     from pathlib import Path
 
-    import adda._src.agents.literature as lit_agent
     from adda._src.runtime import settings as settings_mod
 
     monkeypatch.delenv("SEMANTIC_SCHOLAR_API_KEY", raising=False)
@@ -207,8 +206,10 @@ def test_ss_key_settable_via_config_yaml(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
         study = Path(td)
         (study / "runs").mkdir()
-        agent = lit_agent.LiteratureReviewAgent()
-        tools = agent.build_closure_tools(study)
+        from adda._src.agents.literature_tools import (
+            build_literature_providers,
+        )
+        tools = build_literature_providers(study)
 
     if "search_semantic_scholar" not in tools:
         pytest.skip("semanticscholar not installed")
