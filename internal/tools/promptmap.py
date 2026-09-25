@@ -562,7 +562,10 @@ def preamble_sections(tpl: str, role: str, is_entry: bool,
             parts.append({
                 "field": "{" + field + "}",
                 "note": note,
-                "text": text or f"({field} is empty for {role} — nothing is injected)",
+                # Empty means the agent receives nothing here, so the prompt
+                # text shows nothing; the legend says the field is empty. A
+                # placeholder sentence in the text read as injected prompt.
+                "text": text,
                 "empty": not text,
                 "source": {"file": sym["file"], "line": sym["line"],
                            "match": "symbol", "span": False},
