@@ -136,7 +136,7 @@ def test_strategizer_xml_sections_appear_exactly_once():
         "role",
         "operating_principles",
         "failure_modes_to_avoid",
-        "on_error",
+        "delegation_errors",
     ]
     for tag in required_tags:
         _assert_tag_once(STRATEGIZER_SYSTEM_PROMPT, tag)
@@ -244,11 +244,9 @@ def test_implementer_xml_sections_appear_exactly_once():
 
     required_tags = [
         "role",
-        "deliverables",
         "f3dasm_api",
+        "oracle_contract",
         "operating_principles",
-        "failure_modes_to_avoid",
-        "tool_usage",
         "output_format",
         "examples",
     ]
@@ -554,16 +552,17 @@ def test_strategizer_hypothesis_log_content():
 
 
 # ---------------------------------------------------------------------------
-# NEW Test 18 — Piece B: on_error tag appears exactly once
+# NEW Test 18 — Piece B: delegation_errors tag appears exactly once
 # ---------------------------------------------------------------------------
 
-def test_strategizer_on_error_tag_appears_once():
-    """STRATEGIZER_SYSTEM_PROMPT has exactly one <on_error> pair."""
+def test_strategizer_delegation_errors_tag_appears_once():
+    """STRATEGIZER_SYSTEM_PROMPT has exactly one <delegation_errors> pair
+    (it was <on_error>; the section is about delegations that errored)."""
     from adda._src.prompts.agent_prompts import (
         STRATEGIZER_SYSTEM_PROMPT,
     )
 
-    _assert_tag_once(STRATEGIZER_SYSTEM_PROMPT, "on_error")
+    _assert_tag_once(STRATEGIZER_SYSTEM_PROMPT, "delegation_errors")
 
 
 # ---------------------------------------------------------------------------
@@ -603,16 +602,20 @@ def test_checkpoint_prompt_contains_ledger_digest():
 
 
 # ---------------------------------------------------------------------------
-# NEW Test 21 — Piece C: reasoning_protocol tag appears exactly once
+# NEW Test 21 — Piece C: the pre-Report stages live in <output_format>
 # ---------------------------------------------------------------------------
 
-def test_implementer_reasoning_protocol_tag_appears_once():
-    """IMPLEMENTER_SYSTEM_PROMPT has exactly one <reasoning_protocol> pair."""
+def test_implementer_reasoning_stages_live_in_output_format():
+    """The three stages before the Report are part of what the Report looks
+    like, so they sit in <output_format> (they were a <reasoning_protocol>
+    section of their own)."""
     from adda._src.prompts.agent_prompts import (
         IMPLEMENTER_SYSTEM_PROMPT,
     )
 
-    _assert_tag_once(IMPLEMENTER_SYSTEM_PROMPT, "reasoning_protocol")
+    fmt = IMPLEMENTER_SYSTEM_PROMPT.split("<output_format>", 1)[1]
+    assert "## Stage 1" in fmt.split("</output_format>", 1)[0]
+    assert "<reasoning_protocol>" not in IMPLEMENTER_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------

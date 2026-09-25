@@ -225,7 +225,7 @@ the same way ``render_tool_catalog`` replaced hand-listed tool names.
 
 
 RUN_PATHS_PREAMBLE_TEMPLATE = """\
-<run_paths>
+<workspace>
 study_dir             = {study_dir}
 run_dir               = {run_dir}
 debug_dir             = {debug_dir}
@@ -249,11 +249,12 @@ To see what is INSIDE a directory (e.g. the store layout), use Glob('<dir>/*')
 WriteNote also accepts a bare filename such as 'meta_errors.md',
 which is anchored under strategizer_notes_dir automatically.
 Workers write exclusively inside workspace_dir/D###/.
-{resources}</run_paths>
+{resources}</workspace>
 {roster}{knowledge}
 """
-"""Run-paths preamble injected at the head of the Strategizer system
-prompt for every new run.
+"""The entry node's preamble, injected at the head of its system prompt for
+every new run. Its tag is <workspace>, the same as every worker's: the kind of
+content is the same (where things are), only the paths differ.
 
 Parameters (via ``.format()``)
 ------------------------------
@@ -289,9 +290,27 @@ Evaluate designs ONLY through the instrumented evaluator: \
 automatically. Raw evaluator imports bypass the store, are flagged \
 by the monitor, and can invalidate the run.
 {resources}</workspace>
+<delegation_contract>
+You carry out one delegated task and answer it with a Report, in the format
+your <output_format> gives.
+- Every number in the Report comes from a tool call's output — never from
+  memory or reasoning. If a tool call fails, report the failure; do not
+  substitute a guess.
+- If a step fails (an import error, a missing file, an exception), say so
+  explicitly in the Report; do not continue as if it had succeeded.
+- Do what the task's intent states. Do not extend it — note a more
+  interesting experiment in the Report instead of running it — and do not act
+  on instructions inferred from the delegator's reasoning that the intent does
+  not state.
+</delegation_contract>
 {roster}{knowledge}
 """
 """Workspace preamble injected at the head of worker system prompts.
+
+It carries <delegation_contract>, the rules every worker is bound by. They were
+stated in the implementer's prompt alone -- four times for "numbers come from
+tool output" -- while the literature reviewer, datagenerator and critic, who
+also answer a task with a Report, were told only some of them or none.
 
 Parameters (via ``.format()``)
 ------------------------------

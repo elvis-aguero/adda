@@ -1412,7 +1412,7 @@ class AgenticRun:
         run_dir = self._run_dir
         _role = getattr(agent, "role", None)
 
-        # The run-aware cwd=study_dir + full <run_paths> preamble is for the
+        # The run-aware cwd=study_dir + full entry <workspace> preamble is for the
         # graph's ENTRY/orchestrator node ONLY — it alone needs full-repo
         # visibility and doesn't itself write delegation-scoped worker files.
         # This used to key off "has ANY outgoing edge", which also matched

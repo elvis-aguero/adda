@@ -50,7 +50,7 @@ DELIVERABLE_AUTHORING_STRATEGIZER = (
     "    reproduction gate Done() applies.\n"
     "BUILD IT BY CONSOLIDATING WORK THAT ALREADY EXISTS. The peers you delegated\n"
     "to already wrote and validated each phase under workspace_dir/D###/ (see\n"
-    "<run_paths>). Read those scripts and assemble them into the cells; reuse\n"
+    "<workspace>). Read those scripts and assemble them into the cells; reuse\n"
     "the proven code rather than re-deriving it from memory. Don't hand-derive\n"
     "the f3dasm API in a cell either — look up the exact method names first (a\n"
     "wrong name fails the gate). Read the store with data.to_pandas() →\n"

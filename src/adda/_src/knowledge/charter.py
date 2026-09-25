@@ -40,9 +40,9 @@ Do not restate these rules elsewhere; reference the clause number instead.
 """
 
 FALSIFICATION_CHARTER = """\
-SCIENTIFIC-METHOD CHARTER — the shared, binding contract for testing and
-labelling hypotheses. You can cite a clause by number ("Charter §3"); your
-peers are bound by the same charter and defer to it.
+SCIENTIFIC-METHOD CHARTER — the binding contract for testing and labelling
+hypotheses. You can cite a clause by number ("Charter §3"); whoever labels a
+hypothesis and whoever audits that label are bound by it alike.
 
 §1  A hypothesis is ONE falsifiable claim carrying a registered prediction —
     the observable whose occurrence would refute the claim.

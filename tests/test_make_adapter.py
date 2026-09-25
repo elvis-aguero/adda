@@ -70,7 +70,10 @@ def test_make_adapter_entry_node_uses_run_paths_preamble(tmp_path):
 
     call_kwargs = MockClaude.call_args[1]
     assert "system_prompt" in call_kwargs
-    assert "<run_paths>" in call_kwargs["system_prompt"]
+    # Both preambles are tagged <workspace>; the entry's carries the run's
+    # paths (strategizer_notes_dir), a worker's the delegation contract.
+    assert "strategizer_notes_dir" in call_kwargs["system_prompt"]
+    assert "<delegation_contract>" not in call_kwargs["system_prompt"]
     assert call_kwargs["study_dir"] == run.study_dir  # cwd == study_dir
 
 
@@ -134,8 +137,8 @@ def test_make_adapter_non_entry_node_with_outgoing_edges_uses_workspace_preamble
         result = run._make_adapter("datagenerator", agent)
 
     call_kwargs = MockClaude.call_args[1]
-    assert "<workspace>" in call_kwargs["system_prompt"]
-    assert "<run_paths>" not in call_kwargs["system_prompt"]
+    assert "<delegation_contract>" in call_kwargs["system_prompt"]
+    assert "strategizer_notes_dir" not in call_kwargs["system_prompt"]
     assert call_kwargs["study_dir"] == run._run_dir / "debug" / "delegations"
 
 

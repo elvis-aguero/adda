@@ -270,8 +270,8 @@ def test_run_paths_renders_delegations_not_workspace():
     assert "delegations" in out, (
         "RUN_PATHS_PREAMBLE_TEMPLATE did not render 'delegations'"
     )
-    assert "/workspace" not in out, (
-        "RUN_PATHS_PREAMBLE_TEMPLATE still renders '/workspace'"
+    assert "workspace_dir         = /s/runs/T/debug/delegations" in out, (
+        "RUN_PATHS_PREAMBLE_TEMPLATE's workspace_dir is not the delegations dir"
     )
 
 

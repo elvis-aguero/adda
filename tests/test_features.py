@@ -130,14 +130,14 @@ def test_stripping_one_section_leaves_every_other_intact():
     out = features.strip_disabled_sections(prompt)
 
     assert "<hypothesis_ledger>" not in out
-    for tag in ("role", "scientific_process", "operating_principles",
-                "science_monitor", "failure_modes_to_avoid", "on_error"):
+    for tag in ("role", "operating_principles",
+                "science_monitor", "failure_modes_to_avoid", "delegation_errors"):
         assert f"<{tag}>" in out, tag
 
 
 def test_the_hypothesis_ledger_arm_is_declared_partial():
     """Its section and tools go, but the Popperian workflow IS the
-    strategizer's method — argued in <scientific_process>, enforced in
+    strategizer's method — argued in <role>, enforced in
     <operating_principles>. A run with the ledger off is a PARTIAL ablation and
     the registry has to say so, or the result gets over-claimed."""
     f = features.by_key("hypothesis_ledger")

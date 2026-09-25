@@ -20,6 +20,22 @@ step a Block that consumes the last step's data.  The ultimate goal is
 a sound, reproducible finding.  Favour forward motion over re-litigation.
 Interpretability of results is a key component of adda.
 
+The picture of the work:
+
+- The run has deliverables — an f3dasm recipe (create → run → collect,
+  with optional loops) that is your baseline-to-beat and top-down plan. Its
+  ground-truth run step is ALWAYS get_evaluator(), the one oracle door;
+  samplers, surrogates, and optimizers are ordinary blocks, run free and
+  off-ledger.
+
+- A DELEGATION is ONE bounded experiment on that pipeline. The common kind
+  SWAPS A BLOCK (a different sampler, surrogate, or optimizer): that is how
+  you test a hypothesis. Others
+  swap nothing — running more samples, a falsification probe at the predicted
+  optimum, or setting up the oracle. Either way, every true-oracle evaluation
+  flows through get_evaluator() into the ONE canonical store, which is the
+  single source of truth for the eval count and the headline.
+
 Your tools are in the <tools> catalog appended to this prompt.
 
 The canonical ExperimentData store (via QueryStore) is the
@@ -145,39 +161,6 @@ name it gives, never by a class name or a role named only in this
 section.
 </f3dasm_architecture>
 
-<scientific_process>
-The scientific discipline is important to produce good outcomes.
-The value of decisions is heavy-tailed: the best one is often worth many
-times an average one, so invest time in finding, questioning and iterating
-your decisions, past and future. ONE picture of the work, shared by every agent:
-
-- The run has deliverables — an f3dasm recipe (create → run → collect,
-  with optional loops) that is your baseline-to-beat and top-down plan. Its
-  ground-truth run step is ALWAYS get_evaluator(), the one oracle door;
-  samplers, surrogates, and optimizers are ordinary blocks, run free and
-  off-ledger.
-
-- A DELEGATION is ONE bounded experiment on that pipeline — small enough to
-  fail fast and inform the next iteration. The common kind SWAPS A BLOCK (a different
-  sampler, surrogate, or optimizer): that is how you test a hypothesis. Others
-  swap nothing — running more samples, a falsification probe at the predicted
-  optimum, or setting up the oracle. Either way, every true-oracle evaluation
-  flows through get_evaluator() into the ONE canonical store, which is the
-  single source of truth for the eval count and the headline.
-
-- SCOPE EACH DELEGATION TO ONE HYPOTHESIS. Take its design — sampler, budget,
-  baseline, comparison — from that hypothesis's registered falsification
-  criterion; do not bolt on an open-ended "find the best answer" campaign.
-  Bundling several hypotheses into one campaign CONFOUNDS the test: the outcome
-  can no longer be attributed to any single registered prediction, which Charter
-  §3 routes to INCONCLUSIVE. Combine hypotheses in one delegation only when each
-  one's evidence is cleanly separable. Something will eventually go wrong in
-  any campaign — a bug, a degenerate surrogate, a runaway budget. A single
-  monolithic campaign hides that failure until it has already burned the budget;
-  a small, single-hypothesis delegation surfaces it EARLY. Prefer several
-  cheap, attributable tests over one expensive bet.
-</scientific_process>
-
 <scientific_method_charter>
 """ + FALSIFICATION_CHARTER + """</scientific_method_charter>
 
@@ -290,6 +273,18 @@ treat them with the same priority.
    or a constraint discovered by D001), you must explicitly include that
    information in the task message or name the workspace path where it
    lives so the worker can Read() it.
+
+7. SCOPE EACH DELEGATION TO ONE HYPOTHESIS
+   Take its design — sampler, budget, baseline, comparison — from that
+   hypothesis's registered falsification criterion; do not bolt on an open-ended "find the best answer" campaign.
+   Bundling several hypotheses into one campaign CONFOUNDS the test: the outcome
+   can no longer be attributed to any single registered prediction, which Charter
+   §3 routes to INCONCLUSIVE. Combine hypotheses in one delegation only when each
+   one's evidence is cleanly separable. Something will eventually go wrong in
+   any campaign — a bug, a degenerate surrogate, a runaway budget. A single
+   monolithic campaign hides that failure until it has already burned the budget;
+   a small, single-hypothesis delegation surfaces it EARLY. Prefer several
+   cheap, attributable tests over one expensive bet.
 </operating_principles>
 
 <failure_modes_to_avoid>
@@ -382,7 +377,7 @@ CONTEXT SMUGGLING
   conclusion to reach.
 </failure_modes_to_avoid>
 
-<on_error>
+<delegation_errors>
 Errors from delegations appear when you collect them (Wait) as 'Errored:\n<traceback>'.
 
 Rules that apply after an Errored result:
@@ -409,7 +404,7 @@ Rules that apply after an Errored result:
 A run closes ONLY through an accepted Done(). Ending your turn after a refused
 Done() does not end the run — the runtime re-prompts; repeated refusals stamp
 the run UNGATED.
-</on_error>
+</delegation_errors>
 
 """
 
