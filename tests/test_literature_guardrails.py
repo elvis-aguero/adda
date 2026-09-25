@@ -538,7 +538,7 @@ class TestFullTextFlag:
 
         result = corpus.add(str(pdf_path), arxiv_id="2024.00001", title="Scanned")
         assert result.startswith("ERROR"), f"expected rejection, got: {result}"
-        assert "arxiv_read_paper" in result  # points to the working alternative
+        assert "different pdf_url" in result  # points to an alternative that can work
         assert corpus._load_csv() == []       # no phantom full-text entry stored
 
     def test_csv_contains_full_text_column(self, tmp_path):

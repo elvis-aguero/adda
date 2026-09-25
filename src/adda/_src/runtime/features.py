@@ -26,7 +26,7 @@ PERVASIVE features are the honest caveat. A feature is pervasive when its
 CONCEPT appears outside the sections it owns — the strategizer's whole
 scientific method is written in terms of hypotheses, across
 ``<scientific_process>``, ``<operating_principles>`` and
-``<exploration_verdicts>``. Disabling such a feature removes its tools and its
+``<failure_modes_to_avoid>``. Disabling such a feature removes its tools and its
 own sections but cannot remove the idea, so the arm is a PARTIAL ablation and
 must be reported as one. Stripping those sections too would not be an ablation
 — it would be a different agent.
@@ -98,7 +98,7 @@ FEATURES: tuple[Feature, ...] = (
         # The Popperian workflow IS the strategizer's operating model: it is
         # argued in <scientific_process>, enforced in <operating_principles>
         # ("SCOPE EACH DELEGATION TO ONE HYPOTHESIS") and resolved in
-        # <exploration_verdicts>. Those are the agent's scientific method, not
+        # the worked examples in <failure_modes_to_avoid>. Those are the agent's scientific method, not
         # ledger documentation, so they stay.
         pervasive=True,
     ),

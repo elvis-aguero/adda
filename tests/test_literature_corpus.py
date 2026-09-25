@@ -362,7 +362,7 @@ def test_pdf_failed_extraction_is_rejected_not_stored_as_fulltext(
         corpus, "_extract_pdf_to_md", lambda p: "<!-- page 1 -->\n(tiny)")
     result = corpus.add(str(fake_pdf), arxiv_id="1502.05700")
     assert result.startswith("ERROR"), result
-    assert "arxiv_read_paper" in result  # points to the working alternative
+    assert "different pdf_url" in result  # points to an alternative that can work
     assert corpus._load_csv() == []      # nothing phantom entered the corpus
 
 

@@ -74,8 +74,7 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
         "papers/2506.14097.pdf"), or a direct PDF URL (http/https), which is
         downloaded into the corpus first — saved as `filename` if given,
         otherwise named after the arxiv_id or the URL. It is NOT a provider
-        name and NOT a paper id. For full text without a PDF, write the text
-        from arxiv_read_paper with the Write tool and pass that path. The
+        name and NOT a paper id. The
         remaining arguments are metadata about the paper, copied from the
         search result that identified it; arxiv_id/doi are recorded as
         metadata and used to derive a stable paper_id, they are not fetched.

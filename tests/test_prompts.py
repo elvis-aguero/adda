@@ -139,21 +139,23 @@ def test_pipeline_deliverable_is_lazy_and_self_asserting():
 def test_strategizer_has_pipeline_authoring_primer():
     """The strategizer AUTHORS pipeline.ipynb, so the assembled prompt must
     carry a concrete f3dasm primer — load the ledger, read its frames, cache
-    heavy blocks, and derive (not hardcode) the headline. The reproduction
-    rules live in the injected spec (BF-12), so assert the assembled prompt."""
+    heavy blocks, and derive (not hardcode) the headline. All of it lives in
+    the injected notebook spec, which is present only when the notebook
+    feature is on, so assert the assembled prompt."""
     from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
     base = STRATEGIZER_SYSTEM_PROMPT
     p = base + notebook_deliverable_spec("strategizer")
-    # concrete ledger-read API, not just from_file (lives in the base primer)
-    assert "to_pandas()" in base
+    # concrete ledger-read API, not just from_file
+    assert "to_pandas()" in p
     # heavy non-oracle blocks must cache-or-load; store path via env
     assert "CACHE-OR-LOAD" in p
     assert "F3DASM_CANONICAL_STORE" in p
     # explicit anti-hardcoding guidance the critic can lean on
     low = p.lower()
     assert "hardcod" in low and "derive" in low
-    # the base prompt points at the single-source deliverable_format spec
-    assert "deliverable_format" in base.lower()
+    # the base prompt no longer describes the notebook: with the feature off
+    # it would describe a deliverable that does not exist
+    assert "<deliverables>" not in base
 
 
 # ---------------------------------------------------------------------------
@@ -278,15 +280,15 @@ def test_strategizer_has_exploration_verdict_examples():
     worked exploration-verdict examples — (A) a counterexample decisively
     FALSIFIES an absence claim; (B) a budgeted existence search that finds
     nothing closes INCONCLUSIVE as a bounded negative and moves on, which is
-    breadth, not premature convergence. Strategy-only (no gate change)."""
+    breadth, not premature convergence. Strategy-only (no gate change).
+
+    They sit inside <failure_modes_to_avoid>, next to the failure modes they
+    bound (CONFIRMATION BIAS, PREMATURE CONVERGENCE)."""
     p = STRATEGIZER_SYSTEM_PROMPT
-    assert "<exploration_verdicts>" in p, (
-        "STRATEGIZER_SYSTEM_PROMPT missing <exploration_verdicts> section"
-    )
-    assert p.count("</exploration_verdicts>") == 1, (
-        "exploration_verdicts section is not a single well-formed pair"
-    )
-    low = p.lower()
+    section = p.split("<failure_modes_to_avoid>", 1)[1].split(
+        "</failure_modes_to_avoid>", 1)[0]
+    assert "<exploration_verdicts>" not in p
+    low = section.lower()
     # Example A — counterexample refutes an absence claim (black swan).
     assert "counterexample" in low and "black swan" in low, (
         "exploration_verdicts missing the counterexample/black-swan example"

@@ -48,6 +48,20 @@ DELIVERABLE_AUTHORING_STRATEGIZER = (
     "  - RunNotebook(upto?, gate?): run the notebook against a copy — cell by\n"
     "    cell to find what breaks, or with gate=True through the exact\n"
     "    reproduction gate Done() applies.\n"
+    "BUILD IT BY CONSOLIDATING WORK THAT ALREADY EXISTS. The peers you delegated\n"
+    "to already wrote and validated each phase under workspace_dir/D###/ (see\n"
+    "<run_paths>). Read those scripts and assemble them into the cells; reuse\n"
+    "the proven code rather than re-deriving it from memory. Don't hand-derive\n"
+    "the f3dasm API in a cell either — look up the exact method names first (a\n"
+    "wrong name fails the gate). Read the store with data.to_pandas() →\n"
+    "(inputs, outputs) frames, or data.get_n_best_output(1, '<obj>'); the\n"
+    "outputs frame carries provenance next to your columns: _delegation_id\n"
+    "('D000' pool, 'D001'+ live evals), _source, _ts.\n"
+    "TEST IT WITH RunNotebook(gate=True) BEFORE Done(): read the real error → fix\n"
+    "the EXACT problem → repeat until it PASSES → Done(). Gate checks are\n"
+    "budgeted (each result shows what is left); if you exhaust them, close with\n"
+    "Done() — the run is recorded FAILED if the notebook does not reproduce. If\n"
+    "you are stuck, say so in your retrospective (BLOCKED).\n"
 )
 
 #: The implementer writes phase code the strategizer lifts into cells.

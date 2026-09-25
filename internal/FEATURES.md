@@ -258,13 +258,13 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 ### Literature reviewer
 - **What:** a specialist agent that searches papers (arXiv / Semantic Scholar /
   OpenAlex) and returns findings; degrades to lexical search without the heavy
-  extras. It holds six tools: `ConsultLiterature` and `CorpusAdd` (the corpus;
+  extras. It holds five tools: `ConsultLiterature` and `CorpusAdd` (the corpus;
   `CorpusAdd` also takes a PDF URL), `SearchPapers` (all three databases in
   parallel, the same paper merged into one entry, and a first line saying how
   each provider did — so a throttled or failing provider is visible without
   being a separate tool), `CitationGraph` (citing / references / similar,
-  OpenAlex first with Semantic Scholar as fallback), `PaperDetails`, and
-  `arxiv_read_paper`. These replaced thirteen per-provider tools and the
+  OpenAlex first with Semantic Scholar as fallback) and `PaperDetails`.
+  These replaced thirteen per-provider tools and the
   `wait=False` / `CollectSearches` async pool the agent used to fan them out by
   hand; the per-provider calls stay as plain functions with their own tests. Its
   corpus (`runs/lit_reviewer_notes/`) is STUDY-scoped, not per-run — it

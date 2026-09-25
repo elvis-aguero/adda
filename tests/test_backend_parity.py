@@ -287,13 +287,13 @@ def test_literature_agent_has_no_arxiv_mcp_server():
 
 
 def test_literature_agent_arxiv_tools_in_build_closure_tools(tmp_path):
-    """arXiv reaches the reviewer through SearchPapers (search), CorpusAdd
-    (a PDF URL) and arxiv_read_paper -- not as four tools of its own."""
+    """arXiv reaches the reviewer through SearchPapers (search) and CorpusAdd
+    (a PDF URL) -- not as four tools of its own."""
     from adda._src.agents.literature import LiteratureReviewAgent
     tools = LiteratureReviewAgent().build_closure_tools(tmp_path)
-    assert {"SearchPapers", "CorpusAdd", "arxiv_read_paper"} <= set(tools)
+    assert {"SearchPapers", "CorpusAdd"} <= set(tools)
     assert not {"arxiv_search_papers", "arxiv_list_papers",
-                "arxiv_download_paper"} & set(tools)
+                "arxiv_download_paper", "arxiv_read_paper"} & set(tools)
 
 
 def test_build_arxiv_closures_returns_empty_without_package(monkeypatch):

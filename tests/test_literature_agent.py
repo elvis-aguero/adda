@@ -99,8 +99,7 @@ def test_discovery_tools_produce_typed_json_schema(tmp_path):
     tools = agent.build_closure_tools(
         study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit",
     )
-    for name in ("SearchPapers", "CitationGraph", "PaperDetails",
-                 "arxiv_read_paper"):
+    for name in ("SearchPapers", "CitationGraph", "PaperDetails"):
         assert name in tools, f"expected {name!r} among literature closures"
         tool = StructuredTool.from_function(tools[name], name=name)
         for param_name, schema in tool.args.items():
@@ -116,7 +115,7 @@ def test_the_reviewer_holds_the_merged_tools_only(tmp_path):
     tools = _make_agent().build_closure_tools(
         study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit")
     assert set(tools) == {"ConsultLiterature", "CorpusAdd", "SearchPapers",
-                          "CitationGraph", "PaperDetails", "arxiv_read_paper"}
+                          "CitationGraph", "PaperDetails"}
 
 
 def test_corpus_add_closure_works(tmp_path):

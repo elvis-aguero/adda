@@ -134,9 +134,9 @@ def test_strategizer_xml_sections_appear_exactly_once():
     # they're DRY and shared, not hand-maintained in the prompt.
     required_tags = [
         "role",
-        "deliverables",
         "operating_principles",
         "failure_modes_to_avoid",
+        "on_error",
     ]
     for tag in required_tags:
         _assert_tag_once(STRATEGIZER_SYSTEM_PROMPT, tag)
