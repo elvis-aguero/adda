@@ -15,8 +15,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from ..prompts.tool_catalog import tool_examples
-
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -234,7 +232,7 @@ class Agent:
         them in Agent.tools.
 
         The default gives EVERY agent read-only lookup against the study's
-        persistent literature corpus (ConsultLiterature/CorpusList/CorpusGetPaper) —
+        persistent literature corpus (ConsultLiterature) —
         the corpus is shared, queryable infrastructure (see LiteratureCorpus),
         the same way QueryStore lets every node read the canonical evaluation
         ledger without delegating to the data generator. ACQUIRING a new paper
@@ -242,7 +240,7 @@ class Agent:
         and vetting a new paper needs judgment a raw tool call can't supply,
         so it stays gated behind an actual delegation — see
         LiteratureReviewAgent.build_closure_tools, which overrides this
-        method entirely (its own ConsultLiterature/List/GetPaper + CorpusAdd) and
+        method entirely (the same ConsultLiterature plus CorpusAdd) and
         does not call super().
 
         Override in a subclass to replace this default entirely.
@@ -259,41 +257,8 @@ class Agent:
             else _Path(study_dir) / "runs" / "lit_reviewer_notes"
         )
         corpus = LiteratureCorpus(corpus_dir)
-
-        @tool_examples(
-            "ConsultLiterature('lattice buckling under axial compression', top_k=5)",
-        )
-        def ConsultLiterature(query: str, top_k: int = 10):
-            """Passage search across the FULL-TEXT papers already in this
-            study's persistent literature corpus (shared across every run of
-            the study). Returns an ERROR string if no full-text papers have
-            been added yet — this is a READ-ONLY lookup; acquiring a new
-            paper requires delegating to the literature_reviewer."""
-            return corpus.search(query, int(top_k))
-
-        @tool_examples(
-            'CorpusList()',
-        )
-        def CorpusList():
-            """List corpus metadata — each paper tagged [full-text] or
-            [abstract-only] so you know which you may quote from. The corpus
-            persists across every run of this study, so it may already
-            contain a prior run's answer to your question."""
-            return corpus.list_papers()
-
-        @tool_examples(
-            "CorpusGetPaper('<a paper_id from CorpusList>')",
-        )
-        def CorpusGetPaper(paper_id: str):
-            """Return the full extracted (page-annotated) text of one paper
-            already in the study's persistent literature corpus."""
-            return corpus.get_paper(paper_id)
-
-        return {
-            "ConsultLiterature": ConsultLiterature,
-            "CorpusList": CorpusList,
-            "CorpusGetPaper": CorpusGetPaper,
-        }
+        from ..agents.literature_tools.corpus import build_corpus_read_closures
+        return build_corpus_read_closures(corpus)
 
 
 # ---------------------------------------------------------------------------

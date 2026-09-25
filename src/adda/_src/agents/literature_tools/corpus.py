@@ -35,32 +35,7 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
             arxiv_id=arxiv_id, venue=venue, abstract=abstract,
             citation_count=int(citation_count or 0))
 
-    @tool_examples(
-        "ConsultLiterature('lattice buckling under axial compression', top_k=5)",
-    )
-    def ConsultLiterature(query: str, top_k: int = 10):
-        """Passage search across the FULL-TEXT papers in the corpus only.
-        Returns an ERROR string if no full-text papers have been added yet —
-        add papers first via the search → download → CorpusAdd chain."""
-        return corpus.search(query, int(top_k))
-
-    @tool_examples(
-        "CorpusGetPaper('<a paper_id from CorpusList>')",
-    )
-    def CorpusGetPaper(paper_id: str):
-        """Return the full extracted (page-annotated) text of one corpus paper."""
-        return corpus.get_paper(paper_id)
-
-    @tool_examples(
-        'CorpusList()',
-    )
-    def CorpusList():
-        """List corpus metadata — each paper tagged [full-text] or
-        [abstract-only] so you know which you may quote from. The corpus
-        persists across every run of this study, so this may already
-        list papers a prior run added — check here before re-searching
-        the databases for something already present."""
-        return corpus.list_papers()
+    tools = build_corpus_read_closures(corpus)
 
     def CorpusRank(passages: str, question: str) -> str:
         """Re-rank corpus passages by BM25 relevance to question.
@@ -152,8 +127,38 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
         dest.write_bytes(body)
         return str(dest)
 
-    return {
-        "CorpusAdd": CorpusAdd, "ConsultLiterature": ConsultLiterature,
-        "CorpusGetPaper": CorpusGetPaper, "CorpusList": CorpusList,
-        "CorpusRank": CorpusRank, "DownloadPdf": DownloadPdf,
-    }
+    tools.update({"CorpusAdd": CorpusAdd, "CorpusRank": CorpusRank,
+                  "DownloadPdf": DownloadPdf})
+    return tools
+
+
+def build_corpus_read_closures(corpus) -> dict:
+    """The corpus lookup every agent holds: one tool, one definition.
+
+    It used to be three tools (search, list, read one paper) written twice --
+    here for the literature reviewer and again in ``backends/base.py`` for
+    everyone else, with different wording -- so the same name meant two
+    docstrings and the prompt map could not say which one an agent read.
+    """
+
+    @tool_examples(
+        "ConsultLiterature()",
+        "ConsultLiterature('lattice buckling under axial compression', limit=5)",
+        "ConsultLiterature('<a paper_id from the list>')",
+    )
+    def ConsultLiterature(query: str = "", limit: int = 10):
+        """Read the study's literature corpus. It is shared across every run
+        of the study, so it may already hold a prior run's answer — look here
+        before searching the databases again.
+
+        No argument → what is in it: every paper with its paper_id, each
+        tagged [full-text] or [abstract-only] so you know which you may quote
+        from. A paper_id from that list → the full extracted, page-annotated
+        text of that paper. Anything else → passage search across the
+        full-text papers, best match first, up to `limit`.
+
+        Papers enter the corpus only when the literature reviewer adds them;
+        a search over a corpus with no full-text papers says so."""
+        return corpus.consult(query, int(limit))
+
+    return {"ConsultLiterature": ConsultLiterature}

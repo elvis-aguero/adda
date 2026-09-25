@@ -478,10 +478,9 @@ def _roster_text(role: str) -> str:
     A generated map that quietly claims a prompt section is absent is worse
     than one that fails to build.
     """
-    from adda._src.agents import _graphs
     from adda._src.runtime.agent_runtime import AgenticRun
 
-    graph = _graphs._default_graph()
+    graph = _map_graph()
     run = AgenticRun.__new__(AgenticRun)
     run._graph_spec = graph
     return run._delegation_roster(graph.entry)
@@ -1199,15 +1198,41 @@ def live_tool_doc(fn) -> dict | None:
     return None
 
 
-def build_roles(shared: list[dict]) -> list[dict]:
+#: Placeholder corpus path for the map's Abaqus datagenerator. The map never
+#: calls the tool; it only needs the agent to BUILD it, which it does whenever
+#: a corpus is named (see build_abaqus_docs_closures).
+_ABAQUS_CORPUS_PLACEHOLDER = "<ADDA_ABAQUS_DOC_CORPUS>"
+
+
+def _map_graph():
+    """The graph the map shows: the default one, with the Abaqus datagenerator.
+
+    The shipped default wires the plain DataGeneratorAgent, because a study
+    whose oracle is not an Abaqus model should not pay catalog tokens for the
+    solver manual. But the Abaqus agent is the one this project actually runs
+    oracles with, so it is the one worth reading and editing here. It is the
+    plain agent plus ConsultAbaqus, so nothing the plain one says is hidden.
+    """
     from adda._src.agents import _graphs
+    from adda._src.agents.abaqus_datagenerator import AbaqusDataGeneratorAgent
+    from adda._src.backends.base import Graph
+
+    base = _graphs._default_graph()
+    nodes = dict(base.nodes)
+    if "datagenerator" in nodes:
+        nodes["datagenerator"] = AbaqusDataGeneratorAgent(
+            corpus_dir=_ABAQUS_CORPUS_PLACEHOLDER)
+    return Graph(nodes=nodes, edges=base.edges, entry=base.entry)
+
+
+def build_roles(shared: list[dict]) -> list[dict]:
     from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
     from adda._src.prompts.agent_prompts import (
         RUN_PATHS_PREAMBLE_TEMPLATE,
         WORKSPACE_PREAMBLE_TEMPLATE,
     )
 
-    graph = _graphs._default_graph()
+    graph = _map_graph()
     entry = graph.entry
     out_edges: dict[str, list[str]] = {}
     for edge in graph.edges:

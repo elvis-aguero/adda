@@ -452,15 +452,26 @@ class LiteratureCorpus:
 
         return chunks, _np.array(rows, dtype=_np.float32), has_embedding
 
-    def consult(self, query: str, limit: int = 10) -> str:
-        """The canonical name from ``knowledge.protocol``.
+    def consult(self, query: str = "", limit: int = 10) -> str:
+        """The canonical lookup from ``knowledge.protocol``, and what the
+        ConsultLiterature tool calls.
 
-        ``search`` remains and is what the ConsultLiterature tool calls: the name
-        is written into the literature reviewer's prompt, so renaming it is a
-        prompt change rather than a refactor, and there is no measurement
-        saying the new name works better.
+        Shaped like every other reference lookup (the handbook, the Abaqus
+        manual): no query lists the contents, an id from that list opens one
+        entry in full, anything else searches. Listing, reading a paper and
+        searching were three tools over the same corpus, told apart only by
+        which argument the agent passed.
+
+        A query that is exactly a paper_id in the corpus reads that paper; ids
+        are derived from arXiv ids, DOIs or file names, so a search phrase does
+        not collide with one.
         """
-        return self.search(query, top_k=limit)
+        q = (query or "").strip()
+        if not q:
+            return self.list_papers()
+        if any(row.get("paper_id") == q for row in self._load_csv()):
+            return self.get_paper(q)
+        return self.search(q, top_k=limit)
 
     def search(self, query: str, top_k: int = 10) -> str:
         """Search FULL-TEXT papers for passages relevant to *query*.

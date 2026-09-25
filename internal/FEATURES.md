@@ -277,7 +277,8 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 
 ### Universal read-only corpus lookup
 - **What:** EVERY agent (not just the literature_reviewer) gets `ConsultLiterature`
-  / `CorpusList` / `CorpusGetPaper` for free — read-only lookup against the
+  for free (no query lists the corpus, a paper_id reads that paper, anything
+  else searches passages) — read-only lookup against the
   study's persistent literature corpus, injected via
   `Agent.build_closure_tools`'s own default. Same rationale as `QueryStore`
   letting every node read the canonical evaluation ledger without delegating

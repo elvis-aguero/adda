@@ -50,8 +50,7 @@ def _held_tools() -> set[str]:
     # than listed in an agent's `tools`.
     names |= {"Delegate", "Wait", "Reply", "FollowUp", "RecallHistory",
               "Confer", "ConsultHandbook", "ReportEvals", "AskForFeedback",
-              "ConsultF3dasm", "ConsultLiterature", "CorpusList",
-              "CorpusGetPaper", "CorpusAdd"}
+              "ConsultF3dasm", "ConsultLiterature", "CorpusAdd"}
     return names
 
 

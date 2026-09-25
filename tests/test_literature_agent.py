@@ -57,8 +57,8 @@ def test_build_closure_tools_returns_corpus_tools(tmp_path):
 
     assert "CorpusAdd" in tools
     assert "ConsultLiterature" in tools
-    assert "CorpusGetPaper" in tools
-    assert "CorpusList" in tools
+    assert "CorpusGetPaper" not in tools  # folded into ConsultLiterature
+    assert "CorpusList" not in tools  # folded into ConsultLiterature
 
 
 def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
@@ -76,7 +76,7 @@ def test_corpus_closures_produce_typed_json_schema_for_every_param(tmp_path):
     tools = agent.build_closure_tools(
         study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit",
     )
-    for name in ("CorpusAdd", "ConsultLiterature", "CorpusGetPaper"):
+    for name in ("CorpusAdd", "ConsultLiterature"):
         tool = StructuredTool.from_function(tools[name], name=name)
         for param_name, schema in tool.args.items():
             assert "type" in schema, (
@@ -157,7 +157,7 @@ def test_corpus_list_closure_works(tmp_path):
     )
 
     # Empty corpus
-    result = tools["CorpusList"]()
+    result = tools["ConsultLiterature"]()
     assert result == "Corpus is empty."
 
 
@@ -176,7 +176,9 @@ def test_corpus_search_closure_on_empty_corpus(tmp_path):
 
 
 def test_corpus_get_paper_not_found(tmp_path):
-    """CorpusGetPaper returns ERROR for unknown paper."""
+    """An id that is not in the corpus is not read as a paper: on an empty
+    corpus it falls through to search, which says there is nothing to
+    search."""
     agent = _make_agent()
     lit_dir = tmp_path / "lit"
     tools = agent.build_closure_tools(
@@ -184,7 +186,7 @@ def test_corpus_get_paper_not_found(tmp_path):
         lit_reviewer_notes_dir=lit_dir,
     )
 
-    result = tools["CorpusGetPaper"]("no_such_paper")
+    result = tools["ConsultLiterature"]("no_such_paper")
     assert "ERROR" in result
 
 
@@ -206,7 +208,7 @@ def test_build_closure_tools_fallback_dir(tmp_path):
 
     # Should still return the corpus tools
     assert "CorpusAdd" in tools
-    assert "CorpusList" in tools
+    assert "CorpusList" not in tools  # folded into ConsultLiterature
     assert (tmp_path / "runs" / "lit_reviewer_notes").is_dir()
 
 
@@ -400,3 +402,25 @@ def test_cap_result_truncates_oversized_payloads():
     assert len(out) < len(big) and "truncated" in out
     assert out.startswith("x" * 100)                 # keeps the head
     assert _cap_result(12345) == "12345"             # coerces non-str
+
+
+def test_consult_literature_lists_reads_and_searches(tmp_path):
+    """ConsultLiterature absorbed CorpusList and CorpusGetPaper: no query
+    lists the corpus, a paper_id from that list reads the paper in full,
+    anything else searches passages -- the same shape as every other
+    reference lookup."""
+    md_file = tmp_path / "paper.md"
+    md_file.write_text("<!-- page 1 -->\n"
+                       + "Content about tensegrity metamaterials. " * 200,
+                       encoding="utf-8")
+    agent = _make_agent()
+    tools = agent.build_closure_tools(
+        study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit")
+    pid = tools["CorpusAdd"](str(md_file), title="Tensegrity Paper",
+                             arxiv_id="9999.99999")
+    consult = tools["ConsultLiterature"]
+    assert "Tensegrity Paper" in consult() and pid in consult()
+    full = consult(pid)
+    assert full.count("tensegrity metamaterials") >= 100   # the whole text
+    hit = consult("tensegrity metamaterials", limit=2)
+    assert "tensegrity" in hit.lower() and hit != full

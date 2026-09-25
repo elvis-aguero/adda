@@ -37,10 +37,12 @@ WHAT IS UNIFORM, AND WHAT DELIBERATELY IS NOT
     prompt-embedded surface -- ``ConsultHandbook``, 46 occurrences -- already
     conforming and untouched.
 
-    ``ConsultLiterature`` was ``CorpusSearch`` and keeps company with
-    ``CorpusAdd`` / ``CorpusList`` / ``CorpusGetPaper``, which do NOT get the
-    prefix. That is the line: those three mutate, enumerate and fetch by id;
-    only this one is a reference lookup, so only this one owes the contract.
+    ``ConsultLiterature`` was ``CorpusSearch``. It has since absorbed
+    ``CorpusList`` and ``CorpusGetPaper``: enumerating and fetching by id are
+    what every other provider's consult already does (no query lists, an id
+    reads one entry), so they were never separate operations. ``CorpusAdd``
+    keeps its own name and no prefix: it MUTATES the corpus, and a reference
+    lookup must never write.
 
     ``test_no_prompt_names_a_tool_that_does_not_exist`` is what keeps this
     true, and is the part that matters more than the naming.
@@ -108,7 +110,7 @@ def providers() -> dict[str, dict]:
     one. A provider added without an entry here is a provider nothing checks,
     which is the state this module was written to end.
     """
-    from ..agents.literature_tools.corpus import build_corpus_closures
+    from ..agents.literature_tools.corpus import build_corpus_read_closures
     from .abaqus import ENV_VAR as ABAQUS_ENV
     from .abaqus import build_abaqus_docs_closures
     from .basilisk import ENV_VAR as BASILISK_ENV
@@ -137,7 +139,9 @@ def providers() -> dict[str, dict]:
             "env": BASILISK_ENV,
         },
         "literature": {
-            "build": build_corpus_closures,
+            # The lookup alone: CorpusAdd and the download tools are the
+            # literature reviewer's acquisition kit, not a reference lookup.
+            "build": build_corpus_read_closures,
             "tool": "ConsultLiterature",
             "env": None,
             "needs_args": True,
