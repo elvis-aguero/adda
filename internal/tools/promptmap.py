@@ -1506,9 +1506,15 @@ def build_gates() -> list[dict]:
         # feedback.py is a step of Done()'s own sequence.
         in_done = spec["module"].endswith("routing/feedback.py") and leaf in chain
         entry["done_order"] = chain.index(leaf) + 1 if in_done else None
-        # A gate's docstring is the one part of it this page can offer to
-        # change: the gate's BEHAVIOUR is its code, and its `effect` line is
-        # this map's own summary, not text from the repo.
+        # What a gate hands back to the agent is the one part of it that is
+        # prompt, so it is the part this page shows and offers to change. Its
+        # docstring is not: no agent ever reads it, so a map of what agents
+        # read leaves it out (it used to show it, beside the messages, as an
+        # "editable description" -- text that changes nothing an agent sees).
+        # The gate's BEHAVIOUR is its code, and its `effect` line is this
+        # map's own summary.
+        for k in ("doc", "doc_line", "doc_line_end"):
+            entry.pop(k, None)
         entry["messages"] = [
             dict(m, edit={
                 "ok": True, "mode": "message",
@@ -1518,15 +1524,6 @@ def build_gates() -> list[dict]:
             })
             for m in gate_messages(spec["module"], spec["symbol"])
         ]
-        entry["edit"] = (
-            {"ok": True, "mode": "docstring",
-             "key": "{}:{}-{}".format(resolved["file"].replace("/", "~"),
-                                      resolved["doc_line"], resolved["doc_line_end"]),
-             "file": resolved["file"], "line": resolved["doc_line"],
-             "line_end": resolved["doc_line_end"]}
-            if resolved.get("doc_line")
-            else {"ok": False, "why": "This gate has no docstring to edit."}
-        )
         out.append(entry)
     out.sort(key=lambda g: (g["done_order"] is None, g["done_order"] or 0, g["title"]))
     return out

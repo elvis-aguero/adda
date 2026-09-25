@@ -1026,12 +1026,10 @@ function renderRole(r){
 }
 
 /* ---------------- gates ---------------- */
-/* A gate owns two kinds of text, and they are NOT alike: what it hands back to
-   the agent (a nudge, a refusal -- this lands in the agent's context, so it is
-   prompt) and its docstring (which only a developer reads). Both render with
-   the same row a role's prompt sections use -- source first, then the text,
-   one "propose an edit" -- so the text an edit would change is always the text
-   directly under the button, and each row's label says who reads it. */
+/* What a gate hands back to the agent -- a nudge, a refusal -- lands in the
+   agent's context, so it is prompt, and it renders with the same row a role's
+   prompt sections use: source first, then the text, one "propose an edit".
+   The gate's docstring is not shown: no agent reads it. */
 function gateRows(g){
   const rows = [];
   const n = (g.messages||[]).length;
@@ -1045,15 +1043,6 @@ function gateRows(g){
                match: "message", span: true},
     }, "gatemsg-" + g.id + "-" + i));
   });
-  if(g.doc) rows.push(sectionRow({
-    label: "docstring — read by developers only, never by the agent",
-    text: g.doc, chars: g.doc.length, edit: g.edit,
-    source: {file: g.file,
-             line: g.edit && g.edit.ok ? g.edit.line : g.line,
-             line_end: g.edit && g.edit.ok ? g.edit.line_end : undefined,
-             match: g.edit && g.edit.ok ? "docstring" : "symbol",
-             span: !!(g.edit && g.edit.ok)},
-  }, "gate-" + g.id));
   const none = n ? "" : `<p class="nomsg">Tells the agent nothing of its own — what
     the agent experiences comes from the caller, or the gate only changes what
     happens next.</p>`;
@@ -1098,11 +1087,11 @@ function renderGates(){
     <p class="lede">Every checkpoint between an agent's intention and its effect, with the
       symbol that implements it. A <em>hard</em> gate refuses; a <em>soft</em> one speaks and
       lets the agent proceed.</p>
-    <p class="lede" style="color:var(--ink-3)">Each gate lists its text as rows, laid out like a
-      role's prompt sections: <b>told to the agent</b> is what lands in the agent's context;
-      the <b>docstring</b> is read by developers only. Both are editable. A gate's
-      <b>behaviour</b> is its code and is not; the italic line under the title is this map's
-      own summary, not text from the repository.</p>
+    <p class="lede" style="color:var(--ink-3)">Each gate lists what it <b>tells the agent</b>
+      — the only part of a gate that lands in an agent's context — laid out like a role's
+      prompt sections, and editable the same way. A gate's <b>behaviour</b> is its code and is
+      not; the italic line under the title is this map's own summary, not text from the
+      repository.</p>
     <div class="facts" style="gap:6px">${counts}</div>
 
     <div class="sectionhead"><h2>The Done() sequence</h2>
@@ -1168,10 +1157,12 @@ function renderSearch(q){
                n:s.text.toLowerCase().split(needle).length-1});
   })));
   DATA.gates.forEach(g=>{
-    const hay = (g.title+" "+g.effect+" "+g.doc+" "+g.symbol).toLowerCase();
+    const told = (g.messages||[]).map(m=>m.text).join("\n");
+    const hay = (g.title+" "+g.effect+" "+told+" "+g.symbol).toLowerCase();
     const i = hay.indexOf(needle);
+    const shown = g.effect+"\n"+told;
     if(i>=0) hits.push({where:`gate › ${g.title}`, src:`${g.file}:${g.line}`,
-                        text:g.effect+"\n"+g.doc, i:Math.max(0,(g.effect+"\n"+g.doc).toLowerCase().indexOf(needle)), n:1});
+                        text:shown, i:Math.max(0,shown.toLowerCase().indexOf(needle)), n:1});
   });
   hits.sort((a,b)=>b.n-a.n);
 
