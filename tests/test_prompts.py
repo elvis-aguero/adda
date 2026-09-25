@@ -231,14 +231,19 @@ def test_strategizer_ledger_is_ground_truth():
     )
 
 
-def test_strategizer_no_builtin_gp_claim():
-    """Strategizer architecture section must not list CMA-ES/GP as
-    f3dasm-native; tpesampler should be present near optimization."""
+def test_strategizer_no_builtin_gp_claim(tmp_path):
+    """The strategizer must not be left to guess what f3dasm ships natively.
+
+    It once claimed CMA-ES and a GP as built in. The guard used to be a
+    hand-kept list of the real natives in the prompt; it is now the f3dasm
+    lookup tool, which reads the installed f3dasm and so cannot go stale.
+    """
+    from adda._src.agents.strategizer import StrategizerAgent
     lower = STRATEGIZER_SYSTEM_PROMPT.lower()
-    assert "tpesampler" in lower, (
-        "STRATEGIZER_SYSTEM_PROMPT does not mention 'tpesampler' in "
-        "optimization guidance"
-    )
+    assert "no built-in gp" in lower
+    assert "<f3dasm_api_lookup>" in lower
+    tools = StrategizerAgent().build_closure_tools(tmp_path)
+    assert "ConsultF3dasm" in tools
 
 
 def test_ollama_implementer_contains_get_evaluator():

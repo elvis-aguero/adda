@@ -368,9 +368,7 @@ class StoreTools:
     def ReadProblemStatement(self) -> str:
         """The run's PROBLEM_STATEMENT.md verbatim: what this run is
         actually trying to establish, and its stated success/termination
-        criteria (e.g. "do not stop until a good design is found or the
-        budget is exhausted"). Available to every agent, not just the
-        strategizer or literature reviewer — call this whenever a
+        criteria. Call this whenever a
         delegation's own brief doesn't make clear what the run as a whole
         is for, or before judging whether a result actually satisfies
         what was asked."""

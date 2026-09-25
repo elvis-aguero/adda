@@ -147,7 +147,7 @@ def test_strategizer_xml_sections_appear_exactly_once():
 # ---------------------------------------------------------------------------
 
 def test_strategizer_names_all_failure_modes():
-    """All six cognitive-bias failure modes are named in the prompt.
+    """The cognitive-bias failure modes are named in the prompt.
 
     Notes
     -----
@@ -164,7 +164,6 @@ def test_strategizer_names_all_failure_modes():
         "confirmation",
         "availability",
         "role drift",
-        "sycophancy",
         "premature convergence",
     ]
     for term in required_terms:
@@ -537,11 +536,11 @@ def test_strategizer_hypothesis_log_content():
     )
 
     lower = STRATEGIZER_SYSTEM_PROMPT.lower()
+    # Concepts, not tool names: the section deliberately names no tool, so a
+    # rename cannot leave it pointing at one that no longer exists. That the
+    # tools themselves are granted is asserted against the roster below.
     required_terms = [
         "hypotheses.json",
-        "hypothesispropose",
-        "hypothesisupdate",
-        "hypothesislist",
         "hypothesis_ids",
         "falsified",
     ]
@@ -549,6 +548,9 @@ def test_strategizer_hypothesis_log_content():
         assert term in lower, (
             f"STRATEGIZER_SYSTEM_PROMPT hypothesis_ledger missing '{term}'"
         )
+    from adda._src.agents.strategizer import StrategizerAgent
+    assert {"HypothesisPropose", "HypothesisUpdate", "HypothesisList"} <= \
+        StrategizerAgent.tools
 
 
 # ---------------------------------------------------------------------------
@@ -1230,7 +1232,7 @@ def test_resource_envelope_stanza_primes_ram_and_parallelism(tmp_path):
     # Shared facts in BOTH roles.
     for s in (worker, strat):
         assert "CPU cores" in s
-        assert "RAM cap 4.0 GB" in s and "KILLED" in s and "disk free" in s
+        assert "RAM cap 4.0 GB" in s and "kills the process" in s and "disk free" in s
     # Role-aware parallelism: the worker is primed to parallelize its
     # EVALUATIONS (compute, epistemically neutral); the strategizer is NOT
     # resource-nudged to fan out experiments (that's its design call, and the

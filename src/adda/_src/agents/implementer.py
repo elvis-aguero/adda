@@ -452,9 +452,10 @@ class F3dasmImplementerAgent(Agent):
     ) -> dict:
         """Base corpus tools, plus the on-demand f3dasm API lookup.
 
-        Only the two agents that WRITE f3dasm carry this tool. Every tool costs
-        catalog tokens in every model call for the agent holding it, so a
-        lookup the critic and strategizer never need does not go to them.
+        The agents that WRITE f3dasm carry this tool, and the strategizer,
+        which chooses what they write. Every tool costs catalog tokens in every
+        model call for the agent holding it, so a lookup the critic never needs
+        does not go to it.
 
         super() is called, so the literature-corpus tools survive: this agent
         wants papers for methodology AND the API for mechanics.

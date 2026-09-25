@@ -97,7 +97,7 @@ class FeedbackTools:
         Reports; at least one falsification attempt has been carried out; every
         PRIMARY success criterion is MET (an INCONCLUSIVE/unmet one is not — run
         the affordable experiment that would settle it if budget remains); and
-        pipeline.ipynb has been authored via WriteDeliverable("pipeline.ipynb", …).
+        the deliverable has been authored.
         summary should state the best design + supporting numbers + the
         falsification outcome + remaining uncertainty + (if closing with budget
         left) why the remaining budget cannot settle any unmet criterion.

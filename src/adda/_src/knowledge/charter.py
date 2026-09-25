@@ -41,9 +41,8 @@ Do not restate these rules elsewhere; reference the clause number instead.
 
 FALSIFICATION_CHARTER = """\
 SCIENTIFIC-METHOD CHARTER — the shared, binding contract for testing and
-labelling hypotheses. It is identical in the strategizer's and the critic's
-instructions: cite a clause by number ("Charter §3") and the other party
-defers to it.
+labelling hypotheses. You can cite a clause by number ("Charter §3"); your
+peers are bound by the same charter and defer to it.
 
 §1  A hypothesis is ONE falsifiable claim carrying a registered prediction —
     the observable whose occurrence would refute the claim.
@@ -62,7 +61,7 @@ defers to it.
     its negation ("no design reaches X") — severity means the search had the
     POWER to find that instance had it existed; concretely, that had a
     qualifying instance existed in the space the claim ranges over, the search
-    would very probably have found it. That is the whole test. HOW you argue the
+    would very probably have found it. HOW you argue the
     search had that power is open and judged on its merits — adequate coverage
     of the space (dense/near-exhaustive sampling, credible in low dimension), a
     guiding surrogate that predicts the claim's OWN observable above chance
@@ -73,8 +72,7 @@ defers to it.
     improving, or whose only power-argument the work itself undercuts (e.g. a
     surrogate it reports as near-chance with no coverage argument to stand on),
     is an INADEQUATE test of such a claim and routes to INCONCLUSIVE under §3 —
-    failing to find a better instance is not
-    the same as showing none exists.
+    failing to find a better instance is not the same as showing none exists.
 
 §3  A hypothesis is FALSIFIED if and only if an ADEQUATE test (§2) of its
     registered prediction yields a contradiction. Concretely:
@@ -87,7 +85,9 @@ defers to it.
         contradiction from a flawed test indicts the test, not the hypothesis
         (Duhem–Quine).
     INCONCLUSIVE is reserved for an inadequate test; a hypothesis that has had
-    no adequate test yet is simply OPEN.
+    no adequate test yet is simply OPEN. To sum up, the hypotheses should,
+    at all points, be logically self-consistent given the evidence (i.e. no
+    subset is contradictory).
 
 §4  No moving the goalposts. A FALSIFIED verdict must rest on the contradiction
     of the SAME prediction that was registered — not a different, post-hoc

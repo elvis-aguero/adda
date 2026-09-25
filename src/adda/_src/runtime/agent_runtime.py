@@ -1368,9 +1368,9 @@ class AgenticRun:
                     if env["disk_free_bytes"] is not None else "unknown")
             facts = (
                 "resources: "
-                f"~{cores} CPU cores · RAM cap {ram} per delegation (HARD — exceed "
-                "it and your process is KILLED; stream/cache large data, don't load "
-                f"it all at once) · disk free {disk}.\n"
+                f"~{cores} CPU cores · RAM cap {ram} per delegation. Using it is "
+                "encouraged; exceeding it kills the process, so stream anything "
+                f"larger · disk free {disk}.\n"
             )
             if for_worker:
                 facts += (
