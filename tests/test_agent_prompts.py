@@ -541,7 +541,7 @@ def test_strategizer_hypothesis_log_content():
     # tools themselves are granted is asserted against the roster below.
     required_terms = [
         "hypotheses.json",
-        "hypothesis_ids",
+        "hypothesis_id",   # "every delegation MUST include at least one"
         "falsified",
     ]
     for term in required_terms:
