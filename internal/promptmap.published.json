@@ -1,8 +1,8 @@
 {
   "url": "https://claude.ai/artifact/EXuUsKPBFJjPbHJKoMSRJr",
-  "artifact_version": "20",
-  "content_hash": "38c85ee07b0d51bb4e09e542b0c6a67e1caa441322a4bc878e33a9047377a3df",
-  "chrome_hash": "5398a565ffd146901fc30eda687765452d710bb6bf0e24c81493f2c04757380b",
-  "published_at": "2026-09-25T02:51:55Z",
+  "artifact_version": "21",
+  "content_hash": "6cfd7c109f37b728f88bfe33e27449fa3f22fdbfe45e05656261f61298fe525f",
+  "chrome_hash": "8b14a69b4001fed873439b5ad678c8a9899cd3dbb8cc3b329e01ea50b758f77e",
+  "published_at": "2026-09-25T11:27:32Z",
   "note": "Written by promptmap_sync.py --record after a successful publish. content_hash covers the map's DATA; chrome_hash covers everything else in the file, because a change to the page's controls needs publishing too and the content hash cannot see it."
 }
