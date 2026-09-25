@@ -71,7 +71,10 @@ def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
         """Look up Abaqus reference documentation.
 
         Pass a keyword (``*FREQUENCY``), a phrase, or a page_id returned by an
-        earlier search to read that page in full.
+        earlier search to read that page in full. Search matches exact words
+        (BM25), so use Abaqus's own terms; an exact keyword ranks its
+        reference page first, and a query that matches nothing returns the
+        closest page titles.
         """
         try:
             from .reader import AbaqusDocs

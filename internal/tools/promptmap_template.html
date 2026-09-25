@@ -227,11 +227,6 @@ pre.piecetext{max-height:220px;font-size:11px;color:var(--ink-2)}
 .egroup h3{margin:0 0 8px;font-size:13px;font-family:var(--mono);font-weight:600;
   display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .editcard.stale{border-color:var(--soft)}
-.msgs{margin:10px 0 0;border-top:1px solid var(--line-soft);padding-top:10px}
-.msghead{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);
-  margin:0 0 8px;font-weight:600}
-.msg{margin:0 0 12px}
-.msg .prompt{margin:0 0 6px;font-size:11.5px}
 .nomsg{font-size:12px;color:var(--ink-3);margin:10px 0 0;font-style:italic}
 .prompt.suggesting{background:var(--surface)}
 .prompt del{background:var(--hard-soft);color:var(--hard);text-decoration:line-through;
@@ -291,10 +286,7 @@ mark{background:var(--mark);color:var(--ink);border-radius:2px;padding:0 1px}
 .gatetop{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .gatetop h3{margin:0;font-size:13.5px;font-weight:600}
 .gateeffect{margin:5px 0 0;font-size:12.5px;color:var(--ink-2);max-width:72ch}
-.gatedoc{margin:8px 0 0;font-family:var(--serif);font-size:12.5px;line-height:1.6;
-  color:var(--ink-2);white-space:pre-wrap;max-width:70ch;
-  border-left:2px solid var(--line);padding-left:11px}
-.gatefoot{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:9px;align-items:center}
+.gatefoot{display:flex;flex-wrap:wrap;gap:6px 12px;margin:9px 0 8px;align-items:center}
 .src{font-family:var(--mono);font-size:11px;color:var(--accent);overflow-wrap:anywhere}
 
 /* ---------- tables ---------- */
@@ -1034,46 +1026,41 @@ function renderRole(r){
 }
 
 /* ---------------- gates ---------------- */
-/* What the gate SAYS. A nudge or a refusal lands in the agent's context and
-   steers what it does next, so it is prompt — and it is the part of a gate a
-   reader most needs and, until now, could not see. Each is registered like any
-   other editable section, so the same editor and the same staging apply. */
-function gateMessages(g){
-  if(!g.messages || !g.messages.length) return `<p class="nomsg">This gate returns no
-    text of its own \u2014 what the agent experiences comes from the caller, or the gate
-    only changes what happens next.</p>`;
-  return `<div class="msgs">
-    <p class="msghead">What the agent is told \u00b7 ${g.messages.length} message${
-      g.messages.length>1?"s":""}</p>
-    ${g.messages.map((m,i)=>{
-      const key = "gatemsg-" + g.id + "-" + i;
-      SECTIONS.set(key, {text: m.text, tag: null, source: {
-        file: m.file, line: m.line, line_end: m.line_end, match: "message", span: true},
-        edit: m.edit});
-      return `<div class="msg">
-        <pre class="prompt" id="txt-${key}">${esc(m.text)}</pre>
-        <div class="gatefoot">
-          <span class="src">${esc(m.file)}:${m.line}\u2013${m.line_end}</span>
-          <button class="editbtn" type="button" data-edit="${key}">edit this message</button>
-          <span data-editchip="${esc(m.edit.key)}" data-row="${key}">${editChip(m.edit.key, key)}</span>
-        </div>
-        <div class="suggslot" id="sg-${key}"></div>
-        <div class="editslot" id="ed-${key}"></div>
-      </div>`;}).join("")}
-  </div>`;
+/* A gate owns two kinds of text, and they are NOT alike: what it hands back to
+   the agent (a nudge, a refusal -- this lands in the agent's context, so it is
+   prompt) and its docstring (which only a developer reads). Both render with
+   the same row a role's prompt sections use -- source first, then the text,
+   one "propose an edit" -- so the text an edit would change is always the text
+   directly under the button, and each row's label says who reads it. */
+function gateRows(g){
+  const rows = [];
+  const n = (g.messages||[]).length;
+  (g.messages||[]).forEach((m, i) => {
+    const first = m.text.trim().split("\n")[0];
+    rows.push(sectionRow({
+      label: `told to the agent${n > 1 ? ` · ${i+1}/${n}` : ""} — “${
+        first.length > 38 ? first.slice(0,38) + "…" : first}”`,
+      text: m.text, chars: m.text.length, edit: m.edit,
+      source: {file: m.file, line: m.line, line_end: m.line_end,
+               match: "message", span: true},
+    }, "gatemsg-" + g.id + "-" + i));
+  });
+  if(g.doc) rows.push(sectionRow({
+    label: "docstring — read by developers only, never by the agent",
+    text: g.doc, chars: g.doc.length, edit: g.edit,
+    source: {file: g.file,
+             line: g.edit && g.edit.ok ? g.edit.line : g.line,
+             line_end: g.edit && g.edit.ok ? g.edit.line_end : undefined,
+             match: g.edit && g.edit.ok ? "docstring" : "symbol",
+             span: !!(g.edit && g.edit.ok)},
+  }, "gate-" + g.id));
+  const none = n ? "" : `<p class="nomsg">Tells the agent nothing of its own — what
+    the agent experiences comes from the caller, or the gate only changes what
+    happens next.</p>`;
+  return none + `<div class="rows">${rows.join("")}</div>`;
 }
 
 function gateCard(g, n){
-  /* Gates reuse the section editor: SECTIONS is what the editor reads, so a
-     gate registers there as the piece of text it actually owns — its
-     docstring. Its EFFECT line is this map's summary and its behaviour is its
-     code; neither is editable from a page, and the card says which is which. */
-  const key = "gate-" + g.id;
-  SECTIONS.set(key, {text: g.doc || "", tag: null, source: {
-    file: g.file, line: g.edit && g.edit.ok ? g.edit.line : g.line,
-    line_end: g.edit && g.edit.ok ? g.edit.line_end : undefined,
-    match: g.edit && g.edit.ok ? "docstring" : "symbol",
-    span: !!(g.edit && g.edit.ok)}, edit: g.edit});
   return `<article class="gate" data-kind="${esc(g.kind)}">
     <div class="gatenum">${n ?? "·"}</div>
     <div class="gatebody">
@@ -1085,18 +1072,12 @@ function gateCard(g, n){
         ${g.escape ? `<span class="chip">escape · ${esc(g.escape)}</span>` : ""}
       </div>
       <p class="gateeffect" title="This map's one-line summary of what the agent experiences. It is written in internal/tools/promptmap.py, not in the repository's prompt or gate code.">${esc(g.effect)}</p>
-      ${g.doc ? `<p class="gatedoc" title="The gate's own docstring — what it says about itself, in the source.">${esc(g.doc)}</p>` : ""}
-      ${gateMessages(g)}
       <div class="gatefoot">
-        <span class="src">${esc(g.file)}:${g.line}</span>
+        <span class="src">implemented at ${esc(g.file)}:${g.line}</span>
         <span class="chip">${esc(g.symbol)}</span>
         ${g.policy ? `<span class="chip">policy · ${esc(g.policy[0])}::${esc(g.policy[1])}</span>` : ""}
-        ${g.edit && g.edit.ok
-          ? `<button class="editbtn" type="button" data-edit="${key}">edit this description</button>` : ""}
-        <span data-editchip="${g.edit && g.edit.key ? g.edit.key : ""}" data-row="${key}">${
-          g.edit && g.edit.key ? editChip(g.edit.key, key) : ""}</span>
       </div>
-      <div class="editslot" id="ed-${key}"></div>
+      ${gateRows(g)}
     </div>
   </article>`;
 }
@@ -1117,11 +1098,11 @@ function renderGates(){
     <p class="lede">Every checkpoint between an agent's intention and its effect, with the
       symbol that implements it. A <em>hard</em> gate refuses; a <em>soft</em> one speaks and
       lets the agent proceed.</p>
-    <p class="lede" style="color:var(--ink-3)">A gate's description is editable here; a gate's
-      <b>behaviour</b> is not. What each one does is its code, and the italic line under the
-      title is this map's own summary rather than text from the repository. Proposing a better
-      description changes what a reader is told, never what a run does — if the description and
-      the code disagree, that is worth saying in the reason, and worth a code change.</p>
+    <p class="lede" style="color:var(--ink-3)">Each gate lists its text as rows, laid out like a
+      role's prompt sections: <b>told to the agent</b> is what lands in the agent's context;
+      the <b>docstring</b> is read by developers only. Both are editable. A gate's
+      <b>behaviour</b> is its code and is not; the italic line under the title is this map's
+      own summary, not text from the repository.</p>
     <div class="facts" style="gap:6px">${counts}</div>
 
     <div class="sectionhead"><h2>The Done() sequence</h2>
