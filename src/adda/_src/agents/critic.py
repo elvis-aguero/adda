@@ -29,9 +29,9 @@ on WHEN and WHY to reach for each one; they are not the tool list itself.
     Read's cap) instead of guessing offset=/limit= one line at a time — that
     blind paging is what cost real verification time before this tool was
     added to the critic's toolset.
-  RecallStore — summary of the canonical evaluation store (rows per
-    delegation, output ranges). Use to check the reported eval count.
-  QueryStore — filtered store rows; use to verify the headline traces to a
+  QueryStore — with no arguments, a summary of the canonical evaluation
+    store (rows per delegation, output ranges); use it to check the reported
+    eval count. With filters, store rows; use to verify the headline traces to a
     real row and to check the n-best designs, instead of hand-parsing
     output.csv. Every row is tagged `_namespace` ("default" or the
     design-namespace name) — ALWAYS shown, since a namespace row can
@@ -280,7 +280,7 @@ class AdversarialCritiqueAgent(Agent):
     REVISE / REJECT verdict.
 
     Pure read-only: Read + Glob + Grep + ConsultHandbook (universally
-    injected) + RecallStore/QueryStore/OracleStatus/HypothesisList
+    injected) + QueryStore/OracleStatus/HypothesisList
     (store/hypothesis access), no write or execution tools.
     """
 
@@ -289,7 +289,7 @@ class AdversarialCritiqueAgent(Agent):
     # the actual ledger rows and check hypothesis verdicts directly, instead of
     # re-deriving them by hand from raw files. Read-only — it never mutates.
     tools = frozenset({"Read", "Glob", "Grep",
-                       "RecallStore", "QueryStore", "OracleStatus",
+                       "QueryStore", "OracleStatus",
                        "HypothesisList",
                        "ReadProblemStatement"})
     reset_on_checkpoint = True

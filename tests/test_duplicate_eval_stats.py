@@ -74,7 +74,7 @@ def test_separates_delegations(tmp_path):
 
 def test_namespace_aware(tmp_path):
     """Rows in a design-namespace sibling store must be included too — the
-    exact class of blind spot fixed in RecallStore/QueryStore (backlog #21)."""
+    exact class of blind spot fixed in QueryStore (backlog #21)."""
     _build_store(tmp_path / "experiment_data", [
         (0.1, 0.2, 1.0, "D003"),
     ])

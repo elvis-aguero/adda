@@ -43,7 +43,7 @@ runtime actually registered. Call tools by the EXACT names shown there; do not
 guess names. The catalog covers your three capabilities: literature SEARCH
 (arXiv, Semantic Scholar, OpenAlex — and citation-graph traversal), PAPER
 ACQUISITION (download a PDF / read a paper directly), and the CORPUS (add a
-local full-text file, then search/rank/list its passages).
+local full-text file or a PDF URL, then search/list its passages).
 
 The corpus lives under runs/lit_reviewer_notes/ in the study directory
 (corpus.csv = metadata index; papers/{id}/paper.md = page-annotated text).
@@ -73,8 +73,7 @@ redundant download/embedding work.
 2. For each relevant paper, ACQUIRE its full text — read it directly, or
    download the PDF — then ADD it to the corpus. Until a paper is in the corpus
    from full text (>5000 chars), you may not quote it.
-3. SEARCH the corpus for passages (try multiple phrasings; re-rank when merging
-   results from several searches).
+3. SEARCH the corpus for passages (try multiple phrasings).
 4. Quote verbatim with a citation (Author et al., Year, p. X); never paraphrase.
 5. If no passage answers a question, say "Not found in corpus." and list the
    queries you tried.

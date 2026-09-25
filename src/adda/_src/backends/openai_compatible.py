@@ -473,7 +473,11 @@ def _build_arxiv_closures() -> dict:
         import arxiv as _arxiv
     except ImportError:
         return {}
+    from ..prompts.tool_catalog import tool_examples
 
+    @tool_examples(
+        "arxiv_search_papers('topology optimization neural network', max_results=10)",
+    )
     def search_papers(query: str, max_results: int = 10) -> str:
         """Search arxiv for papers matching query."""
         # MCP string-in tools pass numbers as strings ("5"); the arxiv library
@@ -486,6 +490,9 @@ def _build_arxiv_closures() -> dict:
             lines.append(f"[{r.entry_id}] {r.title} ({r.published.year})\n  {r.summary[:300]}")
         return "\n\n".join(lines) or "(no results)"
 
+    @tool_examples(
+        "arxiv_list_papers('cs.LG', max_results=10)",
+    )
     def list_papers(category: str, max_results: int = 10) -> str:
         """List recent arxiv papers in a category (e.g. 'cs.LG')."""
         max_results = int(max_results)
@@ -513,6 +520,9 @@ def _build_arxiv_closures() -> dict:
         with open(dest, "wb") as f:
             f.write(data)
 
+    @tool_examples(
+        "arxiv_download_paper('1706.03762', output_dir='papers')",
+    )
     def download_paper(paper_id: str, output_dir: str = ".") -> str:
         """Download a paper PDF from arxiv by its ID (direct URL)."""
         pid = paper_id.strip().rstrip("/").split("/")[-1]
@@ -526,6 +536,9 @@ def _build_arxiv_closures() -> dict:
         _fetch_pdf(paper_id, dest)
         return f"Downloaded: {dest}"
 
+    @tool_examples(
+        "arxiv_read_paper('1706.03762')",
+    )
     def read_paper(paper_id: str) -> str:
         """Download (direct URL) and extract text from an arxiv paper."""
         import tempfile

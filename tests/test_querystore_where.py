@@ -137,9 +137,10 @@ def test_limit_caps_and_reports_remainder(tmp_path):
     assert "more not shown" in out          # 3 remaining flagged
 
 
-def test_no_args_lists_all_under_cap(tmp_path):
+def test_unfiltered_listing_lists_all_under_cap(tmp_path):
+    # No arguments at all is the store summary; any argument is the listing.
     q = _querystore(tmp_path)
-    out = q()
+    out = q(limit=20)
     assert "5 rows match" in out
     assert "more not shown" not in out      # 5 < default 20
 
@@ -148,7 +149,7 @@ def test_default_list_view_includes_input_columns(tmp_path):
     """Observability (#1): the list/where view must surface INPUT columns so a
     design's coordinates are directly verifiable — all 3 critics hit this."""
     q = _querystore(tmp_path)
-    out = q()
+    out = q(limit=20)
     assert "x0" in out, f"input column not surfaced in list view: {out!r}"
     # a specific coordinate value is visible (x0=0.1, the first row)
     assert "0.1" in out
@@ -271,7 +272,7 @@ def test_namespace_column_always_shown(tmp_path):
     namespace row must never be silently indistinguishable from a baseline
     row just because nobody asked to filter by namespace yet."""
     q = _querystore_with_namespace(tmp_path)
-    out = q()
+    out = q(limit=20)
     assert "4 rows match" in out
     assert "_namespace" in out
     assert "default" in out

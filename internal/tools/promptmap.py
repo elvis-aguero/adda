@@ -702,11 +702,7 @@ def tool_docs() -> dict[str, dict]:
             doc = ast.get_docstring(node)
             if not doc:
                 continue
-            examples: list[str] = []
-            for dec in node.decorator_list:
-                if (isinstance(dec, ast.Call)
-                        and getattr(dec.func, "id", getattr(dec.func, "attr", "")) == "tool_examples"):
-                    examples = [a.value for a in dec.args if isinstance(a, ast.Constant)]
+            examples = decorator_examples(node)
             lit = node.body[0]
             found.setdefault(node.name, []).append({
                 "doc": doc, "examples": examples, "file": _rel(path),
@@ -718,6 +714,22 @@ def tool_docs() -> dict[str, dict]:
         out[name] = dict(hits[0], ambiguous=[
             f"{h['file']}:{h['def_line']}" for h in hits] if len(hits) > 1 else [])
     return out
+
+
+def decorator_examples(node: ast.AST) -> list[str]:
+    """The calls a ``@tool_examples(...)`` decorator on *node* shows.
+
+    One reader for every way the map finds a tool. There used to be three
+    copies, and the one for assignment-registered tools (ConsultHandbook)
+    hard-coded ``[]``, so the map showed that tool with no examples while
+    every agent was in fact shown two.
+    """
+    for dec in getattr(node, "decorator_list", ()):
+        if (isinstance(dec, ast.Call)
+                and getattr(dec.func, "id", getattr(dec.func, "attr", ""))
+                == "tool_examples"):
+            return [a.value for a in dec.args if isinstance(a, ast.Constant)]
+    return []
 
 
 def injected_tool_docs() -> dict[str, dict]:
@@ -764,7 +776,8 @@ def injected_tool_docs() -> dict[str, dict]:
                     and node.name in wanted and ast.get_docstring(node)):
                 lit = node.body[0]
                 defs[node.name] = {
-                    "doc": ast.get_docstring(node), "examples": [],
+                    "doc": ast.get_docstring(node),
+                    "examples": decorator_examples(node),
                     "file": _rel(path), "line": lit.lineno,
                     "line_end": lit.end_lineno, "def_line": node.lineno,
                     "ambiguous": [],
@@ -1185,14 +1198,8 @@ def live_tool_doc(fn) -> dict | None:
         doc = ast.get_docstring(node)
         if not doc:
             return None
-        examples: list[str] = []
-        for dec in node.decorator_list:
-            if (isinstance(dec, ast.Call)
-                    and getattr(dec.func, "id", getattr(dec.func, "attr", ""))
-                    == "tool_examples"):
-                examples = [a.value for a in dec.args if isinstance(a, ast.Constant)]
         lit = node.body[0]
-        return {"doc": doc, "examples": examples, "file": _rel(path),
+        return {"doc": doc, "examples": decorator_examples(node), "file": _rel(path),
                 "line": lit.lineno, "line_end": lit.end_lineno,
                 "def_line": node.lineno, "ambiguous": []}
     return None

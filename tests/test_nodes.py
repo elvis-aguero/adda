@@ -47,7 +47,7 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so behaviour tests still exercise them even
         # though production agents no longer grant them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -379,7 +379,7 @@ def test_strategizer_delegate_prepends_edge_preamble():
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so behaviour tests still exercise them even
         # though production agents no longer grant them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -469,7 +469,7 @@ def test_parallel_two_delegations_both_complete():
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so behaviour tests still exercise them even
         # though production agents no longer grant them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -1881,7 +1881,7 @@ def _spec_with_critic():
 
     class S(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "Test strategizer."
 
     class W(Agent):
@@ -2445,7 +2445,7 @@ def _spec_with_write_deliverable():
     class A(Agent):
         role = "strategizer"
         tools = frozenset(
-            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "WriteCell", "ShowNotebook", "RunNotebook", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"}
+            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "WriteCell", "ShowNotebook", "RunNotebook", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"}
         )
         description = "Test strategizer."
 
@@ -2810,7 +2810,7 @@ def test_recall_history_entry_node_gets_orchestrator_message(tmp_path):
     result = node.adapter.closure_tools["RecallHistory"]()
     assert "No prior delegations found." not in result
     assert "never receives one" in result
-    assert "RecallStore" in result or "QueryStore" in result
+    assert "QueryStore" in result
 
 
 def test_recall_history_returns_formatted_pairs(tmp_path):
@@ -3274,7 +3274,7 @@ def _spec_with_critic_and_deliverable():
     class S(Agent):
         role = "strategizer"
         tools = frozenset(
-            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"}
+            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"}
         )
         description = "Test strategizer."
 
@@ -3892,7 +3892,7 @@ def test_gate_prompt_and_runscratch_point_at_namespace_aware_reads():
     """The critic GATE prompt and RunScratch's docstring must not teach the
     single-store idiom (ExperimentData.from_file(project_dir=<default store>))
     as THE way to audit the ledger — it silently misses design-namespace
-    stores, the same gap fixed in RecallStore/QueryStore (backlog #21)."""
+    stores, the same gap fixed in QueryStore (backlog #21)."""
     import importlib
     import inspect
     import pkgutil
@@ -3907,7 +3907,7 @@ def test_gate_prompt_and_runscratch_point_at_namespace_aware_reads():
             for info in pkgutil.iter_modules(_routing.__path__)
         ]
     )
-    assert "audit the ledger yourself: call RecallStore()" in src
+    assert "audit the ledger yourself: call QueryStore()" in src
     assert "misses any namespace store" in src
     assert "load_experiments()" in src
 

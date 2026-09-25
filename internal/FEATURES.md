@@ -236,7 +236,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   `run_setup.py` (`register_evaluator_entrypoint(namespace=…)`), `backends/base.py`
   + `backends/claude.py` (`set_namespace`/`F3DASM_NAMESPACE`), `graph_state.py`
   (`Delegation.namespace`), `routing.py` (`Delegate` + registration handoff).
-- **Report-time provenance:** `RecallStore()` (it absorbed `LedgerBreakdown`) shows per-experiment
+- **Report-time provenance:** `QueryStore()` with no arguments (it absorbed `RecallStore` and `LedgerBreakdown`) shows per-experiment
   / per-delegation ledgered eval counts read live from the stores
   (`ledger_summary.ledger_breakdown`), so a writeup DERIVES counts from the ledger instead
   of hardcoding stale plan numbers (run 20260628T001710 hardcoded 70 polar evals; the
@@ -251,7 +251,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   only the default; this is the one call pipeline.ipynb uses to load them all. Wired
   into the deliverable spec (`notebook_exec.py`) and the injected paths block
   (`agent_prompts.py`).
-- **Tools:** `RecallStore`.
+- **Tools:** `QueryStore`.
 - **Status:** plumbing complete (branch `exp/open-design-space`); gated on the 2D
   experiment before the baseline study adopts it.
 
@@ -642,7 +642,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   runtime-injected closures (`Agent.build_closure_tools()`), not just its
   statically declared `.tools` — LiteratureReviewAgent declares only
   `{Read, Grep, Glob, ReadProblemStatement}`; every actual capability
-  (CorpusAdd/Search/List/GetPaper, arXiv/OpenAlex/Semantic Scholar search) is
+  (CorpusAdd, ConsultLiterature, arXiv/OpenAlex/Semantic Scholar search) is
   injected at runtime, and a first draft that only read `.tools` silently
   showed it as having almost no tools. Every edge renders identically — one
   delegation mechanism (`Delegate`) exists in the code, so there is no
@@ -757,7 +757,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 | `RunNotebook` | Per-cell notebook debugger (#13), and with `gate=True` the reproduction gate as a dry run |
 | `RunScratch` | Worker scratch execution against a ledger copy |
 | `WriteNote` · `ReadNote` | Agent scratch notes |
-| `RecallStore` · `QueryStore` | Canonical evaluation-store read (declaration-gated; shared verbatim across node types — strategizer, workers, and the critic). `QueryStore` accepts `where=` (a pandas `query()` expression over the joined inputs+outputs frame — compound feasibility predicates + arithmetic on input columns in one call) and `limit=` (lifts the 20-row default listing cap); bad `where` returns a column-listing ERROR, never raises (spec 09). The list/`where` view surfaces INPUT columns (a design's coordinates, not just its outputs), and an empty match reports `0 of N scanned` as an unambiguous TRUE zero (distinct from a missing column, which ERRORs) — UNLESS `where=` exact-`==`s a float-dtype column, in which case the zero-row message hedges ("NOT necessarily a true zero") and hints at an `abs(x-v)<1e-6` tolerance predicate instead, since a real row can be silently excluded by float representation error alone (run 20260825T012642: independently hit by the strategizer and 3 of 8 critic rounds, each paying a diagnosis cycle to find the same workaround). Heuristic (regex `col==literal`, checked against the joined frame's dtype), scoped to int/bool exact-`==` staying untouched (e.g. `feasible==1` is not float-precision-sensitive). `columns=` narrows which COLUMNS are shown (the row-narrowing analogue of `where=`/`limit=`) — a wide store's rows can overflow the response token limit even after `where=`/`limit=` have already cut the row count down (run 20260816T013744, 449,879 chars from a single call); `_namespace` is always kept regardless of `columns=`, and a requested column that doesn't exist returns a column-listing ERROR, same convention as `where=` |
+| `QueryStore` | Canonical evaluation-store read: no arguments → the store summary and budget line (formerly `RecallStore`); any argument → rows (declaration-gated; shared verbatim across node types — strategizer, workers, and the critic). `QueryStore` accepts `where=` (a pandas `query()` expression over the joined inputs+outputs frame — compound feasibility predicates + arithmetic on input columns in one call) and `limit=` (sets the listing cap, default 20); bad `where` returns a column-listing ERROR, never raises (spec 09). The list/`where` view surfaces INPUT columns (a design's coordinates, not just its outputs), and an empty match reports `0 of N scanned` as an unambiguous TRUE zero (distinct from a missing column, which ERRORs) — UNLESS `where=` exact-`==`s a float-dtype column, in which case the zero-row message hedges ("NOT necessarily a true zero") and hints at an `abs(x-v)<1e-6` tolerance predicate instead, since a real row can be silently excluded by float representation error alone (run 20260825T012642: independently hit by the strategizer and 3 of 8 critic rounds, each paying a diagnosis cycle to find the same workaround). Heuristic (regex `col==literal`, checked against the joined frame's dtype), scoped to int/bool exact-`==` staying untouched (e.g. `feasible==1` is not float-precision-sensitive). `columns=` narrows which COLUMNS are shown (the row-narrowing analogue of `where=`/`limit=`) — a wide store's rows can overflow the response token limit even after `where=`/`limit=` have already cut the row count down (run 20260816T013744, 449,879 chars from a single call); `_namespace` is always kept regardless of `columns=`, and a requested column that doesn't exist returns a column-listing ERROR, same convention as `where=` |
 | `OracleStatus` | On-demand read of the CURRENT canonical oracle registration — `run_config.json`'s `evaluator_entrypoint`/`evaluator_lookup`/`evaluator_output_names` plus any per-namespace `oracles` entries, read fresh on every call. Declaration-gated to strategizer/datagenerator/implementer/critic/debugger. Exists because `register_evaluator_entrypoint()` can repoint the canonical entrypoint BETWEEN delegations (whenever a datagenerator delegation authors/extends the generator), and the only prior signal was a one-shot `[Evaluator registered: ...]` notification a busy agent could fail to reconcile with its own stated beliefs — which cost one wasted real evaluation job before a delegation self-diagnosed via bit-identical outputs (run 20260717T014507) |
 | `HypothesisPropose` · `HypothesisUpdate` · `HypothesisList` | Hypothesis ledger — read (`HypothesisList`, full entries when given ids) is declaration-gated to any node; mutate (Propose/Update, which also links a post-hoc falsification attempt) is strategizer-only |
 | `MilestoneList` · `MilestoneSet` | Process milestones (strategizer-only); `MilestoneSet` adds, completes or skips |

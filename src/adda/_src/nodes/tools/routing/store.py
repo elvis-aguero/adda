@@ -1,7 +1,7 @@
-"""Read-only store and hypothesis query tools: RecallStore, OracleStatus,
-QueryStore, HypothesisList, ReadProblemStatement. Declaration-gated and
-shared verbatim across every node (see nodes/node.py::Node._init_capabilities)
-via build_declared_shared_closures()."""
+"""Read-only store and hypothesis query tools: QueryStore, OracleStatus,
+HypothesisList, ReadProblemStatement. Declaration-gated and shared verbatim
+across every node (see nodes/node.py::Node._init_capabilities) via
+build_declared_shared_closures()."""
 from __future__ import annotations
 
 import re
@@ -11,8 +11,8 @@ from typing import Any
 from ....prompts.tool_catalog import tool_examples
 from ._decoding import decode_list_arg
 
-# Returned verbatim by RecallStore and QueryStore alike; one string so the
-# two cannot drift into saying different things about the same condition.
+# Returned verbatim by the summary and the filtered view alike; one string
+# so the two cannot drift into saying different things about one condition.
 _EMPTY_STORE = (
     "Canonical store is empty — no instrumented evaluations recorded yet."
 )
@@ -175,7 +175,7 @@ class StoreTools:
                 continue
             # Tag every row with its source store BEFORE concatenating —
             # once merged, a namespace row is otherwise indistinguishable
-            # from a baseline row (same convention as RecallStore's
+            # from a baseline row (same convention as _summary's
             # "default" if i == 0 else store.name).
             d_out = d_out.copy()
             d_out["_namespace"] = "default" if i == 0 else store.name
@@ -192,20 +192,9 @@ class StoreTools:
 
     # ── The tools ────────────────────────────────────────────────────────────
 
-    @tool_examples("RecallStore()")
-    def RecallStore(self) -> str:
-        """Summary of the run's canonical evaluation store: rows per
-        delegation and source, output ranges, and the evaluation budget spent
-        and remaining — one block per experiment (the baseline store is
-        'default'; each design namespace by its registered name). Call it
-        before deciding the next delegation, and at report time to DERIVE eval
-        counts for the writeup and hypothesis evidence instead of copying a
-        number from a plan or a worker's notes (those drift from what actually
-        landed in the store). Read-only; does NOT spend eval budget.
-
-        Output ends with the run total, e.g.::
-
-            — run total: 140 of 300 eval budget spent — 160 remaining"""
+    def _summary(self) -> str:
+        """QueryStore() with no arguments: one block per experiment, then the
+        run total against the budget."""
         from ....evaluation.ledger_summary import RunStateSummary
         stores = self._all_store_dirs()
         blocks: list[tuple[str, str]] = []
@@ -288,6 +277,7 @@ class StoreTools:
         return "\n".join(lines)
 
     @tool_examples(
+        "QueryStore()",
         "QueryStore(where='feasible==1 and margin>=0.10', n_best=5, output_name='f')",
         "QueryStore(delegation_ids=['D003'], columns=['x1', 'f'], limit=50)",
     )
@@ -303,9 +293,23 @@ class StoreTools:
         limit: int | None = None,
         columns: str | list | None = None,
     ) -> str:
-        """Filtered view of the evaluation store (e.g. rows from D001+D003
-        only). Use to ground claims or to select training subsets; cite row
-        values from here as evidence.
+        """The run's canonical evaluation store. Read-only; does NOT spend
+        eval budget.
+
+        With NO arguments: a summary — rows per delegation and source, output
+        ranges, and the evaluation budget spent and remaining — one block per
+        experiment (the baseline store is 'default'; each design namespace by
+        its registered name). Call it before deciding the next delegation, and
+        at report time to DERIVE eval counts for the writeup and hypothesis
+        evidence instead of copying a number from a plan or a worker's notes
+        (those drift from what actually landed in the store). Output ends with
+        the run total, e.g.::
+
+            — run total: 140 of 300 eval budget spent — 160 remaining
+
+        With any argument: a filtered view of the rows (e.g. rows from
+        D001+D003 only). Use to ground claims or to select training subsets;
+        cite row values from here as evidence.
 
         columns narrows which COLUMNS are shown (the same idea as where=/
         limit= narrowing which ROWS are shown) — e.g.
@@ -343,6 +347,9 @@ class StoreTools:
 
         limit caps the default (non-n_best) listing (default 20); raise it to
         pull a larger feasible set once where= has narrowed the rows."""
+        if all(a is None for a in (delegation_ids, source, namespace, n_best,
+                                   output_name, where, limit, columns)):
+            return self._summary()
         df_in, df_out = self._load_frames()
         if df_out is None:
             return _EMPTY_STORE
@@ -620,7 +627,6 @@ def build_declared_shared_closures(node, agent_tools) -> dict:
     """
     t = StoreTools(node)
     available = {
-        "RecallStore": t.RecallStore,
         "OracleStatus": t.OracleStatus,
         "QueryStore": t.QueryStore,
         "HypothesisList": t.HypothesisList,

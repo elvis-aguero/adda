@@ -474,7 +474,7 @@ class F3dasmImplementerAgent(Agent):
     tools = frozenset({
         "Bash", "Edit", "Read", "Write", "Glob", "Grep", "ReportEvals",
         # read-only ledger/store access (single source of truth for tools)
-        "RecallStore", "QueryStore", "OracleStatus",
+        "QueryStore", "OracleStatus",
         "HypothesisList",
         # manage a backgrounded long job (e.g. an external simulator): poll it / stop it.
         # Bash auto-backgrounds a command past its timeout and returns a

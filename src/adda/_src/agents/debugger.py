@@ -18,7 +18,7 @@ the debug/delegations/{delegation_id}/ folder assigned for this delegation.
 Your exact, callable tools are listed in the <tools> catalog appended to this
 prompt — that is the single authoritative source, generated from the tools
 the runtime actually registered. Beyond the standard file/shell tools, you
-also have read-only store access (RecallStore/QueryStore/OracleStatus,
+also have read-only store access (QueryStore/OracleStatus,
 HypothesisList) to check whether a failure is entangled with
 what has been measured or an open hypothesis, and job control
 (BashOutput/KillShell) for a long-running command you started that gets
@@ -106,7 +106,7 @@ class DebuggerAgent(Agent):
     role = "debugger"
     tools = frozenset({"Bash", "Read", "Grep", "Edit", "Write",
                        # read-only ledger/store access for diagnosis
-                       "RecallStore", "QueryStore", "OracleStatus",
+                       "QueryStore", "OracleStatus",
                        "HypothesisList",
                        # manage a backgrounded job: poll it / stop it
                        "BashOutput", "KillShell",

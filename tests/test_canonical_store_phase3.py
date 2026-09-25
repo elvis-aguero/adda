@@ -1,4 +1,4 @@
-"""Phase 3 canonical-store tests: RunStateSummary, RecallStore/QueryStore,
+"""Phase 3 canonical-store tests: RunStateSummary, QueryStore,
 UNLEDGERED_EVALS drift nudge, DelegationLog.evals field, nodes.py wiring.
 
 TDD: all tests written before implementation.
@@ -293,7 +293,7 @@ class TestRunStateSummaryMtimeCache:
 
 
 # ===========================================================================
-# Part B — RecallStore and QueryStore closures
+# Part B — QueryStore closure (summary and filtered view)
 # ===========================================================================
 
 
@@ -322,7 +322,7 @@ def _make_strategizer_with_notes(tmp_path: Path, notes_dir: Path):
 
     class StratAgent(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "WriteNote", "ReadNote", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "WriteNote", "ReadNote", "QueryStore"})
         description = "test strategizer"
 
     class WorkAgent(Agent):
@@ -348,16 +348,16 @@ def _make_strategizer_with_notes(tmp_path: Path, notes_dir: Path):
     return node
 
 
-class TestRecallStoreClosure:
+class TestQueryStoreSummary:
     def test_recall_store_present_in_closures(self, tmp_path):
         run_dir, notes_dir = _build_run_layout(tmp_path)
         node = _make_strategizer_with_notes(tmp_path, notes_dir)
-        assert "RecallStore" in node.adapter.closure_tools
+        assert "QueryStore" in node.adapter.closure_tools
 
     def test_recall_store_empty_message_when_no_store(self, tmp_path):
         run_dir, notes_dir = _build_run_layout(tmp_path)
         node = _make_strategizer_with_notes(tmp_path, notes_dir)
-        result = node.adapter.closure_tools["RecallStore"]()
+        result = node.adapter.closure_tools["QueryStore"]()
         assert "empty" in result.lower() or "no" in result.lower()
 
     def test_recall_store_returns_summary_when_store_exists(self, tmp_path):
@@ -373,14 +373,14 @@ class TestRecallStoreClosure:
             (0.3, 3.0, "D002"),
         ])
         node = _make_strategizer_with_notes(tmp_path, notes_dir)
-        result = node.adapter.closure_tools["RecallStore"]()
+        result = node.adapter.closure_tools["QueryStore"]()
         assert isinstance(result, str)
         assert len(result) > 20
         # Should mention the total row count or delegation IDs
         assert "3" in result or "D001" in result or "D002" in result
 
     def test_recall_store_injected_without_delegation_log(self, tmp_path):
-        """RecallStore must be injected even when delegation_log is None."""
+        """QueryStore must be injected even when delegation_log is None."""
         run_dir, notes_dir = _build_run_layout(tmp_path)
         from adda._src.backends.base import Agent, Edge, Graph
         from adda._src.nodes import Node
@@ -395,7 +395,7 @@ class TestRecallStoreClosure:
 
         class SA(Agent):
             role = "strategizer"
-            tools = frozenset({"Done", "RecallStore", "QueryStore"})
+            tools = frozenset({"Done", "QueryStore"})
             description = "s"
 
         class WA(Agent):
@@ -415,7 +415,7 @@ class TestRecallStoreClosure:
         )
         node._current_notes_dir = notes_dir
         node.adapter.closure_tools.update(node._build_routing_closures())
-        assert "RecallStore" in node.adapter.closure_tools
+        assert "QueryStore" in node.adapter.closure_tools
 
 
 class TestQueryStoreClosure:
@@ -699,7 +699,7 @@ class TestNodesDelegationLogEvalsWiring:
 
         class SA(Agent):
             role = "strategizer"
-            tools = frozenset({"Done", "RecallStore", "QueryStore"})
+            tools = frozenset({"Done", "QueryStore"})
             description = "s"
 
         class WA(Agent):
@@ -783,7 +783,7 @@ class TestScienceMonitorStoreDirWiring:
 
         class SA(Agent):
             role = "strategizer"
-            tools = frozenset({"Done", "RecallStore", "QueryStore"})
+            tools = frozenset({"Done", "QueryStore"})
             description = "s"
 
         class WA(Agent):
@@ -884,7 +884,7 @@ def test_stamped_eval_count_counts_only_provenance_rows(tmp_path):
 
 
 def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
-    """RecallStore() (which absorbed LedgerBreakdown) reads the live stores
+    """QueryStore() (which absorbed LedgerBreakdown) reads the live stores
     under run_dir/experiment_data and renders a per-experiment /
     per-delegation split — the report-time provenance that prevents
     hardcoding stale counts (run 20260628T001710 UNGATED)."""
@@ -925,7 +925,7 @@ def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
 
     class StratAgent(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "RecallStore"})
+        tools = frozenset({"Done", "QueryStore"})
         description = "test strategizer"
 
     class WorkAgent(Agent):
@@ -941,7 +941,7 @@ def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
     node.adapter.closure_tools.update(node._build_routing_closures())
 
     assert "LedgerBreakdown" not in node.adapter.closure_tools
-    out = node.adapter.closure_tools["RecallStore"]()
+    out = node.adapter.closure_tools["QueryStore"]()
     assert "[default]" in out and "D004=30" in out
     assert "[polar]" in out and "D006=50" in out
     # grounded against budget: 80 spent of 300 → 220 remaining (read, not computed)

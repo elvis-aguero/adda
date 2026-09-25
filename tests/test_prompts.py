@@ -181,7 +181,7 @@ def test_no_two_agent_framing_in_any_prompt():
 
 
 def test_strategizer_ledger_read_tools_documented(tmp_path):
-    """RecallStore, QueryStore, RecallHistory are documented to the strategizer.
+    """QueryStore, RecallHistory are documented to the strategizer.
 
     Post-Spec-B these live in the GENERATED <tools> catalog (the single source
     of truth, derived from the live closures), not the static base prompt — so
@@ -202,7 +202,7 @@ def test_strategizer_ledger_read_tools_documented(tmp_path):
 
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "strategizer"
 
     class B(Agent):
@@ -218,7 +218,7 @@ def test_strategizer_ledger_read_tools_documented(tmp_path):
         worker_adapters={"implementer": _Stub()},
         delegation_log=DelegationLog(tmp_path / "dlog.jsonl"))  # → RecallHistory
     cat = render_tool_catalog(n.adapter.closure_tools)
-    for tool in ("RecallStore", "QueryStore", "RecallHistory"):
+    for tool in ("QueryStore", "RecallHistory"):
         assert tool in cat, f"generated tool catalog missing '{tool}'"
 
 

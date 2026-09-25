@@ -165,7 +165,7 @@ class MathExpertAgent(Agent):
     tools = frozenset({
         "Bash", "Edit", "Read", "Glob", "Grep",
         # read-only ledger/study context, same set the implementer gets
-        "RecallStore", "QueryStore", "HypothesisList",
+        "QueryStore", "HypothesisList",
         "ReadProblemStatement",
     })
     role = "math_expert"

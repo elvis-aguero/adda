@@ -111,7 +111,7 @@ def test_async_wrapped_discovery_tools_produce_typed_json_schema(tmp_path):
     async_wrapped = (
         "search_semantic_scholar", "get_semantic_scholar_paper_details",
         "search_openalex", "get_openalex_citations", "get_openalex_references",
-        "get_semantic_scholar_recommendations", "DownloadPdf",
+        "get_semantic_scholar_recommendations",
         "arxiv_search_papers", "arxiv_download_paper", "arxiv_read_paper",
     )
     for name in async_wrapped:
@@ -365,29 +365,6 @@ def test_get_ss_recommendations_returns_error_on_failure(tmp_path):
             result = tools["get_semantic_scholar_recommendations"]("1706.03762")
 
     assert "ERROR" in result
-
-
-# ---------------------------------------------------------------------------
-# CorpusRank tool (if present)
-# ---------------------------------------------------------------------------
-
-
-def test_corpus_rank_tool_present(tmp_path):
-    """CorpusRank tool is injected when available."""
-    agent = _make_agent()
-    lit_dir = tmp_path / "lit"
-    tools = agent.build_closure_tools(
-        study_dir=tmp_path,
-        lit_reviewer_notes_dir=lit_dir,
-    )
-
-    if "CorpusRank" not in tools:
-        pytest.skip("CorpusRank not injected (rank_bm25 or other dep missing)")
-
-    # CorpusRank expects a single string containing passage blocks
-    passages_str = "--- Paper (2024), p.1 ---\nSome passage.\n"
-    result = tools["CorpusRank"](passages_str, "relevant query")
-    assert isinstance(result, str)
 
 
 def test_cap_result_truncates_oversized_payloads():

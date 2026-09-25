@@ -142,7 +142,7 @@ class ReproductionGateMixin:
             """(row_count, content_hash) across EVERY store under store_root:
             the canonical/default store PLUS every design-namespace sibling
             (store_root/<namespace>/), via the same experiment_stores()
-            aggregation RecallStore/ScienceMonitor already use. A single-
+            aggregation QueryStore()/ScienceMonitor already use. A single-
             store read here would miss a non-lazy write into a namespace
             store during "reproduction" — the sandbox copy this is called
             against is already namespace-complete (namespace stores nest

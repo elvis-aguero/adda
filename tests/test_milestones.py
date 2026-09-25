@@ -78,7 +78,7 @@ def _node(tmp_path):
         role = "strategizer"
         # Declaration-driven exposure: declare the capability tools this stub
         # exercises (hypothesis + milestone closures are no longer injected).
-        tools = frozenset({"Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "strategizer"
 
     class Lit(Agent):

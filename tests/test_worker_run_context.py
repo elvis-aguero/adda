@@ -1,5 +1,5 @@
 """Any node granted the read tools must resolve its run context so
-RecallStore/QueryStore and HypothesisList actually work — on the
+QueryStore and HypothesisList actually work — on the
 entry strategizer, a delegating worker, and a leaf worker (critic) alike. Tools
 are declaration-gated (single source of truth = the Agent's `tools`).
 
@@ -7,7 +7,7 @@ Regression for runs 20260705T181941 and 20260706T204732: the implementer and
 datagenerator have outgoing edges (to the literature_reviewer), so
 graph_builder wraps them as StrategizerNodes and injects the read tools — but
 passes notes_dir only to the entry node. That left worker `_current_notes_dir`
-and `_ledger` both None, so RecallStore/QueryStore returned "Canonical store is
+and `_ledger` both None, so QueryStore returned "Canonical store is
 empty" and the hypothesis read tools returned "hypothesis ledger not
 available" against stores holding hundreds of rows. Six worker delegations
 across the two runs hit this and fell back to hand-rolled
@@ -65,7 +65,7 @@ def _worker_node(run_dir: Path) -> Node:
         role = "implementer"
         description = "i"
         # Declaration-driven: the worker must DECLARE the read tools to get them.
-        tools = frozenset({"RecallStore", "QueryStore", "HypothesisList"})
+        tools = frozenset({"QueryStore", "HypothesisList"})
 
     class Lit(Agent):
         role = "literature_reviewer"
@@ -106,13 +106,13 @@ def test_worker_resolves_run_dir_from_delegation_log(tmp_path):
     assert n._resolve_run_dir() == run_dir        # resolved via delegation log
 
 
-def test_worker_recallstore_and_querystore_see_the_rows(tmp_path):
+def test_worker_querystore_summary_and_rows_see_the_store(tmp_path):
     run_dir, _ = _setup(tmp_path)
     n = _worker_node(run_dir)
     routing = n._build_routing_closures()
-    rec = routing["RecallStore"]()
-    assert "empty" not in rec.lower(), f"RecallStore falsely empty: {rec!r}"
-    q = routing["QueryStore"]()
+    rec = routing["QueryStore"]()
+    assert "empty" not in rec.lower(), f"QueryStore falsely empty: {rec!r}"
+    q = routing["QueryStore"](limit=20)
     assert "empty" not in q.lower(), f"QueryStore falsely empty: {q!r}"
 
 
@@ -153,11 +153,11 @@ def _leaf_worker(run_dir, agent_tools, study_dir=None):
 
 def test_leaf_worker_gets_declared_read_tools_and_they_work(tmp_path):
     run_dir, hid = _setup(tmp_path)
-    n = _leaf_worker(run_dir, {"RecallStore", "QueryStore",
+    n = _leaf_worker(run_dir, {"QueryStore",
                                "HypothesisList"})
     ct = n.adapter.closure_tools
-    assert {"RecallStore", "QueryStore", "HypothesisList"} <= set(ct)
-    assert "empty" not in ct["RecallStore"]().lower()
+    assert {"QueryStore", "HypothesisList"} <= set(ct)
+    assert "empty" not in ct["QueryStore"]().lower()
     assert hid in ct["HypothesisList"]()
 
 
@@ -184,14 +184,13 @@ def test_leaf_worker_without_declaration_has_no_read_tools(tmp_path):
     run_dir, _ = _setup(tmp_path)
     n = _leaf_worker(run_dir, {"Read", "Glob"})
     ct = n.adapter.closure_tools
-    assert "RecallStore" not in ct
     assert "QueryStore" not in ct
     assert "HypothesisList" not in ct
 
 
 # ---------------------------------------------------------------------------
 # Namespace visibility (backlog #21): the default-store-only resolution used
-# by RecallStore/QueryStore made rows that landed in a design-namespace store
+# by QueryStore made rows that landed in a design-namespace store
 # (run_dir/experiment_data/<namespace>/experiment_data/) invisible, even
 # though LedgerBreakdown's experiment_stores() aggregation sums across them
 # fine. A delegation whose rows only landed in a namespace got a false
@@ -203,7 +202,7 @@ def test_querystore_sees_rows_in_a_design_namespace(tmp_path):
     # D007 lands only in the "polar" namespace store, a sibling of the
     # default store under run_dir/experiment_data/.
     _build_store(run_dir / "experiment_data" / "polar", [(0.4, 4.0, "D007")])
-    n = _leaf_worker(run_dir, {"RecallStore", "QueryStore"})
+    n = _leaf_worker(run_dir, {"QueryStore"})
     q = n.adapter.closure_tools["QueryStore"](delegation_ids="D007")
     assert "No rows match" not in q, (
         f"QueryStore falsely reports D007 empty (namespace-blind): {q!r}"
@@ -211,11 +210,11 @@ def test_querystore_sees_rows_in_a_design_namespace(tmp_path):
     assert "D007" in q
 
 
-def test_recallstore_summary_includes_namespace_rows(tmp_path):
+def test_querystore_summary_includes_namespace_rows(tmp_path):
     run_dir, _ = _setup(tmp_path)
     _build_store(run_dir / "experiment_data" / "polar", [(0.4, 4.0, "D007")])
-    n = _leaf_worker(run_dir, {"RecallStore", "QueryStore"})
-    rec = n.adapter.closure_tools["RecallStore"]()
+    n = _leaf_worker(run_dir, {"QueryStore"})
+    rec = n.adapter.closure_tools["QueryStore"]()
     assert "D007" in rec, (
-        f"RecallStore summary omits namespace delegation D007: {rec!r}"
+        f"QueryStore summary omits namespace delegation D007: {rec!r}"
     )

@@ -211,7 +211,7 @@ class Node(
             self.adapter.closure_tools["RecallHistory"] = build_recall_history(self)
         # Declaration-gated read-only ledger/store tools — the SAME builder
         # every node uses, so a specialist (e.g. the critic) gets an
-        # identical, working RecallStore/QueryStore/HypothesisList/Get
+        # identical, working QueryStore/HypothesisList
         # surface whenever it declares them. Resolves the run via the shared
         # Node._resolve_run_dir (delegation-log path).
         from .tools.routing import build_declared_shared_closures
@@ -261,7 +261,7 @@ class Node(
         }
 
     # ── Run-context resolution (shared by every node) ────────────────────────
-    # The read tools (RecallStore/QueryStore/HypothesisList/Get) may be granted
+    # The read tools (QueryStore/HypothesisList) may be granted
     # to any node — the entry node, a mid-tier delegating node, or a leaf such
     # as the critic. They need the run's store/ledger paths, which are resolved
     # here so the tools work identically wherever they are granted.

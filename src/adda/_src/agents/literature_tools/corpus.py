@@ -1,4 +1,4 @@
-"""Local corpus tools: index, search, read, rank, download."""
+"""Local corpus tools: add a paper (from disk or a URL), and read the corpus."""
 
 from __future__ import annotations
 
@@ -11,82 +11,10 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
     # Defined as named functions (not lambdas) so each carries a docstring:
     # the generated <tools> catalog renders these, making it the single
     # source of tool docs — no hand-written list in the prompt to drift.
-    @tool_examples(
-        "CorpusAdd('papers/2506.14097.pdf', title='Buckling of lattices', arxiv_id='2506.14097', citation_count=12)",
-    )
-    def CorpusAdd(file_path: str, title: str = "", authors: str = "",
-                  year: str = "", doi: str = "", arxiv_id: str = "",
-                  venue: str = "", abstract: str = "",
-                  citation_count: int = 0):
-        """Index a LOCAL file (a saved PDF or full-text markdown) into the
-        corpus so its passages become searchable.
-
-        file_path is a PATH ON DISK to a .pdf/.md/.txt you already downloaded
-        (e.g. "papers/2506.14097.pdf") — NOT a provider name and NOT a paper
-        id. Download the file first with arxiv_download_paper, or write the
-        text from arxiv_read_paper with the Write tool. The remaining
-        arguments are metadata about that file, copied from the search result
-        that identified it; arxiv_id/doi are recorded as metadata and used to
-        derive a stable paper_id, they are not fetched. citation_count boosts
-        BM25 retrieval weight (log10(c+1) scaling) — pass the citationCount
-        from Semantic Scholar or OpenAlex."""
-        return corpus.add(
-            file_path, title=title, authors=authors, year=year, doi=doi,
-            arxiv_id=arxiv_id, venue=venue, abstract=abstract,
-            citation_count=int(citation_count or 0))
-
-    tools = build_corpus_read_closures(corpus)
-
-    def CorpusRank(passages: str, question: str) -> str:
-        """Re-rank corpus passages by BM25 relevance to question.
-
-        Pass the raw output of ConsultLiterature as ``passages``.
-        Returns passages reordered from most to least relevant.
-        """
-        if not passages or passages == "No results found.":
-            return passages
-
-        try:
-            from rank_bm25 import BM25Okapi
-        except ImportError:
-            return passages  # no-op if not installed
-
+    def _download_pdf(url: str, filename: str) -> str:
+        """Fetch a PDF URL into the corpus papers directory; the saved path,
+        or ``"ERROR: …"``."""
         import re as _re
-        blocks = _re.split(
-            r"(?=--- .+ \(\d*\), p\.\d+ ---)",
-            passages.strip(),
-        )
-        blocks = [b.strip() for b in blocks if b.strip()]
-        if len(blocks) <= 1:
-            return passages
-
-        tokenized = [b.lower().split() for b in blocks]
-        bm25 = BM25Okapi(tokenized)
-        scores = bm25.get_scores(question.lower().split())
-        ranked = sorted(
-            zip(blocks, scores, strict=False),
-            key=lambda x: x[1],
-            reverse=True,
-        )
-        return "\n\n".join(b for b, _ in ranked)
-
-    def DownloadPdf(url: str, filename: str) -> str:
-        """Fetch a PDF URL and save to disk.
-
-        Parameters
-        ----------
-        url:
-            Direct URL to the PDF (content-type must contain
-            'pdf' or body must start with ``%PDF``).
-        filename:
-            Destination filename.  If not absolute, saved under
-            the corpus papers directory.
-
-        Returns
-        -------
-        str
-            Absolute path to the saved file, or ``"ERROR: …"``.
-        """
         from pathlib import Path as _Path
         try:
             resp = _robust_get(
@@ -102,7 +30,7 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
         except SourceCooldownError as exc:
             return f"ERROR: {exc}"
         except Exception as exc:
-            return f"ERROR: DownloadPdf fetch failed: {exc}"
+            return f"ERROR: download failed: {exc}"
 
         # Validate content
         ct = ""
@@ -120,6 +48,11 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
                 " Check the URL."
             )
 
+        if not filename:
+            stem = url.rstrip("/").rsplit("/", 1)[-1].split("?", 1)[0]
+            filename = _re.sub(r"[^A-Za-z0-9._-]", "_", stem) or "paper"
+        if not filename.lower().endswith(".pdf"):
+            filename += ".pdf"
         dest = _Path(filename)
         if not dest.is_absolute():
             dest = corpus._papers_dir / filename
@@ -127,8 +60,40 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
         dest.write_bytes(body)
         return str(dest)
 
-    tools.update({"CorpusAdd": CorpusAdd, "CorpusRank": CorpusRank,
-                  "DownloadPdf": DownloadPdf})
+    @tool_examples(
+        "CorpusAdd('papers/2506.14097.pdf', title='Buckling of lattices', arxiv_id='2506.14097', citation_count=12)",
+        "CorpusAdd('https://arxiv.org/pdf/1706.03762', title='Attention is all you need', arxiv_id='1706.03762')",
+    )
+    def CorpusAdd(source: str, title: str = "", authors: str = "",
+                  year: str = "", doi: str = "", arxiv_id: str = "",
+                  venue: str = "", abstract: str = "",
+                  citation_count: int = 0, filename: str = ""):
+        """Index a paper into the corpus so its passages become searchable.
+
+        source is either a PATH ON DISK to a .pdf/.md/.txt (e.g.
+        "papers/2506.14097.pdf"), or a direct PDF URL (http/https), which is
+        downloaded into the corpus first — saved as `filename` if given,
+        otherwise named after the arxiv_id or the URL. It is NOT a provider
+        name and NOT a paper id. For full text without a PDF, write the text
+        from arxiv_read_paper with the Write tool and pass that path. The
+        remaining arguments are metadata about the paper, copied from the
+        search result that identified it; arxiv_id/doi are recorded as
+        metadata and used to derive a stable paper_id, they are not fetched.
+        citation_count boosts BM25 retrieval weight (log10(c+1) scaling) —
+        pass the citationCount from Semantic Scholar or OpenAlex."""
+        if str(source).lower().startswith(("http://", "https://")):
+            saved = _download_pdf(
+                source, filename or (f"{arxiv_id}.pdf" if arxiv_id else ""))
+            if saved.startswith("ERROR"):
+                return saved
+            source = saved
+        return corpus.add(
+            source, title=title, authors=authors, year=year, doi=doi,
+            arxiv_id=arxiv_id, venue=venue, abstract=abstract,
+            citation_count=int(citation_count or 0))
+
+    tools = build_corpus_read_closures(corpus)
+    tools["CorpusAdd"] = CorpusAdd
     return tools
 
 

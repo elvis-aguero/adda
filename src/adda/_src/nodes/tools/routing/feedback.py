@@ -457,7 +457,7 @@ class FeedbackTools:
             f"study_dir             = {_study_dir}\n"
             f"debug_dir             = {_debug_dir}\n"
             f"canonical_store       = {_store_dir}\n"
-            "  ^ audit the ledger yourself: call RecallStore()/"
+            "  ^ audit the ledger yourself: call QueryStore()/"
             "QueryStore(...) (namespace-aware — they see every design "
             "namespace, not just the default store). Do NOT hand-roll "
             "ExperimentData.from_file(project_dir=...) directly on this "

@@ -18,7 +18,7 @@ interface (f3dasm DataGenerator), and you conform any source to it.
 Your exact, callable tools are listed in the <tools> catalog appended to this
 prompt — that is the single authoritative source, generated from the tools
 the runtime actually registered. Beyond the standard file/shell tools, you
-also have read-only store access (RecallStore/QueryStore/OracleStatus,
+also have read-only store access (QueryStore/OracleStatus,
 HypothesisList) to check what has already been measured or
 hypothesised before you build, and job control (BashOutput/KillShell) for a
 long-running solver call that gets backgrounded past its timeout.
@@ -285,7 +285,7 @@ class DataGeneratorAgent(Agent):
     tools = frozenset({
         "Bash", "Edit", "Read", "Write", "Glob", "Grep", "ReportEvals",
         # read-only ledger/store access (single source of truth for tools)
-        "RecallStore", "QueryStore", "OracleStatus",
+        "QueryStore", "OracleStatus",
         "HypothesisList",
         # manage a backgrounded long job (e.g. Abaqus): poll it / stop it
         "BashOutput", "KillShell",

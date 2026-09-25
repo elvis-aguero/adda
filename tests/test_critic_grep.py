@@ -6,7 +6,7 @@ it blind, one line at a time, with offset=/limit= guesses (confirmed against
 the raw transcript: one failed full-file Read, then 7 consecutive
 single-line reads). Grep is already a native, read-only tool other roles
 declare (datagenerator/implementer/debugger); the critic's own read-only
-design principle (Read/Glob/RecallStore/QueryStore/OracleStatus/Hypothesis*,
+design principle (Read/Glob/QueryStore/OracleStatus/Hypothesis*,
 never Bash/Edit/Write) is not violated by adding it — Grep searches, it
 never mutates.
 """

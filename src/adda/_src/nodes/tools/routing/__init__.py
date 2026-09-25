@@ -1,5 +1,5 @@
 """The tool closures an orchestrating node is handed (Delegate/Wait/Done/FollowUp/
-WriteNote/ReadNote/WriteCell/RecallStore/QueryStore/AskForFeedback +
+WriteNote/ReadNote/WriteCell/QueryStore/AskForFeedback +
 hypothesis tools). Built per-node; the node is passed in so closures reach its
 state. Built by an orchestrating node via Node._build_routing_closures.
 
@@ -56,7 +56,7 @@ def build_routing_tools(node) -> dict:
 
     # Topology-injected tools: granted to every orchestrating node because the
     # ability to delegate/recall derives from having outgoing edges — the only
-    # structural fact about a node (see nodes/node.py). Capability tools (RecallStore/QueryStore/
+    # structural fact about a node (see nodes/node.py). Capability tools (QueryStore/
     # Hypothesis*/Milestone*/...) are declaration-gated below, NOT here.
     closures: dict = {
         "Delegate": _dele["Delegate"],

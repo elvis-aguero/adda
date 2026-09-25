@@ -6,6 +6,7 @@ import logging
 import os
 
 from ...literature.http_client import SourceCooldownError, _robust_get
+from ...prompts.tool_catalog import tool_examples
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +26,9 @@ def build_openalex_closures(cache_dir) -> dict:
     if _oa_key:
         _oa_headers["Authorization"] = f"Bearer {_oa_key}"
 
+    @tool_examples(
+        "search_openalex('lattice metamaterial buckling', n_results=10)",
+    )
     def search_openalex(
         query: str, n_results: int = 10
     ) -> str:
@@ -101,6 +105,9 @@ def build_openalex_closures(cache_dir) -> dict:
             })
         return _j.dumps(out, indent=2)
 
+    @tool_examples(
+        "get_openalex_citations('W2963403868', n_results=20)",
+    )
     def get_openalex_citations(
         work_id: str, n_results: int = 20
     ) -> str:
@@ -163,6 +170,9 @@ def build_openalex_closures(cache_dir) -> dict:
             })
         return _j.dumps(out, indent=2)
 
+    @tool_examples(
+        "get_openalex_references('W2963403868')",
+    )
     def get_openalex_references(work_id: str) -> str:
         """Fetch the reference list of *work_id* hydrated from OpenAlex; citation-graph traversal fallback when S2 is rate-limited.
 

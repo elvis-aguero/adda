@@ -82,10 +82,6 @@ _SKIP_ALLOWLIST: tuple[tuple["re.Pattern[str]", str], ...] = (
     # same shape as semanticscholar above, for pymupdf's `fitz` import.
     (re.compile(r"^fitz not available$"),
      "guards a pymupdf import that can fail on some platforms"),
-    # tests/test_literature_agent.py: CorpusRank depends on rank-bm25, again
-    # a hard dependency guarded defensively at its call site.
-    (re.compile(r"^CorpusRank not injected \(rank_bm25 or other dep missing\)$"),
-     "guards an optional ranking dependency"),
     # tests/test_embed_worker.py: shells out to the `uv` CLI itself, which a
     # dev machine or CI image is not guaranteed to have on PATH.
     (re.compile(r"^uv not found on PATH$"),

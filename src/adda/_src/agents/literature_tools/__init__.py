@@ -25,7 +25,6 @@ _PROVIDER_OF = {
     "arxiv_search_papers": "arxiv",
     "arxiv_read_paper": "arxiv",
     "arxiv_download_paper": "arxiv",
-    "DownloadPdf": "http",
 }
 
 
@@ -53,8 +52,6 @@ def build_literature_tools(study_dir, lit_reviewer_notes_dir=None) -> dict:
     tools.update(build_semantic_scholar_closures())
     tools.update(build_openalex_closures(cache_dir))
     tools.update(build_recommendations_closure())
-    tools["CorpusRank"] = corpus_tools["CorpusRank"]
-    tools["DownloadPdf"] = corpus_tools["DownloadPdf"]
 
     # arxiv tools — Python-native, same for Claude and Ollama.
     from ...backends.ollama import _build_arxiv_closures
@@ -63,7 +60,7 @@ def build_literature_tools(study_dir, lit_reviewer_notes_dir=None) -> dict:
     # Make the SLOW external-provider tools async-able (wait=False default)
     # so the reviewer fans out across providers concurrently instead of
     # blocking ~minutes per call. Same-provider calls serialize. The fast
-    # local corpus tools (CorpusAdd/Search/List/Rank, Read) stay synchronous.
+    # local corpus tools (CorpusAdd, ConsultLiterature) stay synchronous.
     _asyncable, _collect = _make_search_async_pool()
     for _nm, _pv in _PROVIDER_OF.items():
         if _nm in tools:

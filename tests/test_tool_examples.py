@@ -17,13 +17,23 @@ WHY A TEST AND NOT A CONVENTION
     decorates -- its own name, only real parameters, no more positional
     arguments than the tool takes.
 
-Read from the syntax tree, the same way the prompt map reads the catalog, so
-it covers a tool whether or not a test ever builds the node that holds it.
+Checked twice, because either check alone had a hole:
+
+- from the syntax tree, the way the prompt map reads the catalog, so it covers
+  a tool whether or not a test ever builds the node that holds it; and
+- off the LIVE function objects the agents are given, because that is what
+  the catalog renders. The syntax-tree pass alone let two gaps through: the
+  literature reviewer's runtime tools were never in its list of names (so none
+  had examples and nothing noticed), and the async wrapper around them dropped
+  the ``_tool_examples`` attribute, so an example written in the source would
+  still never have reached the agent.
 """
 from __future__ import annotations
 
 import ast
 import importlib.util
+import inspect
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -81,14 +91,45 @@ def _examples(fn: ast.FunctionDef) -> list[str]:
     return []
 
 
+def _native() -> set[str]:
+    """Tools the backend CLI provides itself: not ours to document."""
+    from adda._src.backends.claude import ClaudeAdapter
+    return set(ClaudeAdapter.NATIVE_TOOLS)
+
+
+def _live_closures() -> dict:
+    """Every closure tool a shipped agent builds for itself, as the object the
+    agent is handed -- including the reviewer's runtime-only tools, which no
+    `tools` declaration names."""
+    from adda._src.agents.abaqus_datagenerator import AbaqusDataGeneratorAgent
+    from adda._src.nodes.parsing import _consult_handbook
+    from adda._src.runtime.agent_runtime import _default_graph
+
+    tmp = Path(tempfile.mkdtemp(prefix="tool_examples_"))
+    out = {"ConsultHandbook": _consult_handbook}
+    agents = [*_default_graph().nodes.values(),
+              AbaqusDataGeneratorAgent(corpus_dir=str(tmp / "abaqus"))]
+    for agent in agents:
+        params = inspect.signature(agent.build_closure_tools).parameters
+        kw = ({"lit_reviewer_notes_dir": tmp / "lit"}
+              if "lit_reviewer_notes_dir" in params else {})
+        out.update(agent.build_closure_tools(tmp, **kw))
+    return out
+
+
 _DEFS = _definitions()
-_HELD = sorted(t for t in _held_tools() if t in _DEFS)
+_HELD = sorted(t for t in _held_tools() - _native())
+_LIVE = _live_closures()
 
 
 def test_the_held_tools_are_found():
     """Guard the guard: if the scan finds nothing, every check below passes
-    vacuously."""
+    vacuously -- and a held tool the scan cannot find is a failure, not a
+    skip (skipping is how the gaps above went unnoticed)."""
     assert len(_HELD) >= 25, _HELD
+    missing = [t for t in _HELD if t not in _DEFS]
+    assert not missing, f"held tools with no definition found: {missing}"
+    assert len(_LIVE) >= 15, sorted(_LIVE)
 
 
 @pytest.mark.parametrize("tool", _HELD)
@@ -117,3 +158,33 @@ def test_every_example_is_a_call_the_tool_accepts(tool):
                 assert kw.arg in params + kwonly, (
                     f"{tool}: {example!r} names {kw.arg!r}, which is not a "
                     f"parameter of the tool ({params + kwonly})")
+
+
+def _check_call(tool: str, example: str, params: list[str], kwonly: list[str]):
+    call = ast.parse(example, mode="eval").body
+    assert isinstance(call, ast.Call), f"{tool}: {example!r} is not a call"
+    assert getattr(call.func, "id", None) == tool, (
+        f"{tool}'s example calls another tool: {example!r}")
+    assert len(call.args) <= len(params), (
+        f"{tool}: {example!r} passes {len(call.args)} positional arguments; "
+        f"the tool takes {params}")
+    for kw in call.keywords:
+        assert kw.arg in params + kwonly, (
+            f"{tool}: {example!r} names {kw.arg!r}, which is not a parameter "
+            f"of the tool ({params + kwonly})")
+
+
+@pytest.mark.parametrize("tool", sorted(_LIVE))
+def test_every_live_tool_carries_examples_the_agent_is_shown(tool):
+    """What ``render_tool_catalog`` reads: the attribute on the live object."""
+    fn = _LIVE[tool]
+    examples = getattr(fn, "_tool_examples", None)
+    assert examples, (
+        f"{tool}: the object the agent is given has no examples, so its "
+        "catalog entry shows none")
+    sig = inspect.signature(fn).parameters.values()
+    positional = [p.name for p in sig if p.kind in (
+        p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)]
+    kwonly = [p.name for p in sig if p.kind is p.KEYWORD_ONLY]
+    for example in examples:
+        _check_call(tool, example, positional, kwonly)

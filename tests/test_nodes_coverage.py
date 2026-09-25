@@ -51,7 +51,7 @@ def _make_state(study_dir=None, **kwargs):
 def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Graph:
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "WriteCell", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "WriteCell", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):

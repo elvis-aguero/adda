@@ -2324,8 +2324,8 @@ class DelegationTools:
                 "RecallHistory recalls delegations RECEIVED by this "
                 "node — the entry/orchestrating node dispatches "
                 "delegations, it never receives one, so this is always "
-                "empty here (not a memory gap). Use RecallStore/"
-                "QueryStore for evaluation history, or HypothesisList "
+                "empty here (not a memory gap). Use QueryStore "
+                "for evaluation history, or HypothesisList "
                 "for the hypothesis ledger, instead."
             )
         records = node._delegation_log.query_received(node._name, n)

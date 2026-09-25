@@ -8,7 +8,7 @@ Tests:
 5. Cache: hit skips request; expired ts → re-fetches.
 6. add() full_text flag (PDF → True; long md → True; short md → False).
 7. search() abstract-only corpus → ERROR; full-text paper → results.
-8. DownloadPdf validates content (PDF magic → ok; html → ERROR).
+8. CorpusAdd(url) validates content (PDF magic → ok; html → ERROR).
 9. Preflight warning: fastembed missing → warning in caplog.
 """
 from __future__ import annotations
@@ -571,7 +571,7 @@ class TestSearchFullTextOnly:
         result = corpus.search("abstract")
         assert result.startswith("ERROR:"), result
         assert "full-text" in result.lower()
-        assert "DownloadPdf" in result or "download" in result.lower()
+        assert "download" in result.lower()
 
     def test_full_text_paper_returns_results(self, tmp_path):
         """search() returns passages when at least one full-text paper."""
@@ -634,10 +634,10 @@ class TestSearchFullTextOnly:
 
 
 # ---------------------------------------------------------------------------
-# Test 8: DownloadPdf validates content
+# Test 8: CorpusAdd(url) downloads, then indexes; it validates content
 # ---------------------------------------------------------------------------
 
-class TestDownloadPdf:
+class TestCorpusAddFromUrl:
     def test_pdf_magic_bytes_accepted(self, tmp_path, monkeypatch):
         """Body starting with %PDF is saved and path returned."""
         monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
@@ -655,6 +655,8 @@ class TestDownloadPdf:
             lit_reviewer_notes_dir=tmp_path / "lit",
         )
 
+        monkeypatch.setattr(LiteratureCorpus, "add",
+                            lambda self, path, **kw: f"ADDED {path}")
         pdf_body = b"%PDF-1.4 this is fake pdf content"
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -664,14 +666,15 @@ class TestDownloadPdf:
         mock_resp.raise_for_status.return_value = None
 
         with patch("requests.get", return_value=mock_resp):
-            result = tools["DownloadPdf"](
+            result = tools["CorpusAdd"](
                 "https://arxiv.org/pdf/1706.03762",
-                "test_paper.pdf",
+                filename="test_paper.pdf",
             )
 
-        assert not result.startswith("ERROR"), result
-        assert result.endswith(".pdf")
-        assert Path(result).exists()
+        assert result.startswith("ADDED "), result
+        saved = Path(result.removeprefix("ADDED "))
+        assert saved.name == "test_paper.pdf"
+        assert saved.read_bytes() == pdf_body
 
     def test_html_body_rejected(self, tmp_path, monkeypatch):
         """HTML body → ERROR 'not a PDF'."""
@@ -696,9 +699,9 @@ class TestDownloadPdf:
         mock_resp.raise_for_status.return_value = None
 
         with patch("requests.get", return_value=mock_resp):
-            result = tools["DownloadPdf"](
+            result = tools["CorpusAdd"](
                 "https://example.com/paper.pdf",
-                "bad_paper.pdf",
+                filename="bad_paper.pdf",
             )
 
         assert result.startswith("ERROR")
@@ -718,6 +721,8 @@ class TestDownloadPdf:
             lit_reviewer_notes_dir=tmp_path / "lit",
         )
 
+        monkeypatch.setattr(LiteratureCorpus, "add",
+                            lambda self, path, **kw: f"ADDED {path}")
         pdf_body = b"some pdf bytes without magic"
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -727,12 +732,12 @@ class TestDownloadPdf:
         mock_resp.raise_for_status.return_value = None
 
         with patch("requests.get", return_value=mock_resp):
-            result = tools["DownloadPdf"](
+            result = tools["CorpusAdd"](
                 "https://example.com/paper",
-                "ct_paper.pdf",
+                filename="ct_paper.pdf",
             )
 
-        assert not result.startswith("ERROR"), result
+        assert result.startswith("ADDED "), result
 
     def test_download_failure_returns_error(self, tmp_path, monkeypatch):
         """Network failure → ERROR string."""
@@ -753,9 +758,9 @@ class TestDownloadPdf:
             "requests.get",
             side_effect=_req.RequestException("Connection refused"),
         ):
-            result = tools["DownloadPdf"](
+            result = tools["CorpusAdd"](
                 "https://example.com/paper.pdf",
-                "fail_paper.pdf",
+                filename="fail_paper.pdf",
             )
 
         assert result.startswith("ERROR")
@@ -1410,3 +1415,24 @@ class TestS2EventLoopSafety:
         assert "timed out" in result.lower(), (
             f"ERROR should mention 'timed out': {result!r}"
         )
+
+
+def test_corpus_add_names_a_download_after_its_arxiv_id(tmp_path, monkeypatch):
+    """No filename given: the arxiv id names the saved PDF, so a second add of
+    the same paper lands on the same file."""
+    monkeypatch.setattr(lc_mod, "_sleep", lambda s: None)
+    _reset_rate_state("arxiv.org")
+    monkeypatch.setattr(LiteratureCorpus, "add",
+                        lambda self, path, **kw: f"ADDED {path}")
+    from adda._src.agents.literature import LiteratureReviewAgent
+    tools = LiteratureReviewAgent().build_closure_tools(
+        study_dir=tmp_path, lit_reviewer_notes_dir=tmp_path / "lit")
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.content = b"%PDF-1.4 x"
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.headers = {"Content-Type": "application/pdf"}
+    with patch("requests.get", return_value=mock_resp):
+        result = tools["CorpusAdd"]("https://arxiv.org/pdf/1706.03762",
+                                    arxiv_id="1706.03762")
+    assert result.endswith("1706.03762.pdf"), result

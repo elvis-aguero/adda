@@ -24,6 +24,6 @@ def test_strategizer_prompt_directs_eval_count_to_ledger():
 
     p = STRATEGIZER_SYSTEM_PROMPT
     assert "TOTAL EVALUATION COUNT" in p
-    assert "RecallStore" in p
+    assert "QueryStore" in p
     # it must forbid hand-computing / worker-self-reported counts
     assert "never" in p.lower() and "self-reported" in p.lower()

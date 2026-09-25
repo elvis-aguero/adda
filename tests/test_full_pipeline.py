@@ -39,7 +39,7 @@ class _StrategistSpec(Agent):
     description = "Test strategizer."
     # This scripted driver polls delegations deterministically with
     # Wait(block=False), and writes the notebook with WriteCell.
-    tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteCell", "Wait", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+    tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteCell", "Wait", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
 
 
 class _WorkerSpec(Agent):

@@ -12,9 +12,9 @@ Manages a directory with::
                               written by :mod:`.http_client`)
 
 **Design principle:** this module does NO network I/O in the corpus
-methods.  Discovery and download are the agent's responsibility via
-MCP tools or ``DownloadPdf``.  ``CorpusAdd`` only accepts paths to
-files already on disk.
+methods.  Discovery and download belong to the agent tools: the
+``CorpusAdd`` tool fetches a URL itself, then hands this module a path
+already on disk.
 """
 
 from __future__ import annotations
@@ -648,9 +648,8 @@ class LiteratureCorpus:
             return "error", (
                 f"ERROR: corpus contains no full-text papers"
                 f" ({n} abstract-only entr{'y' if n == 1 else 'ies'})."
-                " Quotes require full text — download the PDF or full"
-                " text first (DownloadPdf / arxiv_download_paper),"
-                " then CorpusAdd it."
+                " Quotes require full text — download a PDF or"
+                " full-text file into the corpus first."
             )
 
         all_chunks, emb_matrix_all, has_emb_all = self._load_all_embeddings()

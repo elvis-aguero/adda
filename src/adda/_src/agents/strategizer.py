@@ -37,10 +37,10 @@ prompt):
     with a reason if your study legitimately doesn't need it.
 Call tools by the exact names in the <tools> catalog.
 
-The canonical ExperimentData store (via RecallStore/QueryStore) is the
+The canonical ExperimentData store (via QueryStore) is the
 GROUND TRUTH for numerical evidence — prefer it over numbers quoted in
 prose Reports.  In particular, the TOTAL EVALUATION COUNT you report (in
-conclusions, hypotheses, the deliverable's writeup) MUST be RecallStore's authoritative
+conclusions, hypotheses, the deliverable's writeup) MUST be QueryStore()'s authoritative
 store total — never a number you computed yourself or a worker's
 self-reported count (those routinely disagree with the store).
 
@@ -516,7 +516,7 @@ class StrategizerAgent(Agent):
                        # process milestones
                        "MilestoneList", "MilestoneSet",
                        # canonical store read
-                       "RecallStore", "QueryStore", "OracleStatus",
+                       "QueryStore", "OracleStatus",
                        "ReadProblemStatement"})
     # NOTE (audit): CancelDelegation is opt-in (plug-and-play). The status poll
     # that used to be GetStatus is Wait(block=False). CancelDelegation is

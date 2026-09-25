@@ -112,7 +112,7 @@ DELIVERABLE_FORMAT = (
     "         means COMPUTE it in code from the loaded store (this is still\n"
     "         LAZY — loading + computing adds zero new oracle rows); it does\n"
     "         NOT mean pasting a number you remember. For per-experiment /\n"
-    "         per-delegation eval COUNTS, call RecallStore() and quote\n"
+    "         per-delegation eval COUNTS, call QueryStore() and quote\n"
     "         those — counts in a plan or a delegation's notes drift from what\n"
     "         actually landed in the store.\n\n"
     "RULES:\n"

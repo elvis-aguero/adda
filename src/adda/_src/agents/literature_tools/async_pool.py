@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ...prompts.tool_catalog import tool_examples
 from .throttle import _cap_result
 
 
@@ -76,6 +77,9 @@ def _make_search_async_pool():
         # below, and inspect.signature stops unwrapping at an object that
         # carries one, so the added `wait` parameter is kept.
         wrapper.__wrapped__ = fn
+        # The catalog reads examples off the object the agent is given; without
+        # this the async wrapper silently dropped every example it wrapped.
+        wrapper._tool_examples = list(getattr(fn, "_tool_examples", []))
         _doc = inspect.cleandoc(fn.__doc__ or "")
         wrapper.__doc__ = _doc + (
             "\n\nASYNC: pass wait=False to run this in the background and get a "
@@ -99,6 +103,10 @@ def _make_search_async_pool():
             pass
         return wrapper
 
+    @tool_examples(
+        'CollectSearches()',
+        "CollectSearches('openalex#3')",
+    )
     def CollectSearches(handle: str = None) -> str:
         """Collect async (wait=False) search results. With a handle: block until
         that search finishes and return its result. With NO handle: block until

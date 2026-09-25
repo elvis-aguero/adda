@@ -29,7 +29,7 @@ def _node(tmp_path, with_critic=False):
         role = "strategizer"
         # The ritual tests drive a delegation to completion by polling it
         # with Wait(block=False).
-        tools = frozenset({"Done", "Wait", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "Wait", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "QueryStore"})
         description = "strategizer"
 
     class B(Agent):
