@@ -41,7 +41,7 @@ class _Stub:
 def _node(worker_response: str = _WORKER_REPORT) -> Node:
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "Delegate", "Wait", "GetStatus"})
+        tools = frozenset({"Done", "Delegate", "Wait"})
         description = "strategizer"
 
     class B(Agent):

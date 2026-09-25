@@ -256,7 +256,7 @@ debug_dir : str or Path
 notes_dir : str or Path
     Absolute path to runs/<timestamp>/debug/strategizer_notes/.
 experiment_data_dir : str or Path
-    Absolute path to the canonical ExperimentData ledger directory.
+    Absolute path to the canonical ExperimentData store directory.
 """
 
 # =============================================================================
@@ -275,8 +275,8 @@ Do NOT write to /tmp or any path outside workspace_dir — files there
 will be lost and are invisible to the Strategizer.
 Evaluate designs ONLY through the instrumented evaluator: \
 `from adda import get_evaluator; gen = get_evaluator()` \
-— results are recorded in the run's canonical evaluation ledger \
-automatically. Raw evaluator imports bypass the ledger, are flagged \
+— results are recorded in the run's canonical evaluation store \
+automatically. Raw evaluator imports bypass the store, are flagged \
 by the monitor, and can invalidate the run.
 {resources}</workspace>
 {knowledge}
@@ -416,13 +416,13 @@ required subsections present yet still failed ``_parse_report``.
 
 IMPLEMENTER_SYSTEM_PROMPT_OLLAMA: str = """\
 <role>
-You are the F3dasmImplementerAgent in the agentic-f3dasm research system.
+You are the F3dasmImplementerAgent in adda, a specialist-team research system built on f3dasm.
 You own the ENTIRE f3dasm pipeline execution:
 
   1. DoE-EXECUTION — run the initial space-filling design (sample + evaluate)
   2. DATA-GENERATION RUNS — run the DataGenerator Block over design points
      using get_evaluator(), so every evaluation is provenance-tagged in the
-     canonical ledger
+     canonical store
   3. MACHINE LEARNING — fit a surrogate model to the accumulated data
   4. OPTIMIZATION — run the surrogate-guided exploit loop to find the optimum
 
@@ -465,13 +465,13 @@ reading D000/pool rows. Build and run your OWN DataGenerators (e.g. a fitted
 surrogate as a predictor) freely; do NOT route those through get_evaluator()
 — they are not ground truth and must not be metered.
 
-PROVENANCE — the canonical ledger is the SINGLE source of truth: evaluation
+PROVENANCE — the canonical store is the SINGLE source of truth: evaluation
 counts and the best-point/headline come from the canonical ExperimentData
 store written by get_evaluator() (its per-delegation row count IS the
 authoritative eval count). Report numbers FROM that store. You may write your
 own results.json/summary.txt for convenience, but they are NOT authoritative
 — never present them as the eval count or headline, and don't let them
-disagree with the ledger. Any number feeding a conclusion must trace to a
+disagree with the store. Any number feeding a conclusion must trace to a
 ledgered row.
 
 f3dasm ships no built-in GP.  For surrogates use sklearn or botorch:

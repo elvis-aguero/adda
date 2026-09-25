@@ -3,7 +3,7 @@
 DISTINCT from the hypothesis ledger (epistemics — what's true, closed by
 evidence). Milestones are PROCESS steps — engage with the task, assess where you
 might be wrong, get the oracle right — closed by COMPLETION. They are
-SOFT-escapable (MilestoneSkip with a reason) but HARD on one thing: you cannot
+SOFT-escapable (MilestoneSet(id, "SKIPPED", note=reason)) but HARD on one thing: you cannot
 delegate to the f3dasm implementer (the agent that runs experiments) until the
 backlog is resolved. The three are independent and may be done concurrently;
 they block ONLY the implementer, never the literature_reviewer or datagenerator
@@ -260,14 +260,15 @@ def render_backlog(ledger: MilestoneLedger) -> str:
         "<process_backlog>\n"
         "Before you delegate ANY work to the f3dasm implementer (the agent "
         "that runs experiments), resolve this backlog — do each, or "
-        "MilestoneSkip(id, reason) if your study genuinely doesn't need it. "
+        "close it SKIPPED with a reason (MilestoneSet) if your study genuinely "
+        "doesn't need it. "
         "They're independent (do them in any order, even concurrently) and "
         "block ONLY the implementer; delegating to the literature_reviewer or "
         "datagenerator to satisfy one is never blocked. Use the proper agent "
         "for each delegation — match the task to the role built for it (oracle "
         "standardization belongs to a dedicated oracle/datagenerator agent when "
-        "your graph has one, not the generic implementer). Tick with "
-        "MilestoneComplete(id, brief).\n\n"
+        "your graph has one, not the generic implementer). Close each with "
+        "MilestoneSet(id, 'DONE', note=…).\n\n"
         f"{lines}\n"
         "</process_backlog>"
     )

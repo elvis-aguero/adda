@@ -1092,6 +1092,21 @@ def annotate_edits(roles: list[dict]) -> None:
                             "as a verbatim span of any file.")}
 
 
+def _self_built_tool_names(agent) -> list[str]:
+    """Names of the closures ``agent.build_closure_tools`` binds, built in a
+    throwaway study directory. Empty if the agent builds none, or if building
+    them needs something this machine does not have."""
+    import tempfile
+    build = getattr(agent, "build_closure_tools", None)
+    if build is None:
+        return []
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            return sorted((build(Path(tmp)) or {}).keys())
+        except Exception:  # noqa: BLE001 — the map must still build
+            return []
+
+
 def build_roles(shared: list[dict]) -> list[dict]:
     from adda._src.agents import _graphs
     from adda._src.evaluation.notebook_exec import notebook_deliverable_spec
@@ -1177,9 +1192,12 @@ def build_roles(shared: list[dict]) -> list[dict]:
                                              "notebook_deliverable_spec"),
                 "assembled_at": locate("system_prompt = system_prompt + notebook_deliverable_spec"),
                 "chars": len(spec),
-                "sections": [{"tag": "deliverable_format", "chars": len(spec),
-                              "text": spec, "generated": True,
-                              "source": locate(spec, [PKG / "evaluation" / "notebook_exec.py"])}],
+                # Split at its own tags like any other prompt: each section is
+                # one named constant in prompts/deliverable_format.py, so each
+                # is a verbatim span and editable. As one block it spanned two
+                # literals, had no single home, and could not be edited.
+                "sections": split_sections(
+                    spec, prefer=[PKG / "prompts" / "deliverable_format.py"]),
             })
 
         # Layer 4 — the <tools> catalog, generated from the live closure set.
@@ -1188,6 +1206,11 @@ def build_roles(shared: list[dict]) -> list[dict]:
         # onto every adapter at construction. The agent sees them; so must the
         # map. (ConsultHandbook was absent from this view until this line.)
         tools += [t for t in universal_tool_names() if t not in tools]
+        # Tools an agent builds for itself (the f3dasm lookup, the literature
+        # corpus) are not in agent.tools either -- build_closure_tools binds
+        # them per adapter. They were missing from every role's view, so their
+        # descriptions could not be reviewed here at all.
+        tools += [t for t in _self_built_tool_names(agent) if t not in tools]
         layers.append({
             "kind": "catalog",
             "label": "<tools> catalog",
@@ -1248,12 +1271,12 @@ GATES: list[dict] = [
     dict(id="milestones", title="Milestone backlog", kind="hard",
          phase="Done() + pre-delegation", module="nodes/tools/routing/feedback.py",
          symbol="FeedbackTools._milestone_gate", switch="milestones_enabled",
-         escape="MilestoneSkip(reason)",
+         escape="MilestoneSet(id, 'SKIPPED', note=reason)",
          effect="Blocks the close while process milestones are open."),
     dict(id="milestone_block", title="Implementer delegation block", kind="hard",
          phase="Delegate()", module="nodes/tools/routing/delegation.py",
          symbol="DelegationTools._milestone_gate", switch="milestones_enabled",
-         escape="MilestoneSkip(reason)",
+         escape="MilestoneSet(id, 'SKIPPED', note=reason)",
          policy=("epistemics/milestones.py", "implementer_block"),
          effect="No delegation to the implementer until the backlog is resolved."),
     dict(id="falsification_checkpoint", title="Falsification checkpoint", kind="soft",
@@ -1273,7 +1296,7 @@ GATES: list[dict] = [
          symbol="FeedbackTools._first_call_warning",
          effect="The first Done() warns and lists unmet conditions; only the second closes."),
     dict(id="reproduction", title="Reproduction gate", kind="hard",
-         phase="Done() + CheckDeliverable()", module="nodes/reproduction_gate.py",
+         phase="Done() + RunNotebook(gate=True)", module="nodes/reproduction_gate.py",
          symbol="ReproductionGateMixin._reproduction_gate",
          effect="pipeline.ipynb must execute cleanly, add zero oracle rows and rewrite none."),
     dict(id="must_reproduce", title="Pre-critic reproduction bounce", kind="hard",
@@ -1281,7 +1304,7 @@ GATES: list[dict] = [
          symbol="FeedbackTools._must_reproduce",
          effect="A non-reproducing deliverable bounces back before a critic turn is spent. Bounded."),
     dict(id="deliverables", title="Required deliverables present", kind="hard",
-         phase="Done() + CheckDeliverable()", module="nodes/reproduction_gate.py",
+         phase="Done() + RunNotebook(gate=True)", module="nodes/reproduction_gate.py",
          symbol="ReproductionGateMixin._missing_deliverables",
          effect="Names any required deliverable that is absent."),
     dict(id="headline", title="Headline consistency", kind="soft",

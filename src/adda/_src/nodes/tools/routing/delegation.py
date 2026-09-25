@@ -1,4 +1,4 @@
-"""Delegation-family tools: Delegate/Wait/GetStatus/CancelDelegation/Reply/
+"""Delegation-family tools: Delegate/Wait/CancelDelegation/Reply/
 FollowUp/Confer/RecallHistory.
 
 Three objects, one per scope that used to be a level of closure nesting:
@@ -126,6 +126,9 @@ def build_sandboxed_write(
     _root = root.resolve()
     _label = scope_label or f"the workspace ({_root})"
 
+    @tool_examples(
+        "Write('fit_surrogate.py', body='import numpy as np\\n...')",
+    )
     def Write(path: str, body: str) -> str:
         """Write a file. Restricted to your own workspace — no exceptions."""
         _norm = (path or "").strip()
@@ -167,10 +170,14 @@ def build_report_evals(
     real graph routing has no such queue, so it is omitted there.
     """
 
+    @tool_examples(
+        'ReportEvals(25)',
+        'ReportEvals(0)',
+    )
     def ReportEvals(count: int) -> str:
         """Report the total ground-truth evaluations you performed this
         task. Call once per task, ALWAYS — even if 0. When you use
-        get_evaluator() the canonical ledger is authoritative for the
+        get_evaluator() the canonical store is authoritative for the
         count, but this call also ARMS the unledgered-evals safety check,
         so never skip it."""
         n = int(count)
@@ -205,6 +212,10 @@ class ConferTools:
         self.node = node
         self.sender_name = sender_name
 
+    @tool_examples(
+        "Confer('D004', 'Stop at 40 evals — the budget changed.')",
+        "Confer('strategizer', 're #3: the surrogate R2 is 0.91')",
+    )
     def Confer(self, target: str, message: str) -> str:
         """Send an async message to another node in the run.
 
@@ -356,6 +367,9 @@ class WorkerSession:
             msgs = node._pending_worker_msgs.pop(self.delegation_id, [])
         return wrap_notice("\n".join(msgs))
 
+    @tool_examples(
+        "FollowUp('Is the 0.5 kg mass cap a hard constraint or a target?')",
+    )
     def FollowUp(self, question: str) -> str:
         """Ask your delegating party one clarifying question before proceeding.
 
@@ -587,7 +601,7 @@ class WorkerSession:
         )
 
     def _reconcile_evals(self) -> tuple[int, bool, int]:
-        """Believe the ledger, not the worker's self-report.
+        """Believe the store, not the worker's self-report.
 
         Counts this delegation's provenance-stamped rows across EVERY
         experiment store; falls back to the honour-system count only when it
@@ -608,7 +622,7 @@ class WorkerSession:
         """Append the completion constraint snapshot and per-eval KPI footer.
 
         The snapshot is ALWAYS appended (unlike the KPI footer, which only
-        makes sense when this delegation actually wrote ledger rows), so every
+        makes sense when this delegation actually wrote store rows), so every
         delegation's report is budget-aware — not just the ones that happened
         to evaluate something. Taken from the single source of truth
         (constraint_snapshot.py), shared with the RUNNING entry logged at
@@ -693,7 +707,7 @@ class WorkerSession:
             )
 
         # A delegation must not become OBSERVABLE as finished before its
-        # completion is DURABLE. The delegator polls GetStatus(), which reads
+        # completion is DURABLE. The delegator polls Wait(block=False), which reads
         # the registry, and acts the moment it stops saying "Working" — in
         # particular HypothesisUpdate resolves triggered_by via
         # DelegationLog.last_completed_id(), which needs this delegation's
@@ -879,7 +893,7 @@ class WorkerSession:
         node._record_worker_usage(self.worker, target, delegation_id)
 
         # Durable before observable — the same ordering invariant as
-        # _finish_ok. A poller watching GetStatus() leaves "Working" the
+        # _finish_ok. A poller watching Wait(block=False) leaves "Working" the
         # instant the registry flips, and a FAILED delegation is just as
         # citable as a DONE one.
         workspace_sha = self._commit_workspace("FAILED")
@@ -964,8 +978,8 @@ class DelegationTools:
             "precise question to answer. You do NOT need to restate the\n"
             "hypotheses you name in hypothesis_ids — their statement, registered\n"
             "falsification_criterion and prediction are attached to the worker's\n"
-            "task automatically, verbatim from the ledger. Spend the space on\n"
-            "what the ledger does not already hold.\n\n"
+            "task automatically, verbatim from the store. Spend the space on\n"
+            "what the store does not already hold.\n\n"
             "hypothesis_ids must be non-empty when the ledger is active.\n"
             "The worker writes exclusively to {id}/ (relative to their workspace\n"
             "in debug/delegations/).\n\n"
@@ -1129,9 +1143,10 @@ class DelegationTools:
         return (
             f"⚖ FALSIFICATION CHECKPOINT — was {delegation_id} an attempt to "
             "test a registered hypothesis's pre-registered prediction? Open: "
-            f"{listing}. If YES: LinkFalsificationAttempt('{delegation_id}', "
-            "'<id>') then record the verdict with HypothesisUpdate against "
-            f"that prediction. Link ONLY if {delegation_id} genuinely tested "
+            f"{listing}. If YES: record the verdict with HypothesisUpdate "
+            f"against that prediction, citing {delegation_id} as evidence with "
+            f"falsification_attempt=True. Mark it ONLY if {delegation_id} "
+            "genuinely tested "
             "that prediction — do not retrofit an exploratory result onto a "
             "hypothesis. If it was exploration/setup, there is no hypothesis "
             "to attach — continue (no action needed)."
@@ -1291,7 +1306,8 @@ class DelegationTools:
 
         return (
             f"Delegation started. ID: {delegation_id!r}. "
-            f"Use GetStatus('{delegation_id}') to poll for completion."
+            f"Collect it with Wait('{delegation_id}'), or check on it with "
+            f"Wait('{delegation_id}', block=False)."
         )
 
     def _check_delegate_cutoff(self) -> str | None:
@@ -1302,7 +1318,7 @@ class DelegationTools:
         Only NEW delegations are gated here — an in-flight one is untouched
         (this fires before a target is even resolved, so it never reaches
         anything that would register/cancel a delegation). Every other tool
-        the strategizer needs to close a run (Wait, GetStatus, Done,
+        the strategizer needs to close a run (Wait, Done,
         WriteDeliverable, …) lives outside DelegationTools.Delegate and is
         unaffected, so the run always has a path to close.
         """
@@ -1413,8 +1429,8 @@ class DelegationTools:
         milestones (assess-literature, oracle-ready, …) are good prompts, not a
         safety invariant, and a new design legitimately needs its own setup.
         Two-shot confirm, RECURRING PER NAMESPACE — nudge once per namespace,
-        proceed on a re-delegate. MilestoneComplete/MilestoneSkip remain the
-        clean path.
+        proceed on a re-delegate. Closing each milestone (MilestoneSet) remains
+        the clean path.
         """
         node = self.node
         _ms = getattr(node, "_milestones", None)
@@ -1442,8 +1458,8 @@ class DelegationTools:
         return (
             f"[CONFIRM] process backlog still open for {_scope}: "
             f"{_ids}. The usual path is to resolve each first — "
-            "MilestoneComplete(id, brief), or MilestoneSkip(id, "
-            "reason) if it doesn't apply. If you mean to run the "
+            "MilestoneSet(id, 'DONE', note=…), or MilestoneSet(id, "
+            "'SKIPPED', note=…) if it doesn't apply. If you mean to run the "
             "implementer anyway, re-delegate (same target) to "
             "confirm. (Not a tool error; a process nudge.)"
         )
@@ -1547,7 +1563,7 @@ class DelegationTools:
 
         # Prepend the constraint snapshot so every worker starts budget-aware
         # (eval AND wall-clock, not wall-clock only) — automatically, in-band;
-        # not something it has to go query for. GetStatus handles mid-run
+        # not something it has to go query for. Wait(block=False) handles mid-run
         # updates.
         return snapshot.as_text() + "\n\n" + task_msg
 
@@ -1578,17 +1594,13 @@ class DelegationTools:
 
     # ── Polling, waiting, cancelling ─────────────────────────────────────────
 
-    def GetStatus(self, delegation_id: str) -> str:
-        """Poll a background delegation; also delivers push notifications.
+    def _status(self, delegation_id: str) -> str:
+        """Wait(delegation_id, block=False): one delegation's status, now.
 
         Returns one of:
           'Working (running for Xs, polled N times)' — still running
           'Done\\n\\n<full report>'                  — completed
           'Errored:\\n<traceback>'                   — failed
-
-        Polling is for async (wait=False) delegations. If this task had no
-        reason to overlap other work, Delegate(wait=True) would have returned
-        the result directly with no polling — worth a thought next time.
         """
         node = self.node
         prefix = node._drain_notifications()
@@ -1807,7 +1819,7 @@ class DelegationTools:
         """Broadcast a newly-crossed 10%-overbudget threshold, once.
 
         Returned for THIS delegation (folded into the strategizer's own
-        GetStatus/Wait text — the strategizer polled, so it gets the
+        Wait text — the strategizer polled, so it gets the
         strategizer-shaped message, e.g. "call Done()"); queued for every
         OTHER Working delegation, which gets the worker-shaped message
         instead (a worker cannot call Done() — see
@@ -1861,6 +1873,9 @@ class DelegationTools:
                 node._pending_worker_msgs.setdefault(did, []).append(worker_msg)
         return [strategizer_msg]
 
+    @tool_examples(
+        "CancelDelegation('D004')",
+    )
     def CancelDelegation(self, delegation_id: str) -> str:
         """Detach a delegation whose RESULT you no longer want.
 
@@ -1869,23 +1884,22 @@ class DelegationTools:
         is slow: a Working delegation is almost always still producing real,
         ledgered evaluations (the worker runs in a background thread — slow is
         not stuck). Cancelling discards its REPORT, so its findings never reach
-        your conclusion; its already-written ledger rows remain (and still
+        your conclusion; its already-written store rows remain (and still
         count). If you just want to make progress meanwhile, do other work in
         parallel and let it finish. A delegation that has already produced
         ledgered evals is two-shot: call twice to confirm."""
         node = self.node
-        prefix = node._drain_notifications()
         with node._registry_lock:
             entry = node._registry.get(delegation_id)
             if entry is None:
                 return (
-                    prefix + f"No delegation {delegation_id!r}. "
+                    f"No delegation {delegation_id!r}. "
                     f"Known: {list(node._registry)}"
                 )
             st = entry.get("status")
             if st not in ("Working", "FollowUp"):
                 return (
-                    prefix + f"Delegation {delegation_id} is {st!r}, not "
+                    f"Delegation {delegation_id} is {st!r}, not "
                     "running — nothing to cancel."
                 )
             # Harden against impatience: a delegation already writing ledgered
@@ -1903,9 +1917,9 @@ class DelegationTools:
             if _stamped > 0 and not entry.get("cancel_pending"):
                 entry["cancel_pending"] = True
                 return (
-                    prefix + f"HOLD: {delegation_id} has already written "
+                    f"HOLD: {delegation_id} has already written "
                     f"{_stamped} provenance-stamped evaluation(s) to the "
-                    "canonical ledger — it is progressing, not stuck. "
+                    "canonical store — it is progressing, not stuck. "
                     "Cancelling discards its REPORT (its findings won't reach "
                     "your conclusion); the evals remain. If it is merely slow, "
                     "do other work in parallel and let it finish. If its result "
@@ -1919,16 +1933,16 @@ class DelegationTools:
                 "report is discarded (its ledgered evals remain)]"
             )
         return (
-            prefix + f"Delegation {delegation_id} cancelled (detached): "
+            f"Delegation {delegation_id} cancelled (detached): "
             "excluded from the run, its result will be ignored. You may "
             "proceed (e.g. call Done() if nothing else is running) or start "
             "other work."
         )
 
-    def Wait(self, delegation_id: str | None = None) -> str:
+    @tool_examples("Wait()", "Wait('D004')", "Wait('D004', block=False)")
+    def Wait(self, delegation_id: str | None = None, block: bool = True) -> str:
         """Block until a delegation finishes (Done or Errored), then return its
-        result. Use instead of polling with GetStatus() — holds the current
-        turn open with no extra turns consumed.
+        result — holds the current turn open with no extra turns consumed.
 
         OMIT delegation_id to wait for whichever delegation finishes FIRST.
         That is how you collect a fan-out: dispatch several with
@@ -1938,12 +1952,22 @@ class DelegationTools:
         specific worker, which leaves any others finishing unread, so prefer
         the bare form whenever more than one delegation is in flight.
 
+        block=False (with a delegation_id) → do not wait: return that
+        delegation's status right now — 'Working (running for Xs, polled N
+        times)', 'Done' + its full report, or 'Errored' + the traceback. Use it
+        to read a delegation that is gone without reporting, or to check on
+        one while you do other work; polling it faster does not make it finish
+        sooner.
+
         Refuses when there is nothing to wait for, and refuses rather than
         hanging when waiting cannot make progress — every in-flight delegation
         parked on a FollowUp (answer it with Reply), or already gone without
-        reporting (read it with GetStatus).
-
-        Returns the same text as GetStatus() once the delegation completes."""
+        reporting (read it with block=False)."""
+        if not block:
+            if delegation_id is None:
+                return ("ERROR: block=False reads ONE delegation's status — "
+                        "pass its delegation_id.")
+            return self._status(delegation_id)
         prefix = self.node._drain_notifications()
         if delegation_id is None:
             return self._wait_for_any(prefix)
@@ -2008,13 +2032,13 @@ class DelegationTools:
                 if blocked:
                     bits.append(
                         "parked on a FollowUp question "
-                        f"({', '.join(blocked)}) — call GetStatus(id) to "
+                        f"({', '.join(blocked)}) — call Wait(id, block=False) to "
                         "read it, then Reply(id, answer) to unblock it"
                     )
                 if dead:
                     bits.append(
                         f"no longer running but never reported "
-                        f"({', '.join(dead)}) — call GetStatus(id) for its "
+                        f"({', '.join(dead)}) — call Wait(id, block=False) for its "
                         "state"
                     )
                 return prefix + (
@@ -2084,31 +2108,35 @@ class DelegationTools:
                 out += wrap_notice(drift)
         return out
 
+    @tool_examples(
+        "Reply('D004', answer='Yes — treat the mass cap as hard.')",
+    )
     def Reply(self, delegation_id: str, answer: str) -> str:
         """Answer a worker's FollowUp question and unblock it.
 
-        Call this after GetStatus returns 'FollowUp: <question>'.
+        Call this after Wait returns 'FollowUp: <question>'.
         The answer is injected into the worker's context and it resumes.
         """
         node = self.node
-        prefix = node._drain_notifications()
         with node._registry_lock:
             entry = node._registry.get(delegation_id)
             if entry is None:
-                return prefix + f"ERROR: unknown delegation {delegation_id!r}."
+                return f"ERROR: unknown delegation {delegation_id!r}."
             if entry.get("status") != "FollowUp":
                 return (
-                    prefix +
                     f"ERROR: delegation {delegation_id!r} is not awaiting a "
                     f"FollowUp (status: {entry.get('status')!r})."
                 )
             entry["followup_answer"] = answer
             evt = entry["followup_event"]
         evt.set()
-        return prefix + f"Reply sent to {delegation_id}. Worker resuming."
+        return f"Reply sent to {delegation_id}. Worker resuming."
 
     # ── Asking the human ─────────────────────────────────────────────────────
 
+    @tool_examples(
+        "FollowUp('Is the 0.5 kg mass cap a hard constraint or a target?')",
+    )
     def FollowUp(self, question: str) -> str:
         """Ask your delegating party one clarifying question before proceeding.
 
@@ -2267,6 +2295,9 @@ class DelegationTools:
 
     # ── Episodic memory ──────────────────────────────────────────────────────
 
+    @tool_examples(
+        'RecallHistory(n=3)',
+    )
     def RecallHistory(self, n: int = 5) -> str:
         """Return the last n delegations received by this node as (task, deliverable) pairs.
         Call at the start of a delegation to recall prior work. Returns oldest-first."""
@@ -2294,8 +2325,8 @@ class DelegationTools:
                 "node — the entry/orchestrating node dispatches "
                 "delegations, it never receives one, so this is always "
                 "empty here (not a memory gap). Use RecallStore/"
-                "QueryStore for evaluation history, or HypothesisList/"
-                "HypothesisGet for the hypothesis ledger, instead."
+                "QueryStore for evaluation history, or HypothesisList "
+                "for the hypothesis ledger, instead."
             )
         records = node._delegation_log.query_received(node._name, n)
         if not records:
@@ -2308,31 +2339,6 @@ class DelegationTools:
                 f"Deliverable:\n{r['deliverable']}"
             )
         return "\n\n---\n\n".join(parts)
-
-    # ── Peer messaging ───────────────────────────────────────────────────────
-
-    def Confer(self, target: str, message: str) -> str:
-        """Send an async message to another node in the run.
-
-        Returns immediately — neither side blocks. Use it to correct or
-        steer a delegation that is ALREADY RUNNING, rather than waiting
-        for a wrong result and re-delegating.
-
-        target is a node name, a delegation id (D004 — address a
-        specific delegation when two of one role are running), or the
-        orchestrating node. A running delegation gets the message
-        prefixed onto its next tool result; an idle node's message waits
-        until that node itself Confers. The reply tells you which
-        happened — read it, because "delivered" and "queued" are
-        different outcomes.
-
-        Reply by convention with Confer(sender_name, "re #N: <answer>").
-        """
-        # Prepends the notification drain, which also delivers this node's
-        # own inbox — the one thing that differs from a worker's Confer.
-        prefix = self.node._drain_notifications()
-        return prefix + ConferTools(self.node, self.node._name).Confer(
-            target, message)
 
 
 _UNATTENDED = (
@@ -2384,7 +2390,10 @@ def build_delegation_closures(node) -> dict:
         "Reply": t.Reply,
         "FollowUp": t.FollowUp,
         "RecallHistory": t.RecallHistory,
-        "GetStatus": t.GetStatus,
         "CancelDelegation": t.CancelDelegation,
-        "Confer": t.Confer,
+        # One Confer for every node: the orchestrator's used to be a wrapper
+        # whose only job was to drain notifications first, carrying a copy of
+        # this docstring — two definitions of one prompt. The dispatch
+        # wrapper drains for every tool now, so the wrapper had nothing left.
+        "Confer": ConferTools(node, node._name).Confer,
     }

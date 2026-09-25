@@ -11,7 +11,7 @@ Marking has to happen HERE, at the injection sites, not in the viewer:
 
 * the bracket convention is incomplete — most notices carry a ``[TAG …]``
   head (``[SCIENCE MONITOR — …]``, ``[EVAL BUDGET …]``, ``[NUDGE]``) but the
-  GetStatus poll-escalation hints are bare prose (``NOTE: you polled …``);
+  Status-poll escalation hints are bare prose (``NOTE: you polled …``);
 * brackets are not a safe signal anyway — tools emit their own
   (``[output truncated to last …]``, ``[exited 1]``, ``[killed …]``), so a
   reader-side regex mislabels real tool output as an injection. The same

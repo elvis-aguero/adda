@@ -406,7 +406,7 @@ class InstrumentedDataGenerator(DataGenerator):
                     "error_type": "DEDUP_SKIPPED",
                     "message": (
                         f"{n_skipped} buffered eval(s) skipped: design already "
-                        "in the ledger (dedup-on-write)"),
+                        "in the store (dedup-on-write)"),
                 }
                 with diag.open("a", encoding="utf-8") as f:
                     f.write(_json.dumps(rec) + "\n")
@@ -416,14 +416,14 @@ class InstrumentedDataGenerator(DataGenerator):
     # ------------------------------------------------------------------
 
     def supersede(self, experiment_sample: ExperimentSample, **kwargs):
-        """Re-evaluate a design and REPLACE its existing FINISHED ledger row(s).
+        """Re-evaluate a design and REPLACE its existing FINISHED store row(s).
 
         The opt-in correction for a stale/wrong row (e.g. a pre-oracle-fix read):
         dedup-on-write otherwise keep-firsts, so a plain re-eval would be dropped.
         This runs the oracle fresh and, at flush, drops the design's prior canon
         row(s) and writes the new one — net-count-preserving, so the PROTECTED-
         store guard still holds (it blocks only SHRINK and FINISHED-regression,
-        neither of which a same-design replace does). Use sparingly; the ledger
+        neither of which a same-design replace does). Use sparingly; the store
         is otherwise append-only by design."""
         self._supersede_keys.add(
             self._coord_key(experiment_sample._input_data))
@@ -449,7 +449,7 @@ class InstrumentedDataGenerator(DataGenerator):
                     "node": self.delegation_id,
                     "error_type": "SUPERSEDE",
                     "message": (
-                        f"re-evaluated and REPLACED the ledger row for design "
+                        f"re-evaluated and REPLACED the store row for design "
                         f"{coords} (prior value overwritten in-ledger)"),
                 }
                 with diag.open("a", encoding="utf-8") as f:
@@ -510,7 +510,7 @@ class InstrumentedDataGenerator(DataGenerator):
             msg = (
                 f"[EVAL BUDGET — {self.delegation_id}] {n_total}/{budget} ledgered "
                 f"evals ({pct}% of the SOFT budget). The budget is soft (not "
-                "enforced), but this is the SHARED canonical ledger: every campaign "
+                "enforced), but this is the SHARED canonical store: every campaign "
                 "re-run APPENDS to it, so re-running a full campaign to debug burns "
                 "the budget fast. Debug on RunScratch / a stub, not the real oracle; "
                 "re-plan rather than spend more real evaluations."

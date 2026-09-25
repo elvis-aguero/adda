@@ -245,3 +245,50 @@ def test_every_knowledge_tool_follows_the_naming_scheme():
     for name, spec in _PROVIDERS.items():
         assert re.fullmatch(r"Consult[A-Z]\w+", spec["tool"]), (
             f"{name} registers {spec['tool']!r}, which is off-scheme")
+
+
+def test_no_rendered_text_calls_a_tool_that_is_no_longer_defined():
+    """The check above covers ``Consult*`` names only, which is why a merge of
+    thirteen other tools could leave the map saying ``CheckDeliverable()`` in
+    a gate's phase and ``MilestoneSkip(reason)`` as a gate's escape while
+    every test stayed green.
+
+    This one reads EVERYTHING the map renders -- prompt sections, tool
+    descriptions, gate messages, the map's own gate table -- and flags any
+    call-shaped token in the tool naming vocabulary that no longer has a
+    definition anywhere in the package. The vocabulary is the verbs tool
+    names are built from; a library class (``ExperimentData(``) is not in
+    it, and a retired tool name always is.
+    """
+    import importlib.util
+    import json
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[1]
+    html = root / "internal" / "promptmap.html"
+    if not html.exists():
+        pytest.skip("promptmap.html not generated; run `make promptmap`")
+    blob = re.search(r"const DATA = (\{.*?\});\n", html.read_text(), re.S)
+    assert blob, "promptmap.html carries no DATA block"
+    data = json.loads(blob.group(1))
+    text = json.dumps(data, ensure_ascii=False)
+
+    spec = importlib.util.spec_from_file_location(
+        "_promptmap_for_ghosts", root / "internal" / "tools" / "promptmap.py")
+    pm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pm)
+    defined = set(pm.tool_docs()) | set(pm.injected_tool_docs())
+    defined |= {spec["tool"] for spec in _PROVIDERS.values()}
+    # The backend-native tools (Read, Bash, ...) have no definition in this
+    # package; the roster is the authority that they exist.
+    defined |= {t for role in data["roles"] for t in role["tools"]}
+
+    verbs = ("Add|Ask|Cancel|Check|Confer|Consult|Corpus|Delegat|Delete|Done|"
+             "Edit|FollowUp|Get|Hypothesis|Ledger|Link|Milestone|Oracle|Query|"
+             "Read|Recall|Reply|Report|Run|Show|Wait|Write")
+    called = set(re.findall(rf"\b((?:{verbs})[A-Za-z]*)\(", text))
+    ghosts = sorted(called - defined)
+    assert not ghosts, (
+        f"the prompt map renders calls to {ghosts}, which no longer exist. "
+        "A tool was renamed or merged and this text was not updated.")

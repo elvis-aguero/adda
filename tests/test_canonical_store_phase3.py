@@ -884,9 +884,10 @@ def test_stamped_eval_count_counts_only_provenance_rows(tmp_path):
 
 
 def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
-    """LedgerBreakdown() reads the live stores under run_dir/experiment_data and
-    renders a per-experiment / per-delegation split — the report-time provenance
-    that prevents hardcoding stale counts (run 20260628T001710 UNGATED)."""
+    """RecallStore() (which absorbed LedgerBreakdown) reads the live stores
+    under run_dir/experiment_data and renders a per-experiment /
+    per-delegation split — the report-time provenance that prevents
+    hardcoding stale counts (run 20260628T001710 UNGATED)."""
     from adda._src.backends.base import Agent, Edge, Graph
     from adda._src.nodes import Node
     from f3dasm._src.design.domain import Domain
@@ -924,7 +925,7 @@ def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
 
     class StratAgent(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "LedgerBreakdown"})
+        tools = frozenset({"Done", "RecallStore"})
         description = "test strategizer"
 
     class WorkAgent(Agent):
@@ -939,9 +940,9 @@ def test_ledger_breakdown_tool_renders_per_experiment_split(tmp_path):
     node._current_notes_dir = notes_dir
     node.adapter.closure_tools.update(node._build_routing_closures())
 
-    assert "LedgerBreakdown" in node.adapter.closure_tools
-    out = node.adapter.closure_tools["LedgerBreakdown"]()
-    assert "default: 30 total" in out and "D004: 30" in out
-    assert "polar: 50 total" in out and "D006: 50" in out
+    assert "LedgerBreakdown" not in node.adapter.closure_tools
+    out = node.adapter.closure_tools["RecallStore"]()
+    assert "[default]" in out and "D004=30" in out
+    assert "[polar]" in out and "D006=50" in out
     # grounded against budget: 80 spent of 300 → 220 remaining (read, not computed)
     assert "80 of 300 eval budget spent" in out and "220 remaining" in out

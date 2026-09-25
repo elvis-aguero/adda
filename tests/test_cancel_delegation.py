@@ -22,9 +22,7 @@ def _node():
         role = "strategizer"
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so these behaviour tests still exercise them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                           "WriteDeliverable", "CheckDeliverable",
-                           "GetStatus", "CancelDelegation"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "RunNotebook", "Wait", "CancelDelegation"})
         description = "strategizer"
 
     class B(Agent):
@@ -71,7 +69,7 @@ def test_premature_done_is_a_soft_two_option_nudge():
     assert not out.lstrip().startswith("ERROR:")
     assert "two options" in out.lower()
     # CancelDelegation is dropped from production; the nudge no longer offers it.
-    assert "GetStatus" in out
+    assert "Wait" in out
     assert "CancelDelegation" not in out
     # soft return → NOT counted as a tool error
     assert n._error_counts.get("strategizer", 0) == 0
@@ -102,7 +100,7 @@ def test_poll_escalation_offers_options():
         "start_time": _t.monotonic(), "getstatus_count": 0}
     out = ""
     for _ in range(6):  # cross the >=5 escalation
-        out = n.adapter.closure_tools["GetStatus"]("D001")
+        out = n.adapter.closure_tools["Wait"]("D001", block=False)
     assert out.lstrip().startswith("Working")
     assert "do other work" in out.lower()          # (a) do something else
     assert "wait()" in out.lower()                 # (b) block, don't poll
@@ -201,7 +199,7 @@ def test_getstatus_reports_ledger_progress_when_evals_stamped(tmp_path):
     n = _node()
     n._current_notes_dir = run_dir / "debug" / "strategizer_notes"
     n._registry["D007"] = _working_entry()
-    out = n.adapter.closure_tools["GetStatus"]("D007")
+    out = n.adapter.closure_tools["Wait"]("D007", block=False)
     assert out.startswith("Working")
     assert "evals stamped" in out and "progressing" in out
 
@@ -215,7 +213,7 @@ def test_getstatus_flags_zero_progress_as_possible_stuck(tmp_path):
     n = _node()
     n._current_notes_dir = run_dir / "debug" / "strategizer_notes"
     n._registry["D008"] = _working_entry()
-    out = n.adapter.closure_tools["GetStatus"]("D008")
+    out = n.adapter.closure_tools["Wait"]("D008", block=False)
     assert "0 evals stamped" in out
 
 
@@ -230,7 +228,7 @@ def test_getstatus_surfaces_worker_progress_note(tmp_path):
     entry = _working_entry()
     entry["progress_note"] = ("LHS done, 250 evals; fitting GP", _t.monotonic())
     n._registry["D009"] = entry
-    out = n.adapter.closure_tools["GetStatus"]("D009")
+    out = n.adapter.closure_tools["Wait"]("D009", block=False)
     assert "worker note:" in out and "LHS done" in out
 
 
@@ -254,11 +252,14 @@ def _write_nb(study_dir, source):
 
 
 def test_check_deliverable_reports_pass_and_failure(tmp_path):
-    """CheckDeliverable runs pipeline.ipynb through the gate WITHOUT closing: PASS
+    """RunNotebook(gate=True) runs pipeline.ipynb through the gate WITHOUT closing: PASS
     for a grounded headline, full error for a broken notebook. Gives the agent
     sight to debug its own deliverable (the missing capability)."""
     n = _study_with_store(tmp_path, "C0")
-    check = n.adapter.closure_tools["CheckDeliverable"]
+    run = n.adapter.closure_tools["RunNotebook"]
+
+    def check():
+        return run(gate=True)
     # no notebook yet
     assert "no pipeline.ipynb" in check().lower()
     # broken notebook → full error, NOT YET
@@ -301,12 +302,15 @@ def test_readnote_lists_a_directory_so_delegation_code_is_discoverable(tmp_path)
 
 
 def test_check_deliverable_shows_countdown_and_bounds_iteration(tmp_path):
-    """CheckDeliverable has a visible 10-call budget: each call reports how many
+    """The gate check has a visible 10-call budget: each call reports how many
     remain (so the agent never hits an unseen wall), and the 11th refuses —
     converting an endless check↔write grind into a fast, bounded close."""
     n = _study_with_store(tmp_path, "C2")
     _write_nb(tmp_path, "import sys\nsys.exit(1)")  # never passes
-    check = n.adapter.closure_tools["CheckDeliverable"]
+    run = n.adapter.closure_tools["RunNotebook"]
+
+    def check():
+        return run(gate=True)
     first = check()
     assert "1/10 used" in first and "9 checks left" in first
     outs = [check() for _ in range(9)]   # calls 2..10
@@ -389,7 +393,7 @@ def test_ghost_delegation_flushed_interrupted_at_run_close(tmp_path):
 
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "WriteDeliverable", "CheckDeliverable"})
+        tools = frozenset({"Done", "WriteDeliverable", "RunNotebook"})
         description = "strategizer"
 
     class B(Agent):

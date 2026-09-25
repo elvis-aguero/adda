@@ -1,5 +1,5 @@
 """Any node granted the read tools must resolve its run context so
-RecallStore/QueryStore and HypothesisList/HypothesisGet actually work — on the
+RecallStore/QueryStore and HypothesisList actually work — on the
 entry strategizer, a delegating worker, and a leaf worker (critic) alike. Tools
 are declaration-gated (single source of truth = the Agent's `tools`).
 
@@ -8,7 +8,7 @@ datagenerator have outgoing edges (to the literature_reviewer), so
 graph_builder wraps them as StrategizerNodes and injects the read tools — but
 passes notes_dir only to the entry node. That left worker `_current_notes_dir`
 and `_ledger` both None, so RecallStore/QueryStore returned "Canonical store is
-empty" and HypothesisList/HypothesisGet returned "hypothesis ledger not
+empty" and the hypothesis read tools returned "hypothesis ledger not
 available" against stores holding hundreds of rows. Six worker delegations
 across the two runs hit this and fell back to hand-rolled
 ExperimentData.from_file / reading hypotheses.json.
@@ -65,8 +65,7 @@ def _worker_node(run_dir: Path) -> Node:
         role = "implementer"
         description = "i"
         # Declaration-driven: the worker must DECLARE the read tools to get them.
-        tools = frozenset({"RecallStore", "QueryStore",
-                           "HypothesisList", "HypothesisGet"})
+        tools = frozenset({"RecallStore", "QueryStore", "HypothesisList"})
 
     class Lit(Agent):
         role = "literature_reviewer"
@@ -155,10 +154,9 @@ def _leaf_worker(run_dir, agent_tools, study_dir=None):
 def test_leaf_worker_gets_declared_read_tools_and_they_work(tmp_path):
     run_dir, hid = _setup(tmp_path)
     n = _leaf_worker(run_dir, {"RecallStore", "QueryStore",
-                               "HypothesisList", "HypothesisGet"})
+                               "HypothesisList"})
     ct = n.adapter.closure_tools
-    assert {"RecallStore", "QueryStore", "HypothesisList",
-            "HypothesisGet"} <= set(ct)
+    assert {"RecallStore", "QueryStore", "HypothesisList"} <= set(ct)
     assert "empty" not in ct["RecallStore"]().lower()
     assert hid in ct["HypothesisList"]()
 

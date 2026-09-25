@@ -37,10 +37,9 @@ def _make_study(tmp_path: Path) -> Path:
 class _StrategistSpec(Agent):
     role = "strategizer"
     description = "Test strategizer."
-    # GetStatus is opt-in (plug-and-play) since the Confer rework; this scripted
-    # driver polls delegations deterministically, so it declares the opt-in.
-    tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                       "WriteDeliverable", "GetStatus", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"})
+    # This scripted driver polls delegations deterministically with
+    # Wait(block=False), and writes the notebook with WriteCell.
+    tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteCell", "Wait", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
 
 
 class _WorkerSpec(Agent):
@@ -328,10 +327,9 @@ def test_first_strategizer_message_carries_constraint_snapshot(tmp_path):
             if "MilestoneList" in tools:
                 import re as _re
                 for mid in _re.findall(r"M\d{3}", tools["MilestoneList"]()):
-                    tools["MilestoneSkip"](mid, "n/a for this test")
-            tools["WriteDeliverable"](
-                "pipeline.py", "# pipeline\nprint('REPRODUCED: 0.0')"
-            )
+                    tools["MilestoneSet"](mid, "SKIPPED", note="n/a for this test")
+            tools["WriteCell"]("analysis", why="headline",
+                               code="print('REPRODUCED: 0.0')")
             tools["Done"](summary="closing immediately")
             tools["Done"](summary="closing immediately")
             return "done"
@@ -398,7 +396,7 @@ def test_run_log_does_not_falsely_claim_the_notebook_was_stamped(tmp_path):
             tools = self.closure_tools
             if "MilestoneList" in tools:
                 for mid in re.findall(r"M\d{3}", tools["MilestoneList"]()):
-                    tools["MilestoneSkip"](mid, "n/a for this test")
+                    tools["MilestoneSet"](mid, "SKIPPED", note="n/a for this test")
             tools["Done"](summary="closing without a deliverable")
             tools["Done"](summary="closing without a deliverable")
             return "done"

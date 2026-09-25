@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from ..prompts.tool_catalog import tool_examples
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -258,6 +260,9 @@ class Agent:
         )
         corpus = LiteratureCorpus(corpus_dir)
 
+        @tool_examples(
+            "ConsultLiterature('lattice buckling under axial compression', top_k=5)",
+        )
         def ConsultLiterature(query: str, top_k: int = 10):
             """Passage search across the FULL-TEXT papers already in this
             study's persistent literature corpus (shared across every run of
@@ -266,6 +271,9 @@ class Agent:
             paper requires delegating to the literature_reviewer."""
             return corpus.search(query, int(top_k))
 
+        @tool_examples(
+            'CorpusList()',
+        )
         def CorpusList():
             """List corpus metadata — each paper tagged [full-text] or
             [abstract-only] so you know which you may quote from. The corpus
@@ -273,6 +281,9 @@ class Agent:
             contain a prior run's answer to your question."""
             return corpus.list_papers()
 
+        @tool_examples(
+            "CorpusGetPaper('<a paper_id from CorpusList>')",
+        )
         def CorpusGetPaper(paper_id: str):
             """Return the full extracted (page-annotated) text of one paper
             already in the study's persistent literature corpus."""

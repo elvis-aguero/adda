@@ -1,0 +1,202 @@
+"""The deliverable contract, as text an agent reads.
+
+It lived as one function in ``evaluation/notebook_exec.py`` that switched on
+the role and concatenated a role intro onto a shared body. Two things were
+wrong with that. It was prompt text owned by an evaluation module, and the
+rendered ``<deliverable_format>`` section spanned two string literals, so no
+single place in the repository held what the agent read and the prompt map
+could not offer it for editing.
+
+Now each piece is one named constant and each is its own tagged section: the
+role-specific part in ``<deliverable_authoring>`` (the strategizer, which
+authors the notebook) or ``<deliverable_context>`` (the roles that consume
+it), the shared structure and rules in ``<deliverable_format>``. The
+strategizer's intro also lost the line that said it "SUPERSEDES every
+'pipeline.py' / solution.md instruction above" — none remained to supersede.
+"""
+from __future__ import annotations
+
+__all__ = [
+    "DELIVERABLE_AUTHORING_STRATEGIZER",
+    "DELIVERABLE_CONTEXT_CRITIC",
+    "DELIVERABLE_CONTEXT_IMPLEMENTER",
+    "DELIVERABLE_FORMAT",
+]
+
+#: The strategizer alone authors the notebook, so only it is told how.
+DELIVERABLE_AUTHORING_STRATEGIZER = (
+    "DELIVERABLE = pipeline.ipynb — the single merged artifact: the writeup\n"
+    "AND the runnable, lazily-reproducible recipe in one. A SCIENTIFIC\n"
+    "NARRATIVE, not a dumped script. AUTHOR IT WITH THE STRUCTURED TOOLS —\n"
+    "they make the structure unforgeable plumbing:\n"
+    "  - WriteCell(name, …): create, edit or delete ONE named cell. A pillar\n"
+    "    cell (doe, data_generation, ml, optimization, analysis) takes `code`\n"
+    "    and its REQUIRED `why` explainer, so you cannot ship a structureless\n"
+    "    notebook or omit the WHY; 'problem', 'hypotheses' and 'verdict' take\n"
+    "    `content` and get their canonical heading. Cells stay in canonical\n"
+    "    order. Edit surgically (old/new find-replace, self-guarding) or in\n"
+    "    full with expected_rev (the rev from ShowNotebook), so you can't\n"
+    "    clobber a cell that changed since you saw it; delete=True drops a cell\n"
+    "    you decided not to keep. Do NOT hand-write notebook JSON.\n"
+    "  - ShowNotebook(name?): no arg → list every cell by NAME with its rev;\n"
+    "    with a name → that cell's full source + rev. READ before you edit.\n"
+    "  - RunScratch(code): run a snippet against a COPY of the store and\n"
+    "    see its output — INSPECT before you commit. Verify the store\n"
+    "    loads, a path resolves, a value is what you think, the analysis\n"
+    "    cell would populate — rather than discovering a silent bug only\n"
+    "    when the critic reads it. Free (no eval-budget cost, no mutation).\n"
+    "  - RunNotebook(upto?, gate?): run the notebook against a copy — cell by\n"
+    "    cell to find what breaks, or with gate=True through the exact\n"
+    "    reproduction gate Done() applies.\n"
+)
+
+#: The implementer writes phase code the strategizer lifts into cells.
+DELIVERABLE_CONTEXT_IMPLEMENTER = (
+    "DELIVERABLE CONTEXT: the run's single deliverable is pipeline.ipynb,\n"
+    "which the STRATEGIZER assembles from your work (you do NOT author it\n"
+    "— you have no notebook tools). Write your phase code so it drops\n"
+    "cleanly into one of the pillar cells below; return runnable,\n"
+    "non-stub code that reaches the oracle ONLY via get_evaluator().\n"
+)
+
+#: The critic judges the notebook against the structure; it does not author it.
+DELIVERABLE_CONTEXT_CRITIC = (
+    "DELIVERABLE CONTEXT: the run's single deliverable is pipeline.ipynb\n"
+    "(no pipeline.py, no solution.md — the notebook's markdown IS the\n"
+    "writeup). You JUDGE it against the structure below; you do not author\n"
+    "it.\n"
+)
+
+#: The structure and rules every role is held to.
+DELIVERABLE_FORMAT = (
+    "STRUCTURE (the Popperian spine + f3dasm's four pillars). Each code cell\n"
+    "carries name metadata = its pillar so the structure is machine-checkable:\n"
+    "  1. md  '# Problem & objective'  — question, min/max, success criterion.\n"
+    "  2. md  '## Hypotheses'          — registered hypotheses + falsifiable\n"
+    "         predictions (the Popperian setup; mirror the hypothesis ledger).\n"
+    "  3. md WHY-explainer + code name='doe'             — Domain + sampler\n"
+    "         (LOAD-OR-CREATE: load the store if present, else build the DoE).\n"
+    "  4. md WHY-explainer + code name='data_generation' — LAZY eval pattern:\n"
+    "         canonical_store = os.environ['F3DASM_CANONICAL_STORE']\n"
+    "         try:\n"
+    "             from adda import get_evaluator\n"
+    "             gen = get_evaluator()   # raises ValueError if oracle not registered\n"
+    "             gen.call(data, mode='sequential')  # skips FINISHED rows → 0 new\n"
+    "         except ValueError:\n"
+    "             data = ExperimentData.from_file(project_dir=canonical_store)\n"
+    "             assert len(data) > 0, 'Canonical store empty and no oracle registered'\n"
+    "         MULTI-EXPERIMENT LOADING: a run may hold more than one experiment\n"
+    "         (a baseline + design parametrizations), each its OWN ExperimentData\n"
+    "         store at a nested path — a single from_file() loads ONLY the default\n"
+    "         and silently misses the rest, and there is NO namespace column to\n"
+    "         split a single store on. Load them ALL with the one canonical call:\n"
+    "             from adda import load_experiments\n"
+    "             experiments = load_experiments()  # {'default': ExperimentData, 'polar': ...}\n"
+    "         then iterate experiments.items() per experiment. Works for a single-\n"
+    "         experiment run too (returns {'default': ...}).\n"
+    "         (Never use f3dasm._src.* paths — internal, unversioned, not public.)\n"
+    "         @datagenerator SCALAR RULE: if you use @datagenerator(output_names=['y'])\n"
+    "         directly, return the scalar value itself — NOT a dict. 'return val' not\n"
+    "         'return {\"y\": val}'. The output_names mapping already handles the name.\n"
+    "  5. md WHY-explainer + code name='ml'              — fit the surrogate.\n"
+    "  6. md WHY-explainer + code name='optimization'    — acquisition / BO loop.\n"
+    "  7. md name='verdict' '## Verdict & result' + code name='analysis' — for\n"
+    "         each hypothesis\n"
+    "         state SUPPORTED/FALSIFIED + WHY from the evidence; derive the\n"
+    "         headline value FROM the store — never hardcode the result —\n"
+    "         and print exactly 'REPRODUCED: <value>'. Also print exactly\n"
+    "         'CLAIMED_HEADLINE: <value>' = the SAME number your write-up\n"
+    "         states as the answer, so the gate can verify your prose matches\n"
+    "         your computation (they must agree; a mismatch — e.g. an idxmax\n"
+    "         selecting a noise row — is REJECTED). 'Derive from the store'\n"
+    "         means COMPUTE it in code from the loaded store (this is still\n"
+    "         LAZY — loading + computing adds zero new oracle rows); it does\n"
+    "         NOT mean pasting a number you remember. For per-experiment /\n"
+    "         per-delegation eval COUNTS, call RecallStore() and quote\n"
+    "         those — counts in a plan or a delegation's notes drift from what\n"
+    "         actually landed in the store.\n\n"
+    "RULES:\n"
+    "- NOTEBOOK-LEDGER SYNC: the hypotheses cell (## Hypotheses), the verdict cell\n"
+    "  (## Verdict & result), and the analysis cell MUST reflect the CURRENT status\n"
+    "  of every hypothesis in hypotheses.json. When you call HypothesisUpdate (e.g.\n"
+    "  SUPPORTED → INCONCLUSIVE), you MUST immediately update ALL THREE to match,\n"
+    "  BEFORE the gate check, with WriteCell: the hypotheses cell —\n"
+    "  WriteCell('hypotheses', content=…) — the verdict cell —\n"
+    "  WriteCell('verdict', content=…) — and the analysis cell —\n"
+    "  WriteCell('analysis', code=…).\n"
+    "  ShowNotebook('<name>') first for each cell's current rev (full-field edits\n"
+    "  require expected_rev).\n"
+    "  A notebook that shows a stale status will be REJECTED. Ledger and notebook\n"
+    "  must agree on every hypothesis status at gate time.\n"
+    "- STORE PATH = PORTABILITY. The reproduction must not depend on the machine\n"
+    "  that authored it, so read the canonical store path ONLY from the injected\n"
+    "  env var, never from a fallback or default that bakes in a local path:\n"
+    "  `canonical_store = os.environ['F3DASM_CANONICAL_STORE']` (bracket access —\n"
+    "  raises if missing). Read it at the TOP of every cell that needs it; the gate\n"
+    "  re-executes cells independently, so do not rely on a variable from a prior cell.\n"
+    "- NON-LEDGER REPO RESOURCES: to locate study code that is NOT in the store\n"
+    "  (e.g. a surrogate helper like `bo/cei_core.py`), anchor paths to\n"
+    "  `os.environ['F3DASM_STUDY_ROOT']` (the study repo root) — do NOT derive them\n"
+    "  from the store path, which points at a temp sandbox copy unrelated to the repo.\n"
+    "- OBJECTIVE COLUMN NAME: name your study's objective column EXPLICITLY —\n"
+    "  it is a fixed property of the study (e.g. `output_col = 'lambda_cr_nd'`).\n"
+    "  Do NOT auto-detect it by output order: `data.domain.output_names` is\n"
+    "  SORTED, so with MULTIPLE outputs a non-objective column (e.g. a binary\n"
+    "  constraint flag like 'coilable') can sort BEFORE the objective and get\n"
+    "  silently picked — the optimization then targets the wrong column and\n"
+    "  reports a bogus best. If you must derive it programmatically, read the\n"
+    "  REGISTERED objective from run_config['evaluator_output_names'][0], not\n"
+    "  the first non-provenance column.\n"
+    "- The four pillar cells (doe/data_generation/ml/optimization) are ALWAYS\n"
+    "  present. A pillar you did NOT run stays present but its explainer says\n"
+    "  plainly 'NOT executed (budget)'. Never silently drop a pillar.\n"
+    "- Every WHY-explainer justifies the methodological choice (cite the\n"
+    "  literature you gathered) — this is the rationale, not just description.\n"
+    "- LAZY + reproducible: the runtime executes the notebook against the\n"
+    "  shipped store and requires ZERO new oracle evals. Reach the oracle\n"
+    "  ONLY via get_evaluator(). Print the 'REPRODUCED: <value>' headline\n"
+    "  derived from the store — it is an informational marker the critic\n"
+    "  checks for provenance (it must trace to a real store row); the\n"
+    "  runtime no longer machine-matches it, so a constrained optimum is a\n"
+    "  valid headline even though it is not an objective extremum.\n"
+    "  LAZY is a cell-level invariant: a cell satisfies LAZY only if executing\n"
+    "  it against the shipped store produces zero new oracle rows. A guard that\n"
+    "  is reached only after computation has already begun does not satisfy this\n"
+    "  invariant — the cell is not lazy, it merely crashes late.\n"
+    "- CACHE-OR-LOAD HEAVY BLOCKS. Row-laziness covers ONLY oracle evals. A\n"
+    "  fitted surrogate or costly analysis YOU build must persist and\n"
+    "  load-if-present (cache-or-load), never refit on a re-run — else a re-run\n"
+    "  recomputes for minutes/hours though it adds zero oracle evals.\n"
+    "- NEVER call data.store() after evaluator.call(). The InstrumentedDataGenerator\n"
+    "  behind get_evaluator() already writes FINISHED rows to the canonical store.\n"
+    "  Calling data.store() afterwards overwrites those FINISHED rows with\n"
+    "  IN_PROGRESS — silently corrupting the store. Reload if you need the\n"
+    "  updated outputs: ExperimentData.from_file(project_dir=canonical_store).\n"
+    "- GUARD OPTIONAL IMPORTS = PORTABILITY. Heavy packages (torch, botorch,\n"
+    "  gpytorch, jax) are NOT guaranteed installed; an unguarded `import torch`\n"
+    "  breaks the notebook on any machine without it (again: reproduction must not\n"
+    "  assume the authoring environment). Guard them: `import importlib.util; if\n"
+    "  importlib.util.find_spec(\"torch\") is None: # use sklearn/scipy fallback`.\n"
+    "- WRITEUP STANDARD — the notebook is the companion to a paper, not a code\n"
+    "  dump. Write for a SKEPTICAL reader who accepts the result only if every\n"
+    "  claim is earned; someone who reads ONLY this notebook must come away\n"
+    "  agreeing WHAT the solution is AND WHY. Concretely:\n"
+    "    * CALIBRATE CONFIDENCE TO EVIDENCE. State a conclusion no more strongly\n"
+    "      than its test and its hypothesis posterior support. A hypothesis\n"
+    "      closed at a modest posterior is 'supported, with residual uncertainty',\n"
+    "      not a settled fact — the prose must carry that uncertainty. Reserve\n"
+    "      flat declarative claims ('X IS the global minimum') for what the\n"
+    "      evidence decisively shows; otherwise write 'best found', 'strong but\n"
+    "      not conclusive evidence that…'.\n"
+    "    * NO FAITH GAPS. Every quantitative claim (a 'best', a threshold, a\n"
+    "      'global'/'unique') traces to a store value or a cited delegation\n"
+    "      result. If a claim rests on COVERAGE/sampling ('no better region\n"
+    "      exists'), say so and state the residual risk — a sampling sweep is\n"
+    "      evidence, not a proof; a deceptive landscape can hide a narrow basin\n"
+    "      the sweep missed. Do not present a sampling argument as a proof.\n"
+    "    * ONE PRINCIPLED THRESHOLD per claim. Any cutoff used to judge a\n"
+    "      hypothesis is stated once, justified, and used identically in every\n"
+    "      cell — never a different number for the same claim across cells.\n"
+    "    * NO FILLER. Every sentence is rationale, evidence, or a stated\n"
+    "      limitation; cut restated boilerplate.\n"
+)

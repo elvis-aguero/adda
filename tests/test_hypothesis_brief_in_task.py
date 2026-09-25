@@ -53,7 +53,7 @@ class _Stub:
 def _node(run_dir: Path) -> Node:
     class S(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "Wait", "GetStatus"})
+        tools = frozenset({"Done", "Wait"})
         description = "s"
 
     class W(Agent):

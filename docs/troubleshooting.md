@@ -88,7 +88,7 @@ problem. Set it to `0` to disable.
 every 10% past 100% (100%, 110%, 120%, …) instead of repeating the same
 message every turn. Past `runtime: delegate_cutoff_multiple` (default `1.5`),
 `Delegate()` refuses to start anything NEW — an in-flight delegation is never
-touched, and `Wait`/`GetStatus`/`Done`/the deliverable tools stay open so the
+touched, and `Wait`/`Done`/the deliverable tools stay open so the
 run can still close. The hard backstop is `runtime: run_backstop_multiple`
 (default `2.0`), after which the run itself is force-closed. Both checks run
 *inside* the graph, though, so they can only fire on the run's own next turn

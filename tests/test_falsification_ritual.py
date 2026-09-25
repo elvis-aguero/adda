@@ -27,13 +27,9 @@ class _Stub:
 def _node(tmp_path, with_critic=False):
     class A(Agent):
         role = "strategizer"
-        # GetStatus is opt-in (plug-and-play) post-audit; opt in so the ritual
-        # tests can drive a delegation to completion via polling.
-        tools = frozenset({
-            "Done", "GetStatus", "HypothesisPropose", "HypothesisUpdate",
-            "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt",
-            "MilestoneList", "MilestonePropose", "MilestoneComplete",
-            "MilestoneSkip", "RecallStore", "QueryStore"})
+        # The ritual tests drive a delegation to completion by polling it
+        # with Wait(block=False).
+        tools = frozenset({"Done", "Wait", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "strategizer"
 
     class B(Agent):
@@ -59,12 +55,17 @@ def _propose(n, statement="thin walls buckle first", pred="best feasible f < 2.0
         statement, "an adequate sweep finds a feasible f >= 2.0", pred, 0.5)
 
 
-def _done_record(n, did="D001"):
+def _done_record(n, did="D001", started_at="2026-01-01T00:00:00+00:00"):
     n._delegation_log.record(
         id=did, from_node="strategizer", to_node="implementer",
         task="t", deliverable="## Report\n### Numbers\nbest f: 1.5\n",
-        hypothesis_ids=[], started_at="2026-01-01T00:00:00+00:00",
-        completed_at="2026-01-01T01:00:00+00:00", status="DONE")
+        hypothesis_ids=[], started_at=started_at,
+        completed_at="2099-01-01T01:00:00+00:00", status="DONE")
+
+
+def _after_now():
+    """A start time later than any hypothesis proposed in this test."""
+    return "2099-01-01T00:00:00+00:00"
 
 
 def test_hypothesis_link_deferred_while_process_backlog_open(tmp_path):
@@ -112,8 +113,15 @@ def test_mark_attempt_unknown_id_returns_false(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# 2. LinkFalsificationAttempt closure — links only, never a verdict
+# 2. HypothesisUpdate(falsification_attempt=True) — the post-hoc link
 # --------------------------------------------------------------------------
+
+def _verdict(n, hid, did="D001", **kw):
+    return n.adapter.closure_tools["HypothesisUpdate"](
+        hid, "FALSIFIED", "the sweep found a feasible f of 1.5", 0.1,
+        evidence={"delegation": did, "numbers": {"best f": 1.5}},
+        falsification_attempt=True, **kw)
+
 
 def test_link_falsification_links_registry_and_log(tmp_path):
     n = _node(tmp_path)
@@ -121,11 +129,9 @@ def test_link_falsification_links_registry_and_log(tmp_path):
     n._registry["D001"] = {
         "status": "Done", "result": "r", "is_falsification_attempt": False,
         "hypothesis_ids": [], "reconciled": False}
-    _done_record(n)
-    out = n.adapter.closure_tools["LinkFalsificationAttempt"]("D001", hid)
-    assert "Linked" in out and hid in out
-    assert "best feasible f < 2.0" in out  # quotes the pre-registered prediction
-    assert "does NOT" in out.lower() or "not" in out.lower()
+    _done_record(n, started_at=_after_now())
+    out = _verdict(n, hid)
+    assert not out.startswith("ERROR"), out
     assert n._registry["D001"]["is_falsification_attempt"] is True
     assert hid in n._registry["D001"]["hypothesis_ids"]
     assert n._registry["D001"]["reconciled"] is True
@@ -134,29 +140,49 @@ def test_link_falsification_links_registry_and_log(tmp_path):
     assert rec["attempt_linked_post_hoc"] is True
 
 
-def test_link_does_not_record_a_verdict(tmp_path):
-    """No rubber-stamp: linking leaves the hypothesis status untouched."""
+def test_link_refuses_a_delegation_that_began_before_the_hypothesis(tmp_path):
+    """The anti-retrofit rule, enforced in code: a delegation that started
+    before the hypothesis was registered cannot have been designed to test
+    it, so it cannot be linked as its falsification attempt."""
     n = _node(tmp_path)
     hid = _propose(n)
     n._registry["D001"] = {
         "status": "Done", "result": "r", "is_falsification_attempt": False,
         "hypothesis_ids": [], "reconciled": False}
-    _done_record(n)
-    n.adapter.closure_tools["LinkFalsificationAttempt"]("D001", hid)
+    _done_record(n, started_at="2000-01-01T00:00:00+00:00")
+    out = _verdict(n, hid)
+    assert out.startswith("ERROR") and "before" in out
+    assert n._registry["D001"]["is_falsification_attempt"] is False
+
+
+def test_a_refused_link_records_no_verdict(tmp_path):
+    """No rubber-stamp: when the link is refused, the verdict is not
+    recorded either — the hypothesis stays OPEN."""
+    n = _node(tmp_path)
+    hid = _propose(n)
+    out = _verdict(n, hid, did="D999")
+    assert "unknown delegation" in out.lower()
     statuses = [h["current_status"] for h in n._ledger.list_all()
                 if h["id"] == hid]
-    assert statuses == ["OPEN"]  # link did not close it
+    assert statuses == ["OPEN"]
 
 
 def test_link_errors_on_unknown_delegation_or_hypothesis(tmp_path):
     n = _node(tmp_path)
     hid = _propose(n)
-    assert "unknown delegation" in n.adapter.closure_tools[
-        "LinkFalsificationAttempt"]("D999", hid).lower()
+    assert "unknown delegation" in _verdict(n, hid, did="D999").lower()
     n._registry["D001"] = {"status": "Done", "hypothesis_ids": [],
                            "is_falsification_attempt": False}
-    assert "not found" in n.adapter.closure_tools[
-        "LinkFalsificationAttempt"]("D001", "H99").lower()
+    assert "not found" in _verdict(n, "H99").lower()
+
+
+def test_link_needs_the_attempt_as_evidence(tmp_path):
+    n = _node(tmp_path)
+    hid = _propose(n)
+    out = n.adapter.closure_tools["HypothesisUpdate"](
+        hid, "FALSIFIED", "no evidence named", 0.1, evidence=None,
+        falsification_attempt=True)
+    assert out.startswith("ERROR") and "evidence" in out
 
 
 # --------------------------------------------------------------------------
@@ -170,12 +196,12 @@ def test_ritual_fires_once_then_reconciled(tmp_path):
         "status": "Done", "result": "the report", "start_time": 0.0,
         "is_falsification_attempt": False, "hypothesis_ids": [],
         "reconciled": False, "getstatus_count": 0}
-    out1 = n.adapter.closure_tools["GetStatus"]("D001")
+    out1 = n.adapter.closure_tools["Wait"]("D001", block=False)
     assert out1.lstrip().startswith("Done")
     assert "FALSIFICATION CHECKPOINT" in out1
     assert n._registry["D001"]["reconciled"] is True
     # second read: no checkpoint (fire-once)
-    out2 = n.adapter.closure_tools["GetStatus"]("D001")
+    out2 = n.adapter.closure_tools["Wait"]("D001", block=False)
     assert "FALSIFICATION CHECKPOINT" not in out2
 
 
@@ -186,11 +212,11 @@ def test_ritual_surfaces_pre_registered_prediction(tmp_path):
         "status": "Done", "result": "r", "start_time": 0.0,
         "is_falsification_attempt": False, "hypothesis_ids": [],
         "reconciled": False, "getstatus_count": 0}
-    out = n.adapter.closure_tools["GetStatus"]("D001")
+    out = n.adapter.closure_tools["Wait"]("D001", block=False)
     assert "resonance >= 8000 Hz" in out  # the immutable, pre-registered text
-    # the ritual must point at LinkFalsificationAttempt, never invite a new
+    # the ritual must point at the post-hoc link, never invite a new
     # criterion after seeing the result
-    assert "LinkFalsificationAttempt" in out
+    assert "falsification_attempt=True" in out
     assert "do not retrofit" in out.lower()
 
 
@@ -201,7 +227,7 @@ def test_predeclared_attempt_collapses_to_verdict_reminder(tmp_path):
         "status": "Done", "result": "r", "start_time": 0.0,
         "is_falsification_attempt": True, "hypothesis_ids": [hid],
         "reconciled": False, "getstatus_count": 0}
-    out = n.adapter.closure_tools["GetStatus"]("D001")
+    out = n.adapter.closure_tools["Wait"]("D001", block=False)
     assert "FALSIFICATION CHECKPOINT" in out
     assert "declared a falsification attempt" in out.lower()
     assert hid in out and "HypothesisUpdate" in out
@@ -213,7 +239,7 @@ def test_exploration_with_no_hypotheses_passes_clean(tmp_path):
         "status": "Done", "result": "r", "start_time": 0.0,
         "is_falsification_attempt": False, "hypothesis_ids": [],
         "reconciled": False, "getstatus_count": 0}
-    out = n.adapter.closure_tools["GetStatus"]("D001")
+    out = n.adapter.closure_tools["Wait"]("D001", block=False)
     assert out.lstrip().startswith("Done")
     assert "CHECKPOINT" not in out
 
@@ -269,14 +295,16 @@ def test_supported_confirm_without_attack_then_allowed_after_link(tmp_path):
         f"Expected success after falsification attempt, got: {out2!r}")
 
 
-def test_hypothesis_list_tolerates_stray_kwarg(tmp_path):
-    """ROOT 4: HypothesisList takes no real args, but agents confuse it with
-    Delegate/AskForFeedback and pass hypothesis_ids. That stray kwarg must be
-    absorbed (list ALL hypotheses) — never crash the turn with a TypeError."""
+def test_hypothesis_list_with_ids_returns_full_entries(tmp_path):
+    """HypothesisList absorbed HypothesisGet. Agents already passed it
+    hypothesis_ids — the kwarg used to be accepted and ignored so it would not
+    crash the turn; now it does what they meant: the full entry of each."""
     n = _node(tmp_path)
     hid = _propose(n)
     hlist = n.adapter.closure_tools["HypothesisList"]
-    out = hlist(hypothesis_ids=[hid])          # the exact observed fumble
-    assert not out.startswith("ERROR")
-    assert hid in out                          # listed despite the bad kwarg
-    assert hlist() == out                      # arg is ignored: identical to no-arg
+    brief = hlist()
+    assert hid in brief and "status_log" not in brief
+    full = hlist(hypothesis_ids=[hid])
+    assert '"status_log"' in full and hid in full
+    assert hlist(hypothesis_ids=hid) == full           # a bare id works too
+    assert "not found" in hlist(hypothesis_ids=["H99"])

@@ -473,9 +473,9 @@ def test_shared_assert_helper_is_executor_agnostic(tmp_path):
     assert "REPRODUCED: 1.0" in r_py.stdout and "REPRODUCED: 1.0" in r_nb.stdout
 
 
-def test_write_deliverable_accepts_ipynb(tmp_path):
-    """WriteDeliverable now accepts .ipynb (valid nbformat JSON); malformed
-    notebook JSON is rejected at write time, not deferred to the gate."""
+def test_write_deliverable_refuses_the_notebook(tmp_path):
+    """The notebook is written cell by cell; WriteDeliverable refuses it, valid
+    JSON or not, so its structure cannot be bypassed with a raw write."""
     study_dir = tmp_path / "study"; study_dir.mkdir()
 
     class A(Agent):
@@ -493,8 +493,8 @@ def test_write_deliverable_accepts_ipynb(tmp_path):
     wd = node.adapter.closure_tools["WriteDeliverable"]
 
     good = nbformat.writes(build_notebook([{"type": "code", "source": "print(1)"}]))
-    assert "Written" in wd("pipeline.ipynb", good)
-    assert (study_dir / "pipeline.ipynb").exists()
+    assert wd("pipeline.ipynb", good).startswith("ERROR")
+    assert not (study_dir / "pipeline.ipynb").exists()
     assert "ERROR" in wd("bad.ipynb", "{ this is not notebook json }")
 
 

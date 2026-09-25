@@ -262,8 +262,9 @@ def test_ask_for_feedback_hypothesis_ids_schema_accepts_none_and_empty(
 # HypothesisList.hypothesis_ids (accepted-and-ignored)
 # ---------------------------------------------------------------------------
 
-def test_hypothesis_list_schema_accepts_string_and_still_lists_all(
-        tmp_path):
+def test_hypothesis_list_schema_accepts_string_encoded_ids(tmp_path):
+    """A JSON-string list is decoded, and the ids it names are the ones
+    returned in full — HypothesisList absorbed HypothesisGet."""
     node, worker = _node(tmp_path)
     h1, h2 = _register_two_hypotheses(node)
     tools = _structured_tools(node._build_routing_closures())
@@ -271,7 +272,7 @@ def test_hypothesis_list_schema_accepts_string_and_still_lists_all(
     result = tools["HypothesisList"].invoke(
         {"hypothesis_ids": json.dumps([h1])})
 
-    assert h1 in result and h2 in result, result
+    assert f'"id": "{h1}"' in result and h2 not in result, result
 
 
 # ---------------------------------------------------------------------------

@@ -472,6 +472,18 @@ class OrchestrationMixin:
         Also coerces string-typed arguments to int/float/bool when the
         function annotation requests it (handles Ollama passing "5" for
         an int parameter).
+
+        And it is where pending notices reach the agent: whatever
+        ``_drain_notifications`` holds is APPENDED to the tool's result — after
+        it, so a result's leading word stays what callers dispatch on ("Done",
+        "Working", "ERROR:", an id like "H3"). That
+        used to be hand-copied into 18 tool bodies and missing from the rest —
+        the store tools never delivered a notice — so whether the agent heard
+        about a finished delegation depended on which tool it happened to
+        call. A tool that places notices itself (the status poll keeps its
+        status word first; Wait drains while it blocks; Done composes its own
+        reply) still does, and finds the queue already empty here. A
+        worker's closures pass through here too, and are never drained into.
         """
         import functools as _functools
         import inspect as _inspect
@@ -531,6 +543,14 @@ class OrchestrationMixin:
                         "ERROR_RETURN",
                         result[:300],
                     )
+                # Only for this node's OWN tools. A dispatched worker's
+                # closures are wrapped by the delegating node too (it records
+                # their errors), and draining there would hand the
+                # orchestrator's notices to the worker.
+                if isinstance(result, str) and node_name == node._name:
+                    notices = node._drain_notifications()
+                    if notices.strip():
+                        result = result.rstrip("\n") + "\n\n" + notices.rstrip("\n")
                 return result
             except Exception as exc:
                 node._record_tool_error(
@@ -606,7 +626,7 @@ class OrchestrationMixin:
         # them (else gate-vs-tool deadlock — audit run 20260624T021359).
         self._required_deliverables = state.get("required_deliverables") or []
 
-        # Store on node so GetStatus() can compute delegation timeout
+        # Store on node so the status poll can compute delegation timeout
         self._budget_seconds = state.get("budget_seconds")
         self._run_start = state.get("start_time")
         self._budget_usd = state.get("budget_usd")
@@ -677,7 +697,8 @@ class OrchestrationMixin:
                         "Begin wrapping up — call Done() soon. Don't cancel a "
                         "progressing delegation under time pressure; its evals "
                         "are already ledgered and cancelling only loses its "
-                        "report (GetStatus shows whether it's progressing)."
+                        "report (Wait(id, block=False) shows whether it's "
+                        "progressing)."
                     ),
                 })
 
@@ -872,7 +893,7 @@ class OrchestrationMixin:
 
         Reproduction is owned entirely by the Done() gate (it runs the
         controlled gate before any close and declares a FAILED run after a
-        bounded number of sighted attempts — see CheckDeliverable), so there is
+        bounded number of sighted attempts — see RunNotebook(gate=True)), so there is
         no separate post-accept repro check here; this handles only deliverable
         presence and un-accepted termination.
         """
@@ -909,7 +930,7 @@ class OrchestrationMixin:
             return None
         msg = (
             f"Delegations still running: {working}. They are"
-            " progressing — poll with GetStatus() and call Done() only"
+            " progressing — collect them with Wait and call Done() only"
             " once they report (then write any remaining deliverables"
             " from their results). Do NOT close early. This wait does"
             " NOT count against your finish attempts; the run's time"
@@ -946,7 +967,7 @@ class OrchestrationMixin:
             if working:
                 problems.append(
                     f"Delegations still running: {working}."
-                    " Poll them with GetStatus() and call Done()"
+                    " Collect them with Wait and call Done()"
                     " once they finish."
                 )
             else:

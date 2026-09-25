@@ -66,9 +66,9 @@ def test_unknown_cell_name_is_flagged_not_executed(tmp_path):
     assert t["missing_name"] is True and t["executed"] == 0
 
 
-def test_runpipelinecell_is_wired_into_the_strategizer():
+def test_runnotebook_is_wired_into_the_strategizer():
     from adda._src.agents.strategizer import StrategizerAgent
-    assert "RunPipelineCell" in StrategizerAgent.tools
+    assert "RunNotebook" in StrategizerAgent.tools
 
 
 def test_runpipelinecell_upto_name_accepts_a_custom_phase_cell(tmp_path):
@@ -101,7 +101,7 @@ def test_runpipelinecell_upto_name_accepts_a_custom_phase_cell(tmp_path):
 
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "AddPipelineCell", "RunPipelineCell"})
+        tools = frozenset({"Done", "WriteCell", "RunNotebook"})
         description = "s"
 
     class B(Agent):
@@ -128,14 +128,13 @@ def test_runpipelinecell_upto_name_accepts_a_custom_phase_cell(tmp_path):
     node._current_notes_dir = run_dir / "debug" / "strategizer_notes"
     tools = node._build_routing_closures()
 
-    tools["AddPipelineCell"]("robustness_check", "extra sanity pass",
-                              "print('custom phase ran')")
-    out = tools["RunPipelineCell"]("robustness_check")
+    tools["WriteCell"]("robustness_check", why="extra sanity pass", code="print('custom phase ran')")
+    out = tools["RunNotebook"](upto="robustness_check")
     assert "No CODE cell named" not in out
     assert "custom phase ran" in out
 
     # A genuinely absent name still errors, but no longer falsely implies
     # only the 5 pillars are valid.
-    out2 = tools["RunPipelineCell"]("does_not_exist")
+    out2 = tools["RunNotebook"](upto="does_not_exist")
     assert "No CODE cell named 'does_not_exist'" in out2
-    assert "custom-phase cell you added via AddPipelineCell" in out2
+    assert "custom code cell you added" in out2

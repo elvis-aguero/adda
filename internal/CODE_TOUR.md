@@ -86,7 +86,7 @@ and nothing after it runs:
 1. `_pending_refusal` — nothing closes while a delegation is in flight (soft)
 2. `_capture_retrospective` — the exit interview
 3. `_milestone_gate` — process backlog must be DONE or SKIPPED (hard; knob
-   `milestones_enabled`; escape `MilestoneSkip(reason)`)
+   `milestones_enabled`; escape `MilestoneSet(id, 'SKIPPED', note=reason)`)
 4. `_first_call_warning` — Done() is two-shot
 5. `_must_reproduce` — the deliverable must execute before a critic turn is
    spent on it (hard, bounded)

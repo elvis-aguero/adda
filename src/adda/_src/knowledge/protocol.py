@@ -66,6 +66,8 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from ..prompts.tool_catalog import tool_examples
+
 __all__ = ["MAX_REPLY_CHARS", "KnowledgeProvider", "clip", "providers"]
 
 #: Cap on any single reply. 6000 characters is roughly 1500 tokens -- enough
@@ -155,6 +157,10 @@ def _build_adda_closures() -> dict:
 
     api = AddaApi()
 
+    @tool_examples(
+        "ConsultAdda('how is a run kept honest')",
+        "ConsultAdda('adda.load_experiments', source=True)",
+    )
     def ConsultAdda(query: str, limit: int = 8, source: bool = False):
         """Look up adda itself — its API, its concepts and its rules.
 

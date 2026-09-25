@@ -81,13 +81,11 @@ class Feature:
 
 
 #: Notebook-authoring surface. Done is deliberately excluded — a run still has
-#: to be able to close.
-NOTEBOOK_TOOLS = frozenset({
-    "WriteDeliverable", "CheckDeliverable",
-    "AddPipelineCell", "AddPipelineMarkdownCell",
-    "EditPipelineCell", "DeletePipelineCell",
-    "ShowNotebook", "RunPipelineCell",
-})
+#: to be able to close. So is WriteDeliverable: it writes the study's declared
+#: EXTRA deliverables (e.g. replicate.py), which the Done() gate requires
+#: whether or not there is a notebook, so stripping it with the notebook would
+#: deadlock that arm.
+NOTEBOOK_TOOLS = frozenset({"WriteCell", "ShowNotebook", "RunNotebook"})
 
 FEATURES: tuple[Feature, ...] = (
     Feature(
@@ -95,7 +93,6 @@ FEATURES: tuple[Feature, ...] = (
         default=True,
         tools=frozenset({
             "HypothesisPropose", "HypothesisUpdate", "HypothesisList",
-            "HypothesisGet", "LinkFalsificationAttempt",
         }),
         sections=("hypothesis_ledger",),
         # The Popperian workflow IS the strategizer's operating model: it is
@@ -109,8 +106,7 @@ FEATURES: tuple[Feature, ...] = (
         key="milestones_enabled",
         default=True,
         tools=frozenset({
-            "MilestoneList", "MilestonePropose", "MilestoneComplete",
-            "MilestoneSkip",
+            "MilestoneList", "MilestoneSet",
         }),
     ),
     Feature(

@@ -24,10 +24,7 @@ class _Stub:
 def _node(tmp_path):
     class S(Agent):
         role = "strategizer"
-        tools = frozenset({
-            "Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList",
-            "HypothesisGet", "LinkFalsificationAttempt", "RecallStore",
-            "QueryStore"})
+        tools = frozenset({"Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "RecallStore", "QueryStore"})
         description = "strategizer"
 
     class I(Agent):

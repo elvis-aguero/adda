@@ -1,5 +1,5 @@
-"""Read-only ledger/store query tools: RecallStore, OracleStatus, QueryStore,
-HypothesisList, HypothesisGet, ReadProblemStatement. Declaration-gated and
+"""Read-only store and hypothesis query tools: RecallStore, OracleStatus,
+QueryStore, HypothesisList, ReadProblemStatement. Declaration-gated and
 shared verbatim across every node (see nodes/node.py::Node._init_capabilities)
 via build_declared_shared_closures()."""
 from __future__ import annotations
@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from ....prompts.tool_catalog import tool_examples
 from ._decoding import decode_list_arg
 
 # Returned verbatim by RecallStore and QueryStore alike; one string so the
@@ -135,7 +136,7 @@ class StoreTools:
         then every store in the run: the canonical/default store PLUS every
         design-namespace sibling (run_dir/experiment_data/<namespace>/). A bare
         run_dir/experiment_data read misses namespace evals entirely — the same
-        gap LedgerBreakdown/ScienceMonitor/GetStatus/CancelDelegation already
+        gap ScienceMonitor/Wait/CancelDelegation already
         avoid by going through experiment_stores() (backlog #21).
         """
         rd = self.node._resolve_run_dir()
@@ -191,25 +192,58 @@ class StoreTools:
 
     # ── The tools ────────────────────────────────────────────────────────────
 
+    @tool_examples("RecallStore()")
     def RecallStore(self) -> str:
-        """Summary of the run's canonical evaluation ledger: rows per
-        delegation/source, output ranges. Call before deciding the next
-        delegation."""
+        """Summary of the run's canonical evaluation store: rows per
+        delegation and source, output ranges, and the evaluation budget spent
+        and remaining — one block per experiment (the baseline store is
+        'default'; each design namespace by its registered name). Call it
+        before deciding the next delegation, and at report time to DERIVE eval
+        counts for the writeup and hypothesis evidence instead of copying a
+        number from a plan or a worker's notes (those drift from what actually
+        landed in the store). Read-only; does NOT spend eval budget.
+
+        Output ends with the run total, e.g.::
+
+            — run total: 140 of 300 eval budget spent — 160 remaining"""
         from ....evaluation.ledger_summary import RunStateSummary
         stores = self._all_store_dirs()
         blocks: list[tuple[str, str]] = []
+        grand = 0
         for i, store in enumerate(stores):
             summary = RunStateSummary.from_store(store)
             if summary is None:
                 continue
             label = "default" if i == 0 else store.name
             blocks.append((label, summary.format()))
+            grand += int(summary.n_rows)
         if not blocks:
             return _EMPTY_STORE
-        if len(blocks) == 1:
-            return blocks[0][1]
-        return "\n\n".join(f"[{label}]\n{body}" for label, body in blocks)
+        body = (blocks[0][1] if len(blocks) == 1 else "\n\n".join(
+            f"[{label}]\n{body}" for label, body in blocks))
+        return body + "\n" + self._budget_line(grand)
 
+    def _budget_line(self, grand: int) -> str:
+        """Spent/remaining, READ against the budget rather than hand-computed
+        (agents flip spent<->remaining: run 20260628T130525 asserted "200
+        remain" when 200 were spent of 300 → UNGATED)."""
+        budget = None
+        rd = self.node._resolve_run_dir()
+        try:
+            import json as _json
+            cfg = rd / "debug" / "run_config.json" if rd is not None else None
+            if cfg is not None and cfg.exists():
+                budget = _json.loads(cfg.read_text()).get("eval_budget")
+        except Exception:  # noqa: BLE001
+            budget = None
+        if budget:
+            return (f"— run total: {grand} of {int(budget)} eval budget spent "
+                    f"— {max(int(budget) - grand, 0)} remaining")
+        return f"— run total: {grand} ledgered evaluations"
+
+    @tool_examples(
+        'OracleStatus()',
+    )
     def OracleStatus(self) -> str:
         """The CURRENT canonical oracle registration — reads
         run_config.json fresh on every call, never from memory of an
@@ -253,6 +287,10 @@ class StoreTools:
             )
         return "\n".join(lines)
 
+    @tool_examples(
+        "QueryStore(where='feasible==1 and margin>=0.10', n_best=5, output_name='f')",
+        "QueryStore(delegation_ids=['D003'], columns=['x1', 'f'], limit=50)",
+    )
     def QueryStore(
         self,
         delegation_ids: str | list | None = None,
@@ -265,7 +303,7 @@ class StoreTools:
         limit: int | None = None,
         columns: str | list | None = None,
     ) -> str:
-        """Filtered view of the evaluation ledger (e.g. rows from D001+D003
+        """Filtered view of the evaluation store (e.g. rows from D001+D003
         only). Use to ground claims or to select training subsets; cite row
         values from here as evidence.
 
@@ -333,18 +371,27 @@ class StoreTools:
                 filtered, filtered_in, output_name, n_best, minimize, columns)
         return _default_listing(filtered, filtered_in, limit, columns)
 
+    @tool_examples("HypothesisList()", "HypothesisList(['H1', 'H3'])")
     def HypothesisList(self, hypothesis_ids: list | str | None = None) -> str:
-        """List all hypotheses with id, status, belief, statement.
+        """List hypotheses.
 
-        Takes no real arguments — it always lists ALL hypotheses. The
-        optional `hypothesis_ids` (a list, or a string a model may emit
-        instead) is accepted-and-ignored so a stray kwarg (agents confuse
-        this with Delegate/AskForFeedback) returns the list instead of
-        crashing the turn with a TypeError or a schema validation error.
-        """
+        No argument → every hypothesis, one line each: id, status, belief,
+        statement. With `hypothesis_ids` (a list, or a single id) → the FULL
+        entry of each named hypothesis, including its status_log."""
         led = self.node._read_ledger()
         if led is None:
             return "ERROR: hypothesis ledger not available in this run."
+        ids = decode_list_arg(hypothesis_ids) if hypothesis_ids else []
+        if isinstance(ids, str):
+            ids = [ids]
+        if ids:
+            import json as _json
+            out = []
+            for hid in ids:
+                entry = led.get(hid)
+                out.append(_json.dumps(entry, indent=2) if entry is not None
+                           else f"ERROR: hypothesis {hid!r} not found.")
+            return "\n\n".join(out)
         items = led.list_all()
         if not items:
             return "No hypotheses proposed yet."
@@ -354,17 +401,9 @@ class StoreTools:
             for h in items
         )
 
-    def HypothesisGet(self, hypothesis_id: str) -> str:
-        """Get full hypothesis entry including status_log."""
-        led = self.node._read_ledger()
-        if led is None:
-            return "ERROR: hypothesis ledger not available in this run."
-        import json as _json
-        entry = led.get(hypothesis_id)
-        if entry is None:
-            return f"ERROR: hypothesis {hypothesis_id!r} not found."
-        return _json.dumps(entry, indent=2)
-
+    @tool_examples(
+        'ReadProblemStatement()',
+    )
     def ReadProblemStatement(self) -> str:
         """The run's PROBLEM_STATEMENT.md verbatim: what this run is
         actually trying to establish, and its stated success/termination
@@ -450,7 +489,7 @@ def _no_match_message(df_out, d_ids, source, namespace, where, joined) -> str:
         "(a non-existent column returns an ERROR, not 0)."
     )
     return (
-        f"0 of {len(df_out)} scanned ledger row(s) match "
+        f"0 of {len(df_out)} scanned store row(s) match "
         f"[{crit}]. {verdict}{hint}"
     )
 
@@ -585,7 +624,6 @@ def build_declared_shared_closures(node, agent_tools) -> dict:
         "OracleStatus": t.OracleStatus,
         "QueryStore": t.QueryStore,
         "HypothesisList": t.HypothesisList,
-        "HypothesisGet": t.HypothesisGet,
         "ReadProblemStatement": t.ReadProblemStatement,
     }
     return {name: fn for name, fn in available.items() if name in agent_tools}

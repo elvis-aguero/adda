@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ..prompts.tool_catalog import tool_examples
+
 _REQUIRED_SUBSECTIONS = [
     "### Actions taken",
     "### Conclusions",
@@ -31,7 +33,7 @@ def _resolve_delegation_evals(
 ) -> int:
     """Return the eval count for a delegation.
 
-    Prefers the row count from the canonical ledger (authoritative, summed across
+    Prefers the row count from the canonical store (authoritative, summed across
     every experiment store) over the honour-system ReportEvals self-report. Falls
     back to *reported* for delegations that wrote no rows (e.g. lookup-direct
     studies).
@@ -84,13 +86,13 @@ def _reconcile_delegation_evals(
     claimed: int,
     source_registered: bool,
 ) -> tuple[int, bool, int]:
-    """Reconcile a worker's claimed eval count against the ledger.
+    """Reconcile a worker's claimed eval count against the store.
 
     The ledger (summed across every experiment store) is the single source of
     truth. When a ground-truth source is registered and the worker CLAIMED
     evaluations but NONE are provenance-stamped in ANY store, the delegation
     evaluated off-ledger: the truthful count is 0. Otherwise fall back to the
-    usual resolution (ledger rows if any, else the honour-system claim — e.g.
+    usual resolution (store rows if any, else the honour-system claim — e.g.
     lookup-direct studies). Provenance-based, so a worker that selected its
     experiment at the call site is reconciled correctly (run 20260627T045747).
 
@@ -229,6 +231,10 @@ def _extract_report_section(text: str, name: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+@tool_examples(
+    'ConsultHandbook()',
+    "ConsultHandbook('falsification-charter')",
+)
 def _consult_handbook(query: str = "") -> str:
     """ConsultHandbook tool: browse the curated handbook of project conventions.
 

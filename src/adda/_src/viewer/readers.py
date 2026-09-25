@@ -65,12 +65,14 @@ _KNOWN_TOOL_DOCS: dict[str, str] = {
     "Delegate": "Hand a task to another node in the graph; returns "
                 "immediately (async) unless wait=True.",
     "Wait": "Block until a delegation finishes (Done or Errored), then "
-            "return its result — use instead of polling GetStatus().",
+            "return its result; with block=False, report its status now.",
     "Reply": "Answer a worker's FollowUp question and unblock it.",
     "FollowUp": "Ask the delegating party one clarifying question before "
                 "proceeding.",
     "RecallHistory": "Return the last N delegations received by this node "
                       "as (task, deliverable) pairs.",
+    # Retired tool names stay described: the viewer reads runs recorded
+    # before they were folded into Wait / WriteCell / RunNotebook.
     "GetStatus": "Poll a background delegation; also delivers push "
                  "notifications.",
     "Done": "Signal end of run with a summary of findings (two-shot: first "

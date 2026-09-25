@@ -1,5 +1,5 @@
-"""The tool closures an orchestrating node is handed (Delegate/Parallel/GetStatus/Done/FollowUp/
-WriteNote/ReadNote/WriteDeliverable/RecallStore/QueryStore/AskForFeedback +
+"""The tool closures an orchestrating node is handed (Delegate/Wait/Done/FollowUp/
+WriteNote/ReadNote/WriteCell/RecallStore/QueryStore/AskForFeedback +
 hypothesis tools). Built per-node; the node is passed in so closures reach its
 state. Built by an orchestrating node via Node._build_routing_closures.
 
@@ -95,42 +95,21 @@ def build_routing_tools(node) -> dict:
 
     if "Done" in _agent_tools:
         closures["Done"] = _fb["Done"]
-    if "EditPipelineCell" in _agent_tools:
-        closures["EditPipelineCell"] = _nb["EditPipelineCell"]
-    if "DeletePipelineCell" in _agent_tools:
-        closures["DeletePipelineCell"] = _nb["DeletePipelineCell"]
-    if "ShowNotebook" in _agent_tools:
-        closures["ShowNotebook"] = _nb["ShowNotebook"]
-    if "RunScratch" in _agent_tools:
-        closures["RunScratch"] = _nb["RunScratch"]
-    if "LedgerBreakdown" in _agent_tools:
-        closures["LedgerBreakdown"] = _nb["LedgerBreakdown"]
-    if "RunPipelineCell" in _agent_tools:
-        closures["RunPipelineCell"] = _nb["RunPipelineCell"]
+    for _t in ("WriteCell", "ShowNotebook", "RunNotebook", "RunScratch",
+               "WriteDeliverable"):
+        if _t in _agent_tools:
+            closures[_t] = _nb[_t]
     if "WriteNote" in _agent_tools:
         closures["WriteNote"] = _notes["WriteNote"]
     if "ReadNote" in _agent_tools:
         closures["ReadNote"] = _notes["ReadNote"]
-    if "WriteDeliverable" in _agent_tools:
-        closures["WriteDeliverable"] = _nb["WriteDeliverable"]
-    if "CheckDeliverable" in _agent_tools:
-        closures["CheckDeliverable"] = _nb["CheckDeliverable"]
-    if "AddPipelineCell" in _agent_tools:
-        closures["AddPipelineCell"] = _nb["AddPipelineCell"]
-    if "AddPipelineMarkdownCell" in _agent_tools:
-        closures["AddPipelineMarkdownCell"] = _nb["AddPipelineMarkdownCell"]
     if "Confer" in _agent_tools:
         closures["Confer"] = _dele["Confer"]
-    # GetStatus / CancelDelegation are now OPT-IN (plug-and-play), not always-on.
-    # Their defs above are intact; they are simply not granted unless an agent
-    # lists them in its `tools`. PRODUCTION agents do not, so:
-    #   - GetStatus is dropped: completions are PUSHED via _notifications each
-    #     turn + Confer supersedes polling.
-    #   - CancelDelegation is dropped (drop-but-don't-delete) pending the
-    #     cooperative-stop decision; restore by adding the name to an agent's
-    #     `tools` (one line), exactly like the debugger agent is plug-and-play.
-    if "GetStatus" in _agent_tools:
-        closures["GetStatus"] = _dele["GetStatus"]
+    # CancelDelegation is OPT-IN (plug-and-play), not always-on: its def is
+    # intact but it is granted only to an agent that lists it in its `tools`.
+    # PRODUCTION agents do not — dropped (drop-but-don't-delete) pending the
+    # cooperative-stop decision; restore by adding the name to an agent's
+    # `tools` (one line), exactly like the debugger agent is plug-and-play.
     if "CancelDelegation" in _agent_tools:
         closures["CancelDelegation"] = _dele["CancelDelegation"]
     # ConsultHandbook is injected universally at adapter construction
@@ -140,8 +119,9 @@ def build_routing_tools(node) -> dict:
     # Agent's `tools`), exactly like the notebook/Done/notes tools above.
     # Every ledger tool MUTATES — hypothesis (epistemics) or milestone
     # (process policy) — so they go only to agents that declare them; a
-    # stateless leaf must never mutate a shared ledger. The read-only
-    # HypothesisList/HypothesisGet come from the shared builder below instead.
+    # stateless leaf must never mutate a shared ledger (MilestoneList is the
+    # one read, kept beside its write). The read-only HypothesisList comes
+    # from the shared builder below instead.
     for _t, _fn in build_ledger_closures(node).items():
         if _t in _agent_tools:
             closures[_t] = _fn

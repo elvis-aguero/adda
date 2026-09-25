@@ -20,7 +20,8 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **What:** the run's record of falsifiable hypotheses and their verdicts (OPEN /
   SUPPORTED / FALSIFIED / INCONCLUSIVE), append-only.
 - **Where:** `hypothesis_ledger.py`; the strategizer's mutate closures
-  (`HypothesisPropose`/`HypothesisUpdate`/`LinkFalsificationAttempt`) in
+  (`HypothesisPropose`/`HypothesisUpdate`, whose `falsification_attempt=True`
+  links an unflagged delegation as an attempt) in
   `nodes/tools/routing/ledger.py`; per-run file `debug/strategizer_notes/hypotheses.json`.
 - **Status:** core.
 
@@ -125,7 +126,8 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **What:** the strategizer delegates work to specialist agents and they report back;
   agents can ask one clarifying question, send async messages, and report progress.
 - **Where:** `nodes/tools/routing/`, `nodes/orchestration.py`.
-- **Tools:** `Delegate`*, `GetStatus`, `Wait`, `FollowUp`, `Confer`, `ReportEvals`.
+- **Tools:** `Delegate`*, `Wait`, `FollowUp`, `Confer`, `ReportEvals`.
+  (`Wait(id, block=False)` is the status poll that used to be `GetStatus`.)
   (*Delegate is injected dynamically, not in a static `tools` set.)
 - **Fan-out harvesting:** `Wait()` takes an OPTIONAL delegation id. Bare
   `Wait()` blocks until whichever delegation finishes first and returns that
@@ -156,15 +158,16 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   constrained optima — audit 20260624T021359).
 - **Where:** `notebook_exec.py`, `nodes/tools/routing/`, `nodes/reproduction_gate.py`
   (`_reproduction_gate`).
-- **Tools:** `AddPipelineCell`, `AddPipelineMarkdownCell`, `EditPipelineCell`,
-  `DeletePipelineCell`, `ShowNotebook`, `WriteDeliverable`, `CheckDeliverable`.
+- **Tools:** `WriteCell` (create / edit / delete one named cell — what were
+  four tools), `ShowNotebook`, `RunNotebook(gate=True)` (the Done() gate as a
+  dry run), and `WriteDeliverable` for the study's declared extra files only.
 - **Status:** core (the live deliverable).
 
 ### Per-cell notebook debugger (#13)
 - **What:** run pipeline.ipynb against a *copy* of the ledger and get a per-cell
   pass/error trace, so a failing cell can be pinpointed instead of guessing.
-- **Where:** `notebook_exec.py` `diagnose_notebook`, `RunPipelineCell` closure.
-- **Tools:** `RunPipelineCell`. **Status:** done.
+- **Where:** `notebook_exec.py` `diagnose_notebook`, `RunNotebook` closure.
+- **Tools:** `RunNotebook` (its default mode). **Status:** done.
 
 ### Unified, SDK-compatible Bash surface: `Bash` + `BashOutput` + `KillShell` (#24)
 - **What:** one tool SURFACE across every backend. `Bash(command, timeout?,
@@ -190,7 +193,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **Status:** done. Supersedes the earlier `WaitForProcess` stopgap.
 
 ### Sandbox study-root anchor (`F3DASM_STUDY_ROOT`)
-- **What:** the reproduction gate, `CheckDeliverable`, `RunPipelineCell`, and the
+- **What:** the reproduction gate, `RunNotebook` (both modes), and the
   scratch tool run against a *temp copy* of the ledger, so the store path has no
   relationship to the study repo. They now also inject `F3DASM_STUDY_ROOT` (a
   read-only anchor to the real study root) so a pillar cell can locate non-ledger
@@ -199,7 +202,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   only the store is a copy; the study root is read-only reference code. The three
   duplicated sandbox-env blocks are unified in one `sandbox_env()` helper.
 - **Where:** `notebook_exec.py` `sandbox_env`; call sites in `nodes/reproduction_gate.py`
-  (`_reproduction_gate`) and `nodes/tools/routing/` (`RunPipelineCell`, scratch).
+  (`_reproduction_gate`) and `nodes/tools/routing/` (`RunNotebook`, scratch).
 - **Status:** telemetry/ergonomics, not a new cap. Run 20260705T181941 friction.
 
 ### Output-column guidance fix
@@ -233,7 +236,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   `run_setup.py` (`register_evaluator_entrypoint(namespace=…)`), `backends/base.py`
   + `backends/claude.py` (`set_namespace`/`F3DASM_NAMESPACE`), `graph_state.py`
   (`Delegation.namespace`), `routing.py` (`Delegate` + registration handoff).
-- **Report-time provenance:** `LedgerBreakdown()` (strategizer tool) shows per-experiment
+- **Report-time provenance:** `RecallStore()` (it absorbed `LedgerBreakdown`) shows per-experiment
   / per-delegation ledgered eval counts read live from the stores
   (`ledger_summary.ledger_breakdown`), so a writeup DERIVES counts from the ledger instead
   of hardcoding stale plan numbers (run 20260628T001710 hardcoded 70 polar evals; the
@@ -248,7 +251,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   only the default; this is the one call pipeline.ipynb uses to load them all. Wired
   into the deliverable spec (`notebook_exec.py`) and the injected paths block
   (`agent_prompts.py`).
-- **Tools:** `LedgerBreakdown`.
+- **Tools:** `RecallStore`.
 - **Status:** plumbing complete (branch `exp/open-design-space`); gated on the 2D
   experiment before the baseline study adopts it.
 
@@ -381,7 +384,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **Where:** `resource_backend.py`. **Status:** done (Linux cgroup backend = future).
 
 ### Per-delegation resource telemetry
-- **What:** `GetStatus` shows a delegation's eval count, current RSS, and **peak
+- **What:** `Wait(id, block=False)` shows a delegation's eval count, current RSS, and **peak
   RSS** (the high-water across the watcher's ticks), so the strategizer can see a
   fat or fattening campaign (and `Confer` the implementer).
 - **Where:** `nodes/tools/routing/`, `watchdog_cleanup.py`
@@ -424,7 +427,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 
 ### Per-delegation ledger KPIs auto-appended to the report
 - **What:** when a delegation completes, a KPI footer is appended to the result
-  the strategizer auto-receives (GetStatus/Confer/Done) — per-eval wall-time
+  the strategizer auto-receives (Wait/Confer/Done) — per-eval wall-time
   (median, max), this delegation's total eval wall-time, the ledger total, and —
   when a wall budget is set — the time remaining (telemetry, not a hard stop), so
   the median is actionable (≈ remaining / median = sims still affordable).
@@ -526,7 +529,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   1. Past `runtime: delegate_cutoff_multiple` × the (soft) time budget (default
      `1.5`, disabled at `<= 0`), `Delegate()` refuses to start a NEW
      delegation — an actionable `ERROR:` string, no delegation registered.
-     Every other close-out tool (`Wait`, `GetStatus`, `Done`, deliverable
+     Every other close-out tool (`Wait`, `Done`, deliverable
      tools) is untouched, and an in-flight delegation started before the
      cutoff is never cancelled or disturbed — only NEW ones are refused, so
      the run always has a path to close. Sits one rung below
@@ -697,11 +700,11 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **Where:** `nodes/notices.py` (`wrap_notice` / `split_notices` and the
   marker); seven injection sites in `nodes/orchestration.py`
   (`_drain_notifications`) and `nodes/tools/routing/` (worker-message
-  drains in `ReportEvals`/`FollowUp`/`GetStatus`, the `GetStatus` poll hints,
+  drains in `ReportEvals`/`FollowUp`/the status poll, the status-poll hints,
   and the science-monitor drains in both `Wait` branches);
   `viewer/app.py::_tool_result_html` renders them.
 - **Why marked at the source, not detected by the reader:** the pre-existing
-  `[TAG …]` convention is incomplete (the `GetStatus` poll hints are bare
+  `[TAG …]` convention is incomplete (the status-poll hints are bare
   prose), and brackets are not a safe signal because tools emit their own
   (`[exited 1]`, `[output truncated to last …]`). A marker is a tag rather
   than a control character because this text is part of the agent's prompt
@@ -733,7 +736,7 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
   that drain claims the queue destructively; anywhere else and an addressed
   note would be swallowed before the router saw it. Delivery therefore
   depends on the orchestrator taking a tool call (it drains on
-  `GetStatus`/`Wait`), so a strategizer blocked in a long synchronous
+  `Wait`), so a strategizer blocked in a long synchronous
   `Delegate(wait=True)` will not route a nudge until it returns.
 - **Where:** `src/adda/_src/operator_channel.py` (`ask_question`,
   `answer_question`, `queue_note`, `drain_note_rows`, `touch_watch`,
@@ -748,15 +751,15 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 | Tool | Feature |
 |---|---|
 | `Delegate` | Delegation (dynamically injected) |
-| `GetStatus` · `Wait` · `FollowUp` · `Confer` · `ReportEvals` | Delegation + messaging + telemetry |
-| `AddPipelineCell` · `AddPipelineMarkdownCell` · `EditPipelineCell` · `DeletePipelineCell` · `ShowNotebook` · `WriteDeliverable` · `CheckDeliverable` | Notebook authoring + reproduction gate. Three markdown-cell names are RESERVED with an auto-added canonical heading (`problem`, `hypotheses`, `verdict` — the last is `<deliverable_format>` step 7, `## Verdict & result`, ahead of the analysis pillar); any other name is a free-form custom narrative cell (content used verbatim, no forced heading), mirroring `AddPipelineCell`'s own non-standard-phase philosophy — the deliverable's structure must not block what an agent needs to say. Only a pillar name or `<pillar>__why` collides and is rejected |
-| `RunPipelineCell` | Per-cell notebook debugger (#13) |
+| `Wait` · `FollowUp` · `Confer` · `ReportEvals` | Delegation + messaging + telemetry (`Wait(id, block=False)` is the status poll) |
+| `WriteCell` · `ShowNotebook` · `WriteDeliverable` | Notebook authoring (`WriteDeliverable`: the study's declared extra files only). Three markdown-cell names are RESERVED with an auto-added canonical heading (`problem`, `hypotheses`, `verdict` — the last is `<deliverable_format>` step 7, `## Verdict & result`, ahead of the analysis pillar); any other name is a free-form custom narrative cell (content used verbatim, no forced heading), mirroring the custom code-phase philosophy — the deliverable's structure must not block what an agent needs to say. Only a pillar name or `<pillar>__why` collides and is rejected |
+| `RunNotebook` | Per-cell notebook debugger (#13), and with `gate=True` the reproduction gate as a dry run |
 | `RunScratch` | Worker scratch execution against a ledger copy |
 | `WriteNote` · `ReadNote` | Agent scratch notes |
 | `RecallStore` · `QueryStore` | Canonical evaluation-store read (declaration-gated; shared verbatim across node types — strategizer, workers, and the critic). `QueryStore` accepts `where=` (a pandas `query()` expression over the joined inputs+outputs frame — compound feasibility predicates + arithmetic on input columns in one call) and `limit=` (lifts the 20-row default listing cap); bad `where` returns a column-listing ERROR, never raises (spec 09). The list/`where` view surfaces INPUT columns (a design's coordinates, not just its outputs), and an empty match reports `0 of N scanned` as an unambiguous TRUE zero (distinct from a missing column, which ERRORs) — UNLESS `where=` exact-`==`s a float-dtype column, in which case the zero-row message hedges ("NOT necessarily a true zero") and hints at an `abs(x-v)<1e-6` tolerance predicate instead, since a real row can be silently excluded by float representation error alone (run 20260825T012642: independently hit by the strategizer and 3 of 8 critic rounds, each paying a diagnosis cycle to find the same workaround). Heuristic (regex `col==literal`, checked against the joined frame's dtype), scoped to int/bool exact-`==` staying untouched (e.g. `feasible==1` is not float-precision-sensitive). `columns=` narrows which COLUMNS are shown (the row-narrowing analogue of `where=`/`limit=`) — a wide store's rows can overflow the response token limit even after `where=`/`limit=` have already cut the row count down (run 20260816T013744, 449,879 chars from a single call); `_namespace` is always kept regardless of `columns=`, and a requested column that doesn't exist returns a column-listing ERROR, same convention as `where=` |
 | `OracleStatus` | On-demand read of the CURRENT canonical oracle registration — `run_config.json`'s `evaluator_entrypoint`/`evaluator_lookup`/`evaluator_output_names` plus any per-namespace `oracles` entries, read fresh on every call. Declaration-gated to strategizer/datagenerator/implementer/critic/debugger. Exists because `register_evaluator_entrypoint()` can repoint the canonical entrypoint BETWEEN delegations (whenever a datagenerator delegation authors/extends the generator), and the only prior signal was a one-shot `[Evaluator registered: ...]` notification a busy agent could fail to reconcile with its own stated beliefs — which cost one wasted real evaluation job before a delegation self-diagnosed via bit-identical outputs (run 20260717T014507) |
-| `HypothesisPropose` · `HypothesisUpdate` · `HypothesisList` · `HypothesisGet` · `LinkFalsificationAttempt` | Hypothesis ledger — read (List/Get) is declaration-gated to any node; mutate (Propose/Update/Link) is strategizer-only |
-| `MilestoneList` · `MilestonePropose` · `MilestoneComplete` · `MilestoneSkip` | Process milestones (strategizer-only) |
+| `HypothesisPropose` · `HypothesisUpdate` · `HypothesisList` | Hypothesis ledger — read (`HypothesisList`, full entries when given ids) is declaration-gated to any node; mutate (Propose/Update, which also links a post-hoc falsification attempt) is strategizer-only |
+| `MilestoneList` · `MilestoneSet` | Process milestones (strategizer-only); `MilestoneSet` adds, completes or skips |
 | `ReadProblemStatement` | Verbatim read of PROBLEM_STATEMENT.md — declaration-gated, uniform across all 6 default agents (strategizer, literature_reviewer, data_generator, implementer, critic, debugger). Replaces the old `inject_problem_statement` push flag (which only ever set `True` on the literature reviewer and was checked only inside `Delegate()`, so no other worker could reach the run's actual goal/success-criteria text at all) with one pull-based tool every agent has equally |
 | `BashOutput` · `KillShell` | Bash companions: poll / stop a backgrounded shell (#24) |
 | `Read` · `Write` · `Edit` · `Bash` · `Glob` · `Grep` | Workspace file/shell primitives |

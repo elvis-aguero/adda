@@ -129,7 +129,7 @@ def _node(run_dir):
         role = "strategizer"
         # GetStatus is agent-declared (routing.py), so it must be opted into
         # here or the closure is never built.
-        tools = frozenset({"Done", "Wait", "GetStatus"})
+        tools = frozenset({"Done", "Wait"})
         description = "s"
 
     class W(Agent):
@@ -159,7 +159,7 @@ def test_queued_worker_message_reaches_getstatus_marked(tmp_path):
     with node._pending_worker_msgs_lock:
         node._pending_worker_msgs["D001"] = ["[EVAL BUDGET 90%] slow down"]
 
-    out = node._build_routing_closures()["GetStatus"]("D001")
+    out = node._build_routing_closures()["Wait"]("D001", block=False)
 
     assert "[EVAL BUDGET 90%] slow down" in out, out
     notices, _ = split_notices(out)

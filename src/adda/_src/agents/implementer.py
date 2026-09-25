@@ -13,13 +13,13 @@ from ..knowledge.idioms import F3DASM_CORE_IDIOMS
 
 IMPLEMENTER_SYSTEM_PROMPT = """\
 <role>
-You are the F3dasmImplementerAgent in the agentic-f3dasm research system.
+You are the F3dasmImplementerAgent in adda, a specialist-team research system built on f3dasm.
 You own the ENTIRE f3dasm pipeline execution:
 
   1. DoE-EXECUTION — run the initial space-filling design (sample + evaluate)
   2. DATA-GENERATION RUNS — run the DataGenerator Block over design points
      using get_evaluator(), so every evaluation is provenance-tagged in the
-     canonical ledger
+     canonical store
   3. MACHINE LEARNING — fit a surrogate model to the accumulated data
   4. OPTIMIZATION — run the surrogate-guided exploit loop to find the optimum
 
@@ -109,16 +109,16 @@ PREFER f3dasm primitives over raw numpy/scipy equivalents.
   # oversubscription and OOM. Real parallelism is the study's cluster-array
   # submission path, one evaluation per array task.
   # gen.supersede(sample) re-runs the oracle and REPLACES that design's existing
-  # row. Use ONLY to correct a stale FINISHED row; the ledger is append-only.
+  # row. Use ONLY to correct a stale FINISHED row; the store is append-only.
 
   METERED vs FREE. Only get_evaluator() calls are metered — they count against
-  the budget and become the ledger your claims rest on. Everything else is FREE:
+  the budget and become the store your claims rest on. Everything else is FREE:
   fitting surrogates, running optimizers and acquisition functions,
   backtracking, your own artifacts, reading D000/pool rows. Build and run your
   OWN DataGenerators (a fitted surrogate as a predictor) freely — do NOT route
   those through get_evaluator(); they are not ground truth.
 
-  NUMBERS TRACE TO THE LEDGER. Eval counts and the best-point headline come from
+  NUMBERS TRACE TO THE STORE. Eval counts and the best-point headline come from
   ONE place: the canonical ExperimentData store written by get_evaluator(); its
   per-delegation row count IS the authoritative count. Read it with
   ExperimentData.from_file(project_dir=...). NEVER call .store() on that
@@ -131,7 +131,7 @@ PREFER f3dasm primitives over raw numpy/scipy equivalents.
       data = ExperimentData.from_file(project_dir=r"<experiment_data_dir>")
       df_in, df_out = data.to_pandas()
       d000 = df_out[df_out["_delegation_id"] == "D000"]
-  Never re-read the raw pool CSV — the ledger is the single source.
+  Never re-read the raw pool CSV — the store is the single source.
 
   NO LIVE ORACLE. In some studies get_evaluator() raises, and that is correct:
   D000 is your TRAINING DATA. Fit a surrogate on it, optimise the surrogate to a
@@ -187,7 +187,7 @@ PREFER f3dasm primitives over raw numpy/scipy equivalents.
       gp.fit(X_train, y_train)
   evaluator.flush()
   # botorch (SingleTaskGP + qExpectedImprovement + optimize_acqf on X normalised
-  # to [0,1]^d) is the GPU / high-dimensional alternative, same ledger contract.
+  # to [0,1]^d) is the GPU / high-dimensional alternative, same store contract.
   # Run the WHOLE loop in ONE delegation: fit → propose → evaluate → refit.
   # Never hand back after a single iteration asking to be re-delegated.
 </doe_playbook>
@@ -475,7 +475,7 @@ class F3dasmImplementerAgent(Agent):
         "Bash", "Edit", "Read", "Write", "Glob", "Grep", "ReportEvals",
         # read-only ledger/store access (single source of truth for tools)
         "RecallStore", "QueryStore", "OracleStatus",
-        "HypothesisList", "HypothesisGet",
+        "HypothesisList",
         # manage a backgrounded long job (e.g. an external simulator): poll it / stop it.
         # Bash auto-backgrounds a command past its timeout and returns a
         # bash_id; these are its SDK companions.

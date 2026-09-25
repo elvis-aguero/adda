@@ -21,7 +21,7 @@ _RETRO_TEXT_CAP = 8000
 # HIGH-PRECISION tokens — NOT natural-language words like "retry", "connection",
 # "timeout", "network", that routinely appear in a tool's own advice text and
 # caused agent errors to be mis-tagged "system" (run 20260630T164908: an
-# EditPipelineCell "...and retry." advice tagged the agent error as system).
+# a notebook edit's "...and retry." advice tagged the agent error as system).
 _SYSTEM_EXC_TYPES = frozenset({
     "ConnectionError", "Timeout", "ReadTimeout", "ConnectTimeout",
     "HTTPError", "ChunkedEncodingError", "ProxyError", "SSLError",

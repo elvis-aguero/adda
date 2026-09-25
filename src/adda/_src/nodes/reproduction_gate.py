@@ -4,7 +4,7 @@
 ``_reproduction_gate`` executes the notebook in a hermetic sandbox copy of
 the canonical store and checks it exits cleanly, adds zero oracle rows,
 rewrites none, and (when it declares both) states the headline it computes.
-Called from ``CheckDeliverable`` and ``Done`` (``nodes/tools/routing``). A
+Called from ``RunNotebook(gate=True)`` and ``Done`` (``nodes/tools/routing``). A
 mixin on the strategizer.
 """
 
@@ -130,10 +130,11 @@ class ReproductionGateMixin:
         )
         if deliverable is None:
             return None  # absence is handled by _missing_deliverables
-        notes = self._current_notes_dir
-        if notes is None:
+        # One resolver for "where is this run", shared with the store tools:
+        # they used to compute it separately and could disagree.
+        if self._current_notes_dir is None:
             return None  # no run dir context (e.g. non-debug) — skip the gate
-        run_dir = notes.parent.parent              # …/runs/<id>
+        run_dir = self._resolve_run_dir()          # …/runs/<id>
         store_dir = run_dir / "experiment_data"
         run_config = run_dir / "debug" / "run_config.json"
 
@@ -141,7 +142,7 @@ class ReproductionGateMixin:
             """(row_count, content_hash) across EVERY store under store_root:
             the canonical/default store PLUS every design-namespace sibling
             (store_root/<namespace>/), via the same experiment_stores()
-            aggregation LedgerBreakdown/ScienceMonitor already use. A single-
+            aggregation RecallStore/ScienceMonitor already use. A single-
             store read here would miss a non-lazy write into a namespace
             store during "reproduction" — the sandbox copy this is called
             against is already namespace-complete (namespace stores nest
@@ -191,7 +192,7 @@ class ReproductionGateMixin:
         # (re-evaluating) writes its evals into the THROWAWAY copy — we detect
         # that as "not lazy" while the real ledger stays pristine. Without this,
         # checking a non-lazy pipeline pollutes + inflates the canonical store
-        # (and CheckDeliverable could be looped to balloon it without bound).
+        # (and the gate check could be looped to balloon it without bound).
         before_n, before_hash = _ledger_snapshot(store_dir)
         if before_n == 0:
             return (

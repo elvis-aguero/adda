@@ -1,12 +1,17 @@
 """Orchestrator-only tools over the two process ledgers.
 
 Hypothesis ledger (epistemics), the MUTATE side: ``HypothesisPropose`` /
-``HypothesisUpdate`` / ``LinkFalsificationAttempt``. The read-only
-``HypothesisList`` / ``HypothesisGet`` live in the declaration-gated shared
-builder (``store.py``) so a leaf can be granted them too.
+``HypothesisUpdate``. The read-only ``HypothesisList`` lives in the
+declaration-gated shared builder (``store.py``) so a leaf can be granted it too.
 
-Milestone ledger (process policy): ``MilestoneList`` / ``MilestonePropose`` /
-``MilestoneComplete`` / ``MilestoneSkip``.
+Linking a delegation as a falsification attempt after the fact is a flag on
+``HypothesisUpdate`` (``falsification_attempt=True``), not a tool of its own:
+the link only ever existed to be followed by a verdict citing the same
+delegation, so it is made in the call that records that verdict.
+
+Milestone ledger (process policy): ``MilestoneList`` (read) / ``MilestoneSet``
+(write). Proposing, completing and skipping are one write with three outcomes;
+reads stay a separate tool so looking never risks changing anything.
 
 ``LedgerTools`` holds them, bound to one node; every tool reads the ledgers off
 the node (``self.node._ledger``, ``self.node._milestones``) at call time, so a
@@ -71,6 +76,9 @@ class LedgerTools:
         "HypothesisUpdate('H1', 'SUPPORTED', 'sweep top t/L=0.09 beats "
         "threshold', 0.80, evidence={'delegation': 'D001', 'numbers': "
         "{'top_tL': 0.09, 'buckling_load_norm': 1.47}})",
+        "HypothesisUpdate('H2', 'FALSIFIED', 'probe at predicted optimum "
+        "fell short', 0.10, evidence={'delegation': 'D004', 'numbers': "
+        "{'f_best': 0.62}}, falsification_attempt=True)",
     )
     def HypothesisUpdate(
         self,
@@ -79,6 +87,7 @@ class LedgerTools:
         comment: str,
         posterior: float,
         evidence: dict | None = None,
+        falsification_attempt: bool = False,
     ) -> str:
         """Update hypothesis status with evidence and updated belief.
 
@@ -97,6 +106,12 @@ class LedgerTools:
           fix your own premature close instead of leaving a contradiction.
           (Un-falsifying a FALSIFIED hypothesis still needs new evidence — it
           is a new claim, not a retraction.)
+        falsification_attempt=True: the cited delegation genuinely tested
+          this hypothesis's registered prediction but was not flagged as an
+          attempt when it was delegated. It is linked as one before the
+          verdict is recorded. Only a delegation that STARTED after the
+          hypothesis was registered can be linked — one that began earlier
+          cannot have been designed to test it.
         triggered_by is auto-injected from last completed
         delegation."""
         node = self.node
@@ -106,6 +121,17 @@ class LedgerTools:
         evidence, err = _decode_evidence(evidence)
         if err is not None:
             return err
+        if falsification_attempt:
+            d_cited = (evidence or {}).get("delegation")
+            if not isinstance(d_cited, str) or not d_cited:
+                return (
+                    "ERROR: falsification_attempt=True needs the attempt as "
+                    "evidence: evidence={'delegation': 'D###', 'numbers': "
+                    "{...}}."
+                )
+            refusal = self._link_attempt(d_cited, hypothesis_id)
+            if refusal is not None:
+                return refusal
         refusal = self._supported_needs_attempt(hypothesis_id, status, comment)
         if refusal is not None:
             return refusal
@@ -161,8 +187,9 @@ class LedgerTools:
                 "challenged before it is accepted — the clean path is "
                 "to delegate a refutation test "
                 "(is_falsification_attempt=True, "
-                f"hypothesis_ids=['{hypothesis_id}']), or "
-                "LinkFalsificationAttempt if one already ran. If you "
+                f"hypothesis_ids=['{hypothesis_id}']), or, if one already "
+                "ran unflagged, re-call with falsification_attempt=True "
+                "and that delegation as evidence. If you "
                 "have genuine grounds to accept it WITHOUT that, re-call "
                 "HypothesisUpdate with the same status and a written "
                 "justification in `comment` (a sentence on why SUPPORTED "
@@ -209,9 +236,8 @@ class LedgerTools:
             return (
                 f"ERROR: {hypothesis_id} cites evidence from {d_cited!r}, "
                 "which is not a completed delegation. Only cite completed "
-                "delegations (status DONE). Check GetStatus or the "
-                "delegation log — if the delegation hasn't finished, wait "
-                "for it."
+                "delegations (status DONE) — if the delegation hasn't "
+                "finished, wait for it."
             )
         return None
 
@@ -270,24 +296,36 @@ class LedgerTools:
         )
         return f"\n{advisory}" if advisory else ""
 
-    def LinkFalsificationAttempt(
-        self, delegation_id: str, hypothesis_id: str
-    ) -> str:
-        """Retroactively mark a completed delegation as a falsification
-        ATTEMPT of a registered hypothesis (the read-time safety net for
-        when the attempt was not declared up front at Delegate time).
+    def _link_attempt(self, delegation_id: str, hypothesis_id: str
+                      ) -> str | None:
+        """Mark a completed delegation as a falsification ATTEMPT of a
+        registered hypothesis, after the fact. Returns a refusal, or None.
 
-        Links ONLY — it does NOT record a verdict and CANNOT change the
-        hypothesis's pre-registered prediction. You must still call
-        HypothesisUpdate to record the verdict, judged against that
-        immutable prediction. Link only if the delegation genuinely tested
-        the prediction — never retrofit an exploratory result."""
+        Links only — the verdict is recorded by the HypothesisUpdate call that
+        asked for the link, judged against the hypothesis's immutable
+        pre-registered prediction. The critic scrutinises a post-hoc link
+        harder than one declared at Delegate time (``mark_attempt`` stamps
+        it), and the timing rule below keeps it from being used to retrofit an
+        exploratory result: a delegation that began before the hypothesis
+        existed cannot have been a test of it."""
         node = self.node
-        if node._ledger is None:
-            return _NO_LEDGER
         h_entry = node._ledger.get(hypothesis_id)
         if h_entry is None:
             return f"ERROR: hypothesis {hypothesis_id!r} not found."
+        record = None
+        if node._delegation_log is not None:
+            record = next((r for r in node._delegation_log.query_all()
+                           if r.get("id") == delegation_id), None)
+        started = (record or {}).get("started_at")
+        proposed = h_entry.get("proposed_at")
+        if started and proposed and started < proposed:
+            return (
+                f"ERROR: {delegation_id} started ({started}) before "
+                f"{hypothesis_id} was registered ({proposed}), so it cannot "
+                "have been designed to test that hypothesis's prediction. "
+                "Record the verdict without falsification_attempt, or "
+                "delegate a genuine attempt."
+            )
         with node._registry_lock:
             entry = node._registry.get(delegation_id)
             if entry is None:
@@ -309,64 +347,72 @@ class LedgerTools:
             entry["reconciled"] = True
         if node._delegation_log is not None:
             node._delegation_log.mark_attempt(delegation_id, hypothesis_id)
-        pred = (
-            h_entry.get("prediction")
-            or h_entry.get("falsification_criterion")
-            or "(no prediction on record)"
-        )
-        return (
-            f"Linked {delegation_id} as a falsification attempt of "
-            f"{hypothesis_id} (post-hoc). Pre-registered prediction: "
-            f"\"{pred}\". Now record the VERDICT: "
-            f"HypothesisUpdate('{hypothesis_id}', "
-            "status=SUPPORTED|FALSIFIED|INCONCLUSIVE, posterior=…, "
-            f"evidence={{'delegation': '{delegation_id}', "
-            "'numbers': {…}}), judging THIS report against that "
-            "prediction. Linking does NOT record a verdict."
-        )
+        return None
 
     # ── Milestone ledger (process policy) ────────────────────────────────────
 
+    @tool_examples("MilestoneList()")
     def MilestoneList(self) -> str:
         """List process milestones with id, status, description.
 
         Milestones are PROCESS steps (do X before Y; get Z ready), distinct
         from hypotheses (epistemics). Default milestones self-resolve when
-        their condition is met; you author your own with MilestonePropose."""
+        their condition is met; you add your own with MilestoneSet."""
         if self.node._milestones is None:
             return "Milestone ledger not available in this run."
         return self.node._milestones.format()
 
-    def MilestonePropose(self, description: str) -> str:
-        """Add your own process milestone. Returns its id (M1, M2, …).
+    @tool_examples(
+        "MilestoneSet(description='oracle validated on one sample before "
+        "any campaign')",
+        "MilestoneSet('M2', 'DONE', note='D003 validated the oracle')",
+        "MilestoneSet('M4', 'SKIPPED', note='no literature exists for this "
+        "geometry')",
+    )
+    def MilestoneSet(
+        self,
+        milestone_id: str | None = None,
+        status: str | None = None,
+        note: str = "",
+        description: str | None = None,
+    ) -> str:
+        """Add a process milestone, or close one.
 
-        While pending, it joins the backlog that gates delegating to the
-        implementer (exactly like the default milestones) — so use it to
-        hold yourself to a process step you don't want to skip."""
-        if self.node._milestones is None:
-            return _NO_MILESTONES
-        return self.node._milestones.propose(description)
+        ADD: no milestone_id, a `description` → returns its id (M1, M2, …).
+        While pending it joins the backlog that gates delegating to the
+        implementer, exactly like the default milestones — so use it to hold
+        yourself to a process step you don't want to skip.
 
-    def MilestoneComplete(self, milestone_id: str, note: str) -> str:
-        """Mark a milestone DONE. A brief `note` (one line on WHY it's
-        satisfied — what was done / which delegation) is REQUIRED, so
-        ticking is a deliberate, auditable act, not a rubber stamp."""
-        if self.node._milestones is None:
+        CLOSE: milestone_id + status DONE or SKIPPED + a `note`. The note is
+        REQUIRED — one line on WHY it is satisfied (what was done, which
+        delegation) or why this study legitimately does not need it — so
+        closing is a deliberate, auditable act, not a rubber stamp. SKIPPED is
+        the escape hatch that keeps soft gates from ever deadlocking you."""
+        ms = self.node._milestones
+        if ms is None:
             return _NO_MILESTONES
+        if milestone_id is None:
+            if status not in (None, "PENDING"):
+                return ("ERROR: a new milestone starts PENDING — add it with "
+                        "a description, then close it by id.")
+            return ms.propose(description or "")
+        if description is not None:
+            return ("ERROR: pass `description` only when ADDING a milestone "
+                    "(no milestone_id); it cannot be changed once added.")
+        _status = (status or "").upper()
+        if _status not in ("DONE", "SKIPPED"):
+            return ("ERROR: status must be DONE or SKIPPED when closing "
+                    f"{milestone_id}.")
         if not note or not note.strip():
             return (
-                "ERROR: a brief note is required to complete a milestone — "
-                "one line on why it's satisfied (what you did / which "
-                "delegation). This keeps ticking honest and auditable."
+                "ERROR: a brief note is required to close a milestone — one "
+                "line on why it's satisfied (what you did / which delegation) "
+                "or why the study does not need it. This keeps closing "
+                "honest and auditable."
             )
-        return self.node._milestones.complete(milestone_id, note)
-
-    def MilestoneSkip(self, milestone_id: str, reason: str) -> str:
-        """Skip a milestone this study legitimately doesn't need (give a
-        reason). The escape hatch so soft gates never deadlock you."""
-        if self.node._milestones is None:
-            return _NO_MILESTONES
-        return self.node._milestones.skip(milestone_id, reason)
+        if _status == "DONE":
+            return ms.complete(milestone_id, note)
+        return ms.skip(milestone_id, note)
 
 
 def _decode_evidence(evidence):
@@ -386,18 +432,15 @@ def _decode_evidence(evidence):
 def build_ledger_closures(node) -> dict:
     """The ledger tools for one node, by registered name.
 
-    Every one is orchestrator-only and MUTATES a ledger; the caller gates them
-    on the agent's declared ``tools``, like every other capability. The
-    read-only HypothesisList/HypothesisGet are NOT here — they live in
-    ``store.py``'s shared builder so a leaf can be granted them too.
+    Orchestrator-only; every one but MilestoneList MUTATES a ledger. The
+    caller gates them on the agent's declared ``tools``, like every other
+    capability. The read-only HypothesisList is NOT here — it lives in
+    ``store.py``'s shared builder so a leaf can be granted it too.
     """
     t = LedgerTools(node)
     return {
         "HypothesisPropose": t.HypothesisPropose,
         "HypothesisUpdate": t.HypothesisUpdate,
-        "LinkFalsificationAttempt": t.LinkFalsificationAttempt,
         "MilestoneList": t.MilestoneList,
-        "MilestonePropose": t.MilestonePropose,
-        "MilestoneComplete": t.MilestoneComplete,
-        "MilestoneSkip": t.MilestoneSkip,
+        "MilestoneSet": t.MilestoneSet,
     }

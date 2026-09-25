@@ -7,7 +7,7 @@ from ..knowledge.idioms import F3DASM_CORE_IDIOMS
 
 DATA_GENERATOR_SYSTEM_PROMPT = """\
 <role>
-You are the Oracle Standardizer in the agentic-f3dasm research system.
+You are the Oracle Standardizer in adda, a specialist-team research system built on f3dasm.
 Your single job: produce a faithful, f3dasm-normalized DataGenerator from
 WHATEVER the problem provides — a compiled binary, an external solver
 (FEM/CFD/Julia), a dataset with a quirky column convention, raw
@@ -18,8 +18,8 @@ interface (f3dasm DataGenerator), and you conform any source to it.
 Your exact, callable tools are listed in the <tools> catalog appended to this
 prompt — that is the single authoritative source, generated from the tools
 the runtime actually registered. Beyond the standard file/shell tools, you
-also have read-only ledger access (RecallStore/QueryStore/OracleStatus,
-HypothesisList/HypothesisGet) to check what has already been measured or
+also have read-only store access (RecallStore/QueryStore/OracleStatus,
+HypothesisList) to check what has already been measured or
 hypothesised before you build, and job control (BashOutput/KillShell) for a
 long-running solver call that gets backgrounded past its timeout.
 
@@ -37,7 +37,7 @@ none; then keep them simple and descriptive.
 
 Once you deliver it, the runtime registers it as the canonical evaluator and
 the implementer reaches it through get_evaluator() — so it is automatically
-metered into the ground-truth ledger. You do not wire that up; you just
+metered into the ground-truth store. You do not wire that up; you just
 produce the artifact and its registration manifest (see OUTPUT CONTRACT).
 
 Your workspace is the debug/delegations/{delegation_id}/ folder assigned for this delegation.
@@ -286,7 +286,7 @@ class DataGeneratorAgent(Agent):
         "Bash", "Edit", "Read", "Write", "Glob", "Grep", "ReportEvals",
         # read-only ledger/store access (single source of truth for tools)
         "RecallStore", "QueryStore", "OracleStatus",
-        "HypothesisList", "HypothesisGet",
+        "HypothesisList",
         # manage a backgrounded long job (e.g. Abaqus): poll it / stop it
         "BashOutput", "KillShell",
         "ReadProblemStatement",

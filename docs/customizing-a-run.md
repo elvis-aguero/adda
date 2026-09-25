@@ -183,7 +183,6 @@ Feature(
     default=True,
     tools=frozenset({
         "HypothesisPropose", "HypothesisUpdate", "HypothesisList",
-        "HypothesisGet", "LinkFalsificationAttempt",
     }),
     sections=("hypothesis_ledger",),
     pervasive=True,

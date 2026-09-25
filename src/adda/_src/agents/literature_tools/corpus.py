@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ...literature.http_client import SourceCooldownError, _robust_get
+from ...prompts.tool_catalog import tool_examples
 
 
 def build_corpus_closures(corpus, cache_dir) -> dict:
@@ -10,6 +11,9 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
     # Defined as named functions (not lambdas) so each carries a docstring:
     # the generated <tools> catalog renders these, making it the single
     # source of tool docs — no hand-written list in the prompt to drift.
+    @tool_examples(
+        "CorpusAdd('papers/2506.14097.pdf', title='Buckling of lattices', arxiv_id='2506.14097', citation_count=12)",
+    )
     def CorpusAdd(file_path: str, title: str = "", authors: str = "",
                   year: str = "", doi: str = "", arxiv_id: str = "",
                   venue: str = "", abstract: str = "",
@@ -31,16 +35,25 @@ def build_corpus_closures(corpus, cache_dir) -> dict:
             arxiv_id=arxiv_id, venue=venue, abstract=abstract,
             citation_count=int(citation_count or 0))
 
+    @tool_examples(
+        "ConsultLiterature('lattice buckling under axial compression', top_k=5)",
+    )
     def ConsultLiterature(query: str, top_k: int = 10):
         """Passage search across the FULL-TEXT papers in the corpus only.
         Returns an ERROR string if no full-text papers have been added yet —
         add papers first via the search → download → CorpusAdd chain."""
         return corpus.search(query, int(top_k))
 
+    @tool_examples(
+        "CorpusGetPaper('<a paper_id from CorpusList>')",
+    )
     def CorpusGetPaper(paper_id: str):
         """Return the full extracted (page-annotated) text of one corpus paper."""
         return corpus.get_paper(paper_id)
 
+    @tool_examples(
+        'CorpusList()',
+    )
     def CorpusList():
         """List corpus metadata — each paper tagged [full-text] or
         [abstract-only] so you know which you may quote from. The corpus

@@ -51,6 +51,7 @@ __all__ = ["ADDA_UNITS", "AddaApi", "Entry", "F3dasmApi", "PackageApi",
 #: Cap on a single consult() reply, from the shared contract. Every provider
 #: uses the same number so the budget is a constant an agent can ignore rather
 #: than something it has to reason about per tool.
+from ..prompts.tool_catalog import tool_examples
 from .protocol import MAX_REPLY_CHARS as _MAX_CHARS
 
 #: Dropped from concept queries. An agent writes "how do I sample the design
@@ -981,6 +982,10 @@ def build_f3dasm_api_closures() -> dict:
     # A named function, not a lambda: the runtime renders this docstring into
     # the generated <tools> catalog, which is the agent's only documentation
     # for it.
+    @tool_examples(
+        "ConsultF3dasm('sample the design space')",
+        "ConsultF3dasm('f3dasm.create_sampler', source=True)",
+    )
     def ConsultF3dasm(query: str, limit: int = 8, source: bool = False):
         """Look up the INSTALLED f3dasm's API — signature, docstring, source.
 

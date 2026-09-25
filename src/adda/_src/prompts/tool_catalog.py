@@ -3,11 +3,21 @@
 The prompt's ``<tools>`` section is GENERATED from the live closure set, so it
 can never drift from the actual tools an agent has, and a newly-registered tool
 self-documents with no hand-edit. The tool owns its guidance: its docstring is
-the description (already what the backends feed the model as the tool's schema
-description), plus optional usage examples attached via ``@tool_examples``.
+the description, plus optional usage examples attached via ``@tool_examples``.
 
-Used by both backends (Claude + OpenAI-compatible) at prompt-assembly time, so
-parity is automatic.
+ONE ROUTE, BOTH BACKENDS
+    A tool's full description reaches the model exactly once, in this
+    ``<tools>`` section; the tool-use API definition carries only its
+    one-line summary (``tool_summary``) and its parameter schema. The two
+    backends used to disagree: Claude got the one line in the API and the full
+    text here, the OpenAI-compatible backend got the full text in BOTH — every
+    tool's documentation twice, on every model call.
+
+    Why the full text lives here rather than in the API definition: Claude
+    Code cuts an MCP tool's description at 2,048 characters, silently, and the
+    Claude backend's closures are MCP tools. QueryStore's description alone is
+    past that. The system prompt has no such cap, so it is the one place a
+    full description is guaranteed to arrive whole.
 """
 
 from __future__ import annotations
@@ -15,7 +25,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable
 
-__all__ = ["tool_examples", "render_tool_catalog"]
+__all__ = ["tool_examples", "tool_summary", "render_tool_catalog"]
 
 
 def tool_examples(*examples: str):
@@ -28,6 +38,13 @@ def tool_examples(*examples: str):
         fn._tool_examples = list(examples)
         return fn
     return deco
+
+
+def tool_summary(fn: Callable, name: str = "") -> str:
+    """The one line a tool-use API definition carries: the docstring's first
+    line. The full description is in ``<tools>`` (see the module docstring)."""
+    doc = inspect.cleandoc(getattr(fn, "__doc__", None) or "")
+    return (doc.split("\n")[0].strip() if doc else "") or name
 
 
 def render_tool_catalog(closure_tools: dict[str, Callable]) -> str:

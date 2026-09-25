@@ -772,6 +772,7 @@ class OpenAICompatibleAdapter:
 
         from langchain_core.tools import StructuredTool
 
+        from ..prompts.tool_catalog import tool_summary
         native_map = _native_tool_map(self.study_dir, self._oracle_nudge.check)
         tools: list[Any] = [
             native_map[name]
@@ -795,7 +796,11 @@ class OpenAICompatibleAdapter:
             def _dispatch(*args, _name=name, **kwargs):
                 return self.closure_tools[_name](*args, **kwargs)
             _dispatch = functools.wraps(fn)(_dispatch)
-            tools.append(StructuredTool.from_function(_dispatch, name=name))
+            # The one-line summary, not the docstring: the full text is
+            # already in the system prompt's <tools> section, and
+            # from_function's default would send it a second time.
+            tools.append(StructuredTool.from_function(
+                _dispatch, name=name, description=tool_summary(fn, name)))
         # Inject MCP-equivalent tools for declared extra_allowed_tools.
         if self.extra_allowed_tools:
             lit_tools = _make_literature_tools()

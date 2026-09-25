@@ -148,7 +148,8 @@ def _run_with_worker(worker_adapter, strategizer_adapter=None):
 
 
 def test_worker_confer_puts_message_in_target_inbox():
-    # Done() drains the strategist inbox via _drain_notifications() — capture its output
+    # The strategist's inbox is drained by whichever of its tools runs next —
+    # here the Delegate(wait=True) that returns after the worker Confers.
     done_results = []
 
     class WorkerAdapter(_Stub):
@@ -158,17 +159,16 @@ def test_worker_confer_puts_message_in_target_inbox():
 
     class CaptureDoneAdapter(_Stub):
         def invoke(self, messages):
-            self.closure_tools["Delegate"](
+            done_results.append(self.closure_tools["Delegate"](
                 target="implementer", intent="task", expected_report="r", wait=True,
-            )
+            ))
             done_results.append(self.closure_tools["Done"](summary="done"))
             done_results.append(self.closure_tools["Done"](summary="done"))
             return "done"
 
     n = _run_with_worker(WorkerAdapter(), strategizer_adapter=CaptureDoneAdapter())
-    # _drain_notifications() is called inside Done() — strategist inbox appears in result
     assert any("worker asking strategizer" in r for r in done_results), (
-        f"Confer message not found in Done() results: {done_results}"
+        f"Confer message not found in the strategizer's results: {done_results}"
     )
 
 

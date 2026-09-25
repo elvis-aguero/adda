@@ -92,7 +92,7 @@ returns immediately — nothing after it runs:
    and what got in its way, before anything closes. This is what ends up in
    `retrospectives.jsonl`.
 3. **The milestone backlog must be resolved.** Hard, same mechanism as above,
-   same `milestones_enabled` switch, same `MilestoneSkip` escape.
+   same `milestones_enabled` switch, same escape: close the milestone `SKIPPED` with a reason.
 4. **`Done()` is two-shot.** The first call warns and lists everything still
    unmet; only a second call closes. A run cannot end on a single impulse.
 5. **The deliverable must reproduce — before a critic sees it.** A

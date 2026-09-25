@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from ...prompts.tool_catalog import tool_examples
+
 ENV_VAR = "ADDA_BASILISK_SRC"
 
 
@@ -44,6 +46,9 @@ def build_basilisk_docs_closures(corpus: str | Path | None = None) -> dict:
 
     # A named function, not a lambda: the runtime renders this docstring into
     # the generated <tools> catalog, which is the agent's only documentation.
+    @tool_examples(
+        "ConsultBasilisk('adaptive mesh refinement')",
+    )
     def ConsultBasilisk(query: str, limit: int = 8, source: bool = False):
         """Look up the Basilisk CFD source tree -- solvers and worked cases.
 

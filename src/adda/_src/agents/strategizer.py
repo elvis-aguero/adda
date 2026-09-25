@@ -209,9 +209,9 @@ AND the reproduction. The detailed mandatory notebook contract is given
 in the <deliverable_format> section appended to this prompt.
 That section is the SINGLE source of the lazy-reproduction contract (oracle
 laziness, cache-or-load heavy blocks, self-asserting REPRODUCED headline, robust
-ledger path, read-only on the ledger); do not keep a second copy here to drift.
+store path, read-only on the store); do not keep a second copy here to drift.
 
-─── PRIMER: the ledger is an f3dasm ExperimentData ─────────────────────
+─── PRIMER: the store is an f3dasm ExperimentData ─────────────────────
   import os
   from f3dasm import ExperimentData
   store = os.environ.get("F3DASM_CANONICAL_STORE", "<experiment_data_dir>")
@@ -229,11 +229,11 @@ you delegated to already wrote and validated each phase under workspace_dir/D###
 (see <run_paths>). ReadNote those scripts and assemble them into the notebook's
 cells; reuse the proven code rather than re-deriving from memory.
 
-TEST IT WITH CheckDeliverable() BEFORE Done(). CheckDeliverable() executes the
+TEST IT WITH RunNotebook(gate=True) BEFORE Done(). It executes the
 notebook through the exact controlled gate the runtime applies at Done() and
 returns the full result — including the complete error if it fails. Do not edit
-blindly: CheckDeliverable() → read the real error → fix the EXACT problem →
-repeat until it PASSES → Done(). You get 10 CheckDeliverable() calls total; if
+blindly: RunNotebook(gate=True) → read the real error → fix the EXACT problem →
+repeat until it PASSES → Done(). You get 10 gate checks total; if
 you exhaust them, close with Done() (the run is recorded FAILED if the notebook
 does not reproduce). If you are stuck, say so in your retrospective (BLOCKED).
 
@@ -349,7 +349,7 @@ RULES:
 <science_monitor>
 A runtime monitor checks every hypothesis update against the delegation
 log.  Messages prefixed [SCIENCE MONITOR — RULE] are corrective
-feedback about the CURRENT ledger state — address them in your next
+feedback about the CURRENT store state — address them in your next
 action; they are not optional commentary.  Repeated drift triggers an
 automatic adversarial audit.  Escalation messages prefixed
 [SCIENCE MONITOR — ESCALATION] carry adversarial-audit findings —
@@ -458,7 +458,7 @@ EXAMPLE — a budgeted existence search finds nothing (bounded negative, move on
 </exploration_verdicts>
 
 <on_error>
-Errors from delegations appear via GetStatus(id) returning 'Errored:\n<traceback>'.
+Errors from delegations appear when you collect them (Wait) as 'Errored:\n<traceback>'.
 
 Rules that apply after an Errored result:
 1. READ the full traceback before re-delegating.  It contains the exact
@@ -477,7 +477,7 @@ Rules that apply after an Errored result:
 3. Record the error via WriteNote('meta_errors.md', ...) so future
    delegations avoid repeating the same mistake.
 4. A delegation that remains 'Working' for an unusually long time
-   (many GetStatus() polls) is likely hung.  After 3 consecutive
+   (many status checks) is likely hung.  After 3 consecutive
    'Working' responses with no progress indication, assume the task
    is stuck and re-delegate with a simpler, more focused intent.
 </on_error>
@@ -516,24 +516,19 @@ class StrategizerAgent(Agent):
         return tools
 
     tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                       "WriteDeliverable", "CheckDeliverable",
-                       "AddPipelineMarkdownCell", "AddPipelineCell",
-                       "EditPipelineCell", "DeletePipelineCell", "ShowNotebook",
-                       "RunScratch", "RunPipelineCell", "Wait", "Confer",
-                       "GetStatus", "LedgerBreakdown",
+                       "WriteDeliverable", "WriteCell", "ShowNotebook",
+                       "RunNotebook", "RunScratch", "Wait", "Confer",
                        # hypothesis ledger — full read+mutate
                        "HypothesisPropose", "HypothesisUpdate",
-                       "HypothesisList", "HypothesisGet",
-                       "LinkFalsificationAttempt",
+                       "HypothesisList",
                        # process milestones
-                       "MilestoneList", "MilestonePropose",
-                       "MilestoneComplete", "MilestoneSkip",
+                       "MilestoneList", "MilestoneSet",
                        # canonical store read
                        "RecallStore", "QueryStore", "OracleStatus",
                        "ReadProblemStatement"})
-    # NOTE (audit): GetStatus/CancelDelegation are now opt-in (plug-and-play).
-    # GetStatus is retained here pending the poll→push re-architecture that lets
-    # Confer fully supersede it. CancelDelegation is intentionally NOT listed —
+    # NOTE (audit): CancelDelegation is opt-in (plug-and-play). The status poll
+    # that used to be GetStatus is Wait(block=False). CancelDelegation is
+    # intentionally NOT listed —
     # dropped from production (drop-but-don't-delete); its def + opt-in gate
     # remain, so restoring it is one line: add "CancelDelegation" above.
     reset_on_checkpoint = False

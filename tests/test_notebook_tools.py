@@ -30,10 +30,7 @@ class _Stub:
         return s
 
 
-_NB_TOOLS = frozenset({
-    "AddPipelineMarkdownCell", "AddPipelineCell", "EditPipelineCell",
-    "DeletePipelineCell", "ShowNotebook", "RunScratch",
-})
+_NB_TOOLS = frozenset({"WriteCell", "ShowNotebook", "RunScratch"})
 
 
 def _node(tmp_path):
@@ -77,31 +74,33 @@ def _rev(tmp_path, phase):
     return hashlib.sha256(src.encode("utf-8")).hexdigest()[:8]
 
 
-# ── AddPipelineCell — create-only ────────────────────────────────────────────
+# ── WriteCell — create ───────────────────────────────────────────────────────
 
 def test_add_creates_and_reports_rev(tmp_path):
     n = _node(tmp_path)
-    out = _tool(n, "AddPipelineCell")("doe", why="w", code="x = 1")
+    out = _tool(n, "WriteCell")("doe", why="w", code="x = 1")
     assert "Added doe" in out and "rev" in out
     assert _cell(_read_nb(tmp_path), "doe")["source"] == "x = 1"
 
 
-def test_add_existing_phase_is_create_only_error(tmp_path):
+def test_rewriting_an_existing_cell_needs_its_rev(tmp_path):
+    """Create-only survived the merge as a rev guard: a second full write to
+    a cell that exists is an EDIT, and an edit that does not name the rev it
+    saw is refused — so a cell is never overwritten blind."""
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="x = 1")
-    out = _tool(n, "AddPipelineCell")("doe", why="w2", code="x = 2")
-    assert "already exists" in out
-    assert "EditPipelineCell" in out
+    _tool(n, "WriteCell")("doe", why="w", code="x = 1")
+    out = _tool(n, "WriteCell")("doe", why="w2", code="x = 2")
+    assert out.startswith("ERROR:") and "expected_rev" in out
     # unchanged
     assert _cell(_read_nb(tmp_path), "doe")["source"] == "x = 1"
 
 
-# ── AddPipelineMarkdownCell + narrative-cell CRUD (replaces SetNotebookIntro) ──
+# ── WriteCell — markdown cells ───────────────────────────────────────────────
 
 def test_add_markdown_cell_creates_problem_and_hypotheses(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("problem", "minimise f over the box")
-    _tool(n, "AddPipelineMarkdownCell")("hypotheses", "H1: …")
+    _tool(n, "WriteCell")("problem", content="minimise f over the box")
+    _tool(n, "WriteCell")("hypotheses", content="H1: …")
     nb = _read_nb(tmp_path)
     assert "minimise f" in _cell(nb, "problem")["source"]
     assert "# Problem & objective" in _cell(nb, "problem")["source"]  # heading added
@@ -111,10 +110,10 @@ def test_add_markdown_cell_creates_problem_and_hypotheses(tmp_path):
 def test_add_markdown_cell_allows_free_form_custom_name(tmp_path):
     """A non-reserved name is a custom narrative cell, not a rejection — the
     deliverable's structure must not block an agent from adding a section
-    <deliverable_format> doesn't already name (mirrors AddPipelineCell's own
-    "non-standard phase just proceeds" philosophy for code cells)."""
+    <deliverable_format> doesn't already name (mirrors the code cells'
+    "non-standard phase just proceeds" philosophy)."""
     n = _node(tmp_path)
-    out = _tool(n, "AddPipelineMarkdownCell")("caveats", "x is subject to y")
+    out = _tool(n, "WriteCell")("caveats", content="x is subject to y")
     assert "Added custom" in out
     nb = _read_nb(tmp_path)
     # verbatim content, no forced heading, unlike problem/hypotheses/verdict
@@ -123,17 +122,17 @@ def test_add_markdown_cell_allows_free_form_custom_name(tmp_path):
 
 def test_add_markdown_cell_rejects_pillar_name_collision(tmp_path):
     n = _node(tmp_path)
-    out = _tool(n, "AddPipelineMarkdownCell")("doe", "x")
-    assert out.startswith("ERROR:") and "AddPipelineCell" in out
-    out2 = _tool(n, "AddPipelineMarkdownCell")("doe__why", "x")
-    assert out2.startswith("ERROR:") and "AddPipelineCell" in out2
+    out = _tool(n, "WriteCell")("doe", content="x")
+    assert out.startswith("ERROR:") and "`code` + `why`" in out
+    out2 = _tool(n, "WriteCell")("doe__why", content="x")
+    assert out2.startswith("ERROR:") and "`code` + `why`" in out2
 
 
-def test_add_markdown_cell_is_create_only(tmp_path):
+def test_rewriting_a_markdown_cell_needs_its_rev(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("problem", "p1")
-    out = _tool(n, "AddPipelineMarkdownCell")("problem", "p2")
-    assert "already exists" in out
+    _tool(n, "WriteCell")("problem", content="p1")
+    out = _tool(n, "WriteCell")("problem", content="p2")
+    assert out.startswith("ERROR:") and "expected_rev" in out
     assert "p1" in _cell(_read_nb(tmp_path), "problem")["source"]
 
 
@@ -147,7 +146,7 @@ def test_add_markdown_cell_creates_verdict(tmp_path):
     trying to author this cell (it guessed 'verdict_heading').
     """
     n = _node(tmp_path)
-    out = _tool(n, "AddPipelineMarkdownCell")("verdict", "H1 SUPPORTED because ...")
+    out = _tool(n, "WriteCell")("verdict", content="H1 SUPPORTED because ...")
     assert "Added verdict" in out
     nb = _read_nb(tmp_path)
     assert "H1 SUPPORTED" in _cell(nb, "verdict")["source"]
@@ -162,10 +161,8 @@ def test_edit_custom_markdown_cell_does_not_force_a_heading(tmp_path):
     on either create or edit.
     """
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("caveats", "first draft")
-    out = _tool(n, "EditPipelineCell")(
-        "caveats", content="revised caveat text",
-        expected_rev=_rev(tmp_path, "caveats"))
+    _tool(n, "WriteCell")("caveats", content="first draft")
+    out = _tool(n, "WriteCell")("caveats", content="revised caveat text", expected_rev=_rev(tmp_path, "caveats"))
     assert "Edited caveats" in out
     nb = _read_nb(tmp_path)
     assert _cell(nb, "caveats")["source"] == "revised caveat text"
@@ -174,10 +171,9 @@ def test_edit_custom_markdown_cell_does_not_force_a_heading(tmp_path):
 def test_edit_narrative_cell_with_content_and_rev(tmp_path):
     # The clunk fix: update hypotheses ALONE (no resupplying problem), rev-guarded.
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("problem", "the problem")
-    _tool(n, "AddPipelineMarkdownCell")("hypotheses", "old hyp")
-    out = _tool(n, "EditPipelineCell")(
-        "hypotheses", content="new hyp", expected_rev=_rev(tmp_path, "hypotheses"))
+    _tool(n, "WriteCell")("problem", content="the problem")
+    _tool(n, "WriteCell")("hypotheses", content="old hyp")
+    out = _tool(n, "WriteCell")("hypotheses", content="new hyp", expected_rev=_rev(tmp_path, "hypotheses"))
     assert "Edited hypotheses" in out
     nb = _read_nb(tmp_path)
     assert "new hyp" in _cell(nb, "hypotheses")["source"]
@@ -186,23 +182,23 @@ def test_edit_narrative_cell_with_content_and_rev(tmp_path):
 
 def test_edit_narrative_cell_stale_rev_rejected(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("hypotheses", "h")
-    out = _tool(n, "EditPipelineCell")("hypotheses", content="x", expected_rev="deadbeef")
+    _tool(n, "WriteCell")("hypotheses", content="h")
+    out = _tool(n, "WriteCell")("hypotheses", content="x", expected_rev="deadbeef")
     assert "changed since" in out
 
 
 def test_edit_narrative_cell_rejects_code_param(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("problem", "p")
-    out = _tool(n, "EditPipelineCell")("problem", code="x=1", expected_rev=_rev(tmp_path, "problem"))
+    _tool(n, "WriteCell")("problem", content="p")
+    out = _tool(n, "WriteCell")("problem", code="x=1", expected_rev=_rev(tmp_path, "problem"))
     assert "markdown cell" in out and "content" in out
 
 
 def test_delete_narrative_cell(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("problem", "p")
-    _tool(n, "AddPipelineMarkdownCell")("hypotheses", "h")
-    out = _tool(n, "DeletePipelineCell")("hypotheses", expected_rev=_rev(tmp_path, "hypotheses"))
+    _tool(n, "WriteCell")("problem", content="p")
+    _tool(n, "WriteCell")("hypotheses", content="h")
+    out = _tool(n, "WriteCell")("hypotheses", delete=True, expected_rev=_rev(tmp_path, "hypotheses"))
     assert "Deleted hypotheses" in out
     nb = _read_nb(tmp_path)
     assert _cell(nb, "hypotheses") is None and _cell(nb, "problem") is not None
@@ -213,8 +209,8 @@ def test_delete_custom_markdown_cell(tmp_path):
     before even checking the notebook's real contents — rejecting a valid
     custom cell as 'unknown' rather than deleting it."""
     n = _node(tmp_path)
-    _tool(n, "AddPipelineMarkdownCell")("caveats", "x")
-    out = _tool(n, "DeletePipelineCell")("caveats", expected_rev=_rev(tmp_path, "caveats"))
+    _tool(n, "WriteCell")("caveats", content="x")
+    out = _tool(n, "WriteCell")("caveats", delete=True, expected_rev=_rev(tmp_path, "caveats"))
     assert "Deleted caveats" in out
     assert _cell(_read_nb(tmp_path), "caveats") is None
 
@@ -223,8 +219,8 @@ def test_delete_custom_markdown_cell(tmp_path):
 
 def test_show_brief_lists_all_cells_by_name(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="rationale", code="x = 1")
-    _tool(n, "AddPipelineCell")("ml", why="fit it", code="fit()")
+    _tool(n, "WriteCell")("doe", why="rationale", code="x = 1")
+    _tool(n, "WriteCell")("ml", why="fit it", code="fit()")
     out = _tool(n, "ShowNotebook")()
     for name in ("doe", "doe__why", "ml", "ml__why"):
         assert name in out
@@ -234,7 +230,7 @@ def test_show_brief_lists_all_cells_by_name(tmp_path):
 
 def test_show_detailed_returns_full_source_and_rev(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="x = 1\ny = 2")
+    _tool(n, "WriteCell")("doe", why="w", code="x = 1\ny = 2")
     out = _tool(n, "ShowNotebook")("doe")
     assert "x = 1\ny = 2" in out
     assert _rev(tmp_path, "doe") in out
@@ -242,7 +238,7 @@ def test_show_detailed_returns_full_source_and_rev(tmp_path):
 
 def test_show_missing_phase_lists_present(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="x=1")
+    _tool(n, "WriteCell")("doe", why="w", code="x=1")
     out = _tool(n, "ShowNotebook")("analysis")
     assert "no cell named" in out and "doe" in out
 
@@ -254,12 +250,12 @@ def test_show_absent_file_reports_without_creating(tmp_path):
     assert not (tmp_path / "pipeline.ipynb").exists()
 
 
-# ── EditPipelineCell — surgical (self-guarding) ──────────────────────────────
+# ── WriteCell — surgical edit (self-guarding) ──────────────────────────────
 
 def test_surgical_edit_replaces_single_occurrence(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="a = 1\nb = 2")
-    out = _tool(n, "EditPipelineCell")("doe", old="a = 1", new="a = 99")
+    _tool(n, "WriteCell")("doe", why="w", code="a = 1\nb = 2")
+    out = _tool(n, "WriteCell")("doe", old="a = 1", new="a = 99")
     assert "Edited doe" in out
     assert _cell(_read_nb(tmp_path), "doe")["source"] == "a = 99\nb = 2"
     # why untouched, name preserved
@@ -269,72 +265,72 @@ def test_surgical_edit_replaces_single_occurrence(tmp_path):
 
 def test_surgical_old_not_found_errors(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="a = 1")
-    out = _tool(n, "EditPipelineCell")("doe", old="zzz", new="q")
+    _tool(n, "WriteCell")("doe", why="w", code="a = 1")
+    out = _tool(n, "WriteCell")("doe", old="zzz", new="q")
     assert "not found" in out
 
 
 def test_surgical_ambiguous_old_names_count(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="p = 1\np = 1")
-    out = _tool(n, "EditPipelineCell")("doe", old="p = 1", new="p = 2")
+    _tool(n, "WriteCell")("doe", why="w", code="p = 1\np = 1")
+    out = _tool(n, "WriteCell")("doe", old="p = 1", new="p = 2")
     assert "2" in out and ("occurs" in out or "×" in out)
 
 
 def test_surgical_and_fullfield_mutually_exclusive(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="a = 1")
-    out = _tool(n, "EditPipelineCell")("doe", old="a", new="b", code="z = 1")
+    _tool(n, "WriteCell")("doe", why="w", code="a = 1")
+    out = _tool(n, "WriteCell")("doe", old="a", new="b", code="z = 1")
     assert "EITHER" in out or "not both" in out
 
 
-# ── EditPipelineCell — full-field, rev-guarded ───────────────────────────────
+# ── WriteCell — full-field edit, rev-guarded ───────────────────────────────
 
 def test_fullfield_edit_requires_expected_rev(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="x = 1")
-    out = _tool(n, "EditPipelineCell")("doe", code="x = 2")
+    _tool(n, "WriteCell")("doe", why="w", code="x = 1")
+    out = _tool(n, "WriteCell")("doe", code="x = 2")
     assert "expected_rev" in out
 
 
 def test_fullfield_edit_with_current_rev_succeeds(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="x = 1")
+    _tool(n, "WriteCell")("doe", why="w", code="x = 1")
     rev = _rev(tmp_path, "doe")
-    out = _tool(n, "EditPipelineCell")("doe", code="x = 2", expected_rev=rev)
+    out = _tool(n, "WriteCell")("doe", code="x = 2", expected_rev=rev)
     assert "Edited doe" in out
     assert _cell(_read_nb(tmp_path), "doe")["source"] == "x = 2"
 
 
 def test_fullfield_edit_with_stale_rev_rejected(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="x = 1")
-    out = _tool(n, "EditPipelineCell")("doe", code="x = 2", expected_rev="deadbeef")
+    _tool(n, "WriteCell")("doe", why="w", code="x = 1")
+    out = _tool(n, "WriteCell")("doe", code="x = 2", expected_rev="deadbeef")
     assert "changed since" in out
     assert _cell(_read_nb(tmp_path), "doe")["source"] == "x = 1"  # unchanged
 
 
 def test_edit_missing_phase_errors(tmp_path):
     n = _node(tmp_path)
-    out = _tool(n, "EditPipelineCell")("analysis", code="y = 1", expected_rev="x")
+    out = _tool(n, "WriteCell")("analysis", code="y = 1", expected_rev="x")
     assert "not in pipeline.ipynb" in out
 
 
-# ── DeletePipelineCell — rev-guarded ─────────────────────────────────────────
+# ── WriteCell(delete=True) — rev-guarded ─────────────────────────────────────────
 
 def test_delete_requires_expected_rev(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="c")
-    out = _tool(n, "DeletePipelineCell")("doe")
+    _tool(n, "WriteCell")("doe", why="w", code="c")
+    out = _tool(n, "WriteCell")("doe", delete=True)
     assert "expected_rev" in out
     assert _cell(_read_nb(tmp_path), "doe") is not None  # not deleted
 
 
 def test_delete_with_current_rev_removes_cell_and_why(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="c")
-    _tool(n, "AddPipelineCell")("ml", why="w2", code="c2")
-    out = _tool(n, "DeletePipelineCell")("ml", expected_rev=_rev(tmp_path, "ml"))
+    _tool(n, "WriteCell")("doe", why="w", code="c")
+    _tool(n, "WriteCell")("ml", why="w2", code="c2")
+    out = _tool(n, "WriteCell")("ml", delete=True, expected_rev=_rev(tmp_path, "ml"))
     assert "Deleted ml" in out
     nb = _read_nb(tmp_path)
     assert _cell(nb, "ml") is None and _cell(nb, "ml__why") is None
@@ -343,16 +339,16 @@ def test_delete_with_current_rev_removes_cell_and_why(tmp_path):
 
 def test_delete_stale_rev_rejected(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="c")
-    out = _tool(n, "DeletePipelineCell")("doe", expected_rev="deadbeef")
+    _tool(n, "WriteCell")("doe", why="w", code="c")
+    out = _tool(n, "WriteCell")("doe", delete=True, expected_rev="deadbeef")
     assert "changed since" in out
     assert _cell(_read_nb(tmp_path), "doe") is not None
 
 
 def test_delete_absent_phase_is_noop(tmp_path):
     n = _node(tmp_path)
-    _tool(n, "AddPipelineCell")("doe", why="w", code="c")
-    out = _tool(n, "DeletePipelineCell")("analysis", expected_rev="x")
+    _tool(n, "WriteCell")("doe", why="w", code="c")
+    out = _tool(n, "WriteCell")("analysis", delete=True, expected_rev="x")
     assert "Nothing to delete" in out
 
 

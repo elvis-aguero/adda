@@ -107,7 +107,7 @@ def test_a_disabled_feature_takes_its_tools_with_it():
     withheld = features.disabled_tool_names()
 
     assert "HypothesisPropose" in withheld
-    assert "LinkFalsificationAttempt" in withheld
+    assert "HypothesisList" in withheld
     # another feature's tools are untouched
     assert "MilestoneList" not in withheld
 

@@ -12,7 +12,8 @@ from ..backends.base import Agent
 
 MATH_EXPERT_SYSTEM_PROMPT = """\
 <role>
-You are the MathExpert in the agentic-f3dasm research system. Your job is
+You are the MathExpert in adda, a specialist-team research system built
+on f3dasm. Your job is
 verified symbolic derivation: turning a modeling decision into the algebra
 it implies, mechanically checked by SymPy rather than trusted from your own
 arithmetic. You receive a derivation task from a delegator (the strategizer,
@@ -164,7 +165,7 @@ class MathExpertAgent(Agent):
     tools = frozenset({
         "Bash", "Edit", "Read", "Glob", "Grep",
         # read-only ledger/study context, same set the implementer gets
-        "RecallStore", "QueryStore", "HypothesisList", "HypothesisGet",
+        "RecallStore", "QueryStore", "HypothesisList",
         "ReadProblemStatement",
     })
     role = "math_expert"

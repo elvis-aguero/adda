@@ -21,6 +21,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from ....prompts.tool_catalog import tool_examples
 from ....runtime import terminal
 from ...parsing import _parse_verdict
 from ._binding import with_doc
@@ -90,6 +91,9 @@ class FeedbackTools:
 
     # ── Done: the gates, applied in order ────────────────────────────────────
 
+    @tool_examples(
+        "Done(summary='Best design x=0.31 → f=1.47 (D006). H1 SUPPORTED after its falsification attempt (D007); 140 of 300 evals spent; residual risk: an unsampled narrow basin.')",
+    )
     def Done(self, summary: str) -> str:
         """Signal end of run with a summary of findings (two-shot).
 
@@ -106,8 +110,8 @@ class FeedbackTools:
         unmet conditions; does NOT close.
         Second call: closes the run.
 
-        Refused if any delegation is still Working — call GetStatus()
-        on all pending delegations first. (A delegation you launched
+        Refused if any delegation is still Working — collect every
+        pending delegation with Wait first. (A delegation you launched
         wait=True would already be collected here, with no pending poll.)
         """
         prefix = self.node._drain_notifications()
@@ -144,7 +148,7 @@ class FeedbackTools:
             "Closing now is premature — you have two options:\n"
             "  (a) keep working: inspect results so far, write notes, or "
             "start another delegation while these finish;\n"
-            "  (b) wait, then GetStatus(<id>) on each and interpret its "
+            "  (b) collect each with Wait and interpret its "
             "results before you conclude.\n"
             "Re-call Done() once none are still running."
         )
@@ -176,7 +180,7 @@ class FeedbackTools:
         """Every milestone must be DONE or SKIPPED before the run can close.
 
         Spec #1, HARD. Auto-satisfy first (met gates tick themselves). Forces
-        engagement; MilestoneSkip(id, reason) is the escape so it never
+        engagement; MilestoneSet(id, 'SKIPPED', note=reason) is the escape so it never
         deadlocks. Checked on every Done() call (the agent can't bypass via the
         two-shot).
         """
@@ -196,9 +200,9 @@ class FeedbackTools:
             return (
                 prefix + "Cannot close yet — these milestones are "
                 f"still PENDING: {items}. For each: "
-                "MilestoneComplete(id, brief) with a one-line why, or "
-                "MilestoneSkip(id, reason) if this study doesn't need "
-                "it. Then re-call Done(). (Process gate, not a tool "
+                "MilestoneSet(id, 'DONE', note=…) with a one-line why, or "
+                "MilestoneSet(id, 'SKIPPED', note=…) if this study doesn't "
+                "need it. Then re-call Done(). (Process gate, not a tool "
                 "error.)"
             )
         # Bounded escape (mirrors the 3-strikes UNGATED gate): after 3
@@ -297,21 +301,21 @@ class FeedbackTools:
                 "REPRO_GATE_BOUNCE", "",
                 f"pre-critic reproduction gate failed (attempt {n}/{_REPRO_MAX})")
             # Escalate: after the first failure, push the agent to DEBUG with
-            # CheckDeliverable() rather than re-Write blindly — it is the only
+            # RunNotebook rather than re-write blindly — it is the only
             # way to run pipeline.ipynb and see the real error.
             escalate = (
                 "" if n == 1 else
                 f"\n\nThis is failure {n}/{_REPRO_MAX}. Do NOT re-Write "
-                "pipeline.ipynb blindly. Use CheckDeliverable() to RUN it and "
-                "read the full error, fix the EXACT problem, CheckDeliverable() "
-                "again until it PASSES, then call Done(). After "
+                "pipeline.ipynb blindly. Use RunNotebook() to find the failing "
+                "cell and read the full error, fix the EXACT problem, then "
+                "RunNotebook(gate=True) until it PASSES, then call Done(). After "
                 f"{_REPRO_MAX} failures the run is closed FAILED.")
             return (
                 prefix + "Cannot close yet — pipeline.ipynb failed the "
                 "reproduction gate (the runtime ran it before involving the "
                 "critic):\n\n" + _repro
-                + "\n\nFix it via WriteDeliverable('pipeline.ipynb', …) — and "
-                "verify with CheckDeliverable() before re-calling Done()."
+                + "\n\nFix it with WriteCell — and verify with "
+                "RunNotebook(gate=True) before re-calling Done()."
                 + escalate)
         # Genuine non-convergence: the agent could not produce a reproducing
         # deliverable in _REPRO_MAX sighted attempts. Close FAILED (loud,
@@ -584,6 +588,9 @@ class FeedbackTools:
 
     # ── Mid-run consultation ─────────────────────────────────────────────────
 
+    @tool_examples(
+        "AskForFeedback(['H1', 'H2'])",
+    )
     def AskForFeedback(self, hypothesis_ids: list | str | None = None) -> str:
         """Synchronous find-only audit by the connected critic.
 

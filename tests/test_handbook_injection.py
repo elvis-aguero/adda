@@ -56,8 +56,8 @@ def test_notebook_spec_always_injected(tmp_path):
         assert "DELIVERABLE = pipeline.ipynb" in b.system_prompt
         assert "name='doe'" in b.system_prompt  # four-pillar template present
         # Only the strategizer is told to AUTHOR with the structured tools.
-        assert "AUTHOR IT WITH THE\nSTRUCTURED TOOLS" in b.system_prompt
-        assert "AddPipelineCell(phase, why, code)" in b.system_prompt
+        assert "AUTHOR IT WITH THE STRUCTURED TOOLS" in b.system_prompt
+        assert "WriteCell(name, …)" in b.system_prompt
     finally:
         settings.configure({})
 

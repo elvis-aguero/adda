@@ -25,6 +25,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from ...prompts.tool_catalog import tool_examples
+
 ENV_VAR = "ADDA_ABAQUS_DOC_CORPUS"
 
 
@@ -62,6 +64,9 @@ def build_abaqus_docs_closures(corpus: str | Path | None = None) -> dict:
     if root is None:
         return {}
 
+    @tool_examples(
+        "ConsultAbaqus('linear buckling analysis step')",
+    )
     def ConsultAbaqus(query: str, limit: int = 8) -> str:
         """Look up Abaqus reference documentation.
 

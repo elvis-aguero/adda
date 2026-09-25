@@ -178,8 +178,9 @@ live from the stores, and prints budget spent against remaining.}
 observed, not hypothetical: one run hardcoded 70 evaluations where the ledger
 held 90, and another asserted 200 remaining with 200 spent. Both closed
 UNGATED.}
-{another tool in the catalogue, and a discipline the prompt has to insist on
---- the agent must call it rather than recall.}
+{a discipline the prompt has to insist on --- the agent must call it rather
+than recall. It is folded into the tool the agent already uses to summarise the
+recorded data, rather than being one more tool to know about.}
 
 \subsection{Anti-drift: generated, not typed}
 \label{sec:antidrift}
@@ -189,7 +190,10 @@ UNGATED.}
 invocation; the run diagram is generated from the live graph; a feature owns
 its knob, its tools and its prompt section as one unit; and the documented
 run-knob table is checked against the source, so a knob read but undocumented,
-documented but unread, or documented with the wrong default fails the build.}
+documented but unread, or documented with the wrong default fails the build.
+Every tool shows the agent at least one example call, and each example is
+checked against the tool it belongs to, so an example cannot teach a call that
+would fail.}
 {documentation and prompts maintained in parallel with the code. The failure
 this prevents is specific and was observed repeatedly: a flag that appears to
 disable a feature while the agent is still instructed to use it.}
@@ -199,6 +203,19 @@ line. And the guarantee is only as good as its contract tests: one such test
 was silently reduced to checking one of seven feature defaults by a refactor
 that moved defaults into the feature registry, and reported as passing skips
 throughout.}
+
+\decision{Few tools, each owning one object}
+{Operations on the same thing are one tool. The notebook is created, edited and
+pruned through a single tool; a hypothesis is listed or read in full through
+one; a process milestone is added, completed or skipped through one. The
+strategizer's thirteen notebook, hypothesis, milestone and status tools became
+three.}
+{a tool per operation. Every tool is a choice the agent makes on every call,
+and tools that differ only in which arguments they take invite the wrong
+choice --- the agent had already been sending one tool the arguments meant
+for its sibling, which the tool quietly ignored.}
+{a tool whose behaviour depends on the arguments it is given, which its
+description and its examples have to make plain.}
 
 \subsection{Provenance: recorded, not reconstructed}
 
@@ -294,7 +311,8 @@ them are the interesting part.
 \decision{f3dasm: runtime introspection}
 {The installed f3dasm is imported and introspected at run time --- 243 symbols,
 roughly 117{,}000 characters of docstring --- and exposed as a single lookup
-tool to the two agents that write f3dasm code. Each entry leads with the
+tool to the two agents that write f3dasm code, and to the one that decides
+what they write, which otherwise guesses what f3dasm provides. Each entry leads with the
 \emph{canonical public import path}, resolved by walking the public
 namespaces.}
 {parsing a source checkout. On a cluster the checkout may be a different

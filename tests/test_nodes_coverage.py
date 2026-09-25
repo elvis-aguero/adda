@@ -51,8 +51,7 @@ def _make_state(study_dir=None, **kwargs):
 def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Graph:
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                           "WriteDeliverable", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "WriteCell", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -190,21 +189,16 @@ def test_worker_node_recall_history_empty(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_write_deliverable_creates_file(tmp_path):
-    """WriteDeliverable writes pipeline.ipynb to study_dir."""
-    import nbformat
-
+def test_write_deliverable_creates_declared_file(tmp_path):
+    """WriteDeliverable writes a declared extra deliverable to study_dir."""
     from adda._src.nodes import Node
-    from adda._src.evaluation.notebook_exec import build_notebook
 
-    nb_json = nbformat.writes(build_notebook(
-        [{"type": "code", "name": "analysis", "source": "x = 42"}]))
     write_results = []
 
     class DeliverableAdapter(StubAdapter):
         def invoke(self, messages):
             result = self.closure_tools["WriteDeliverable"](
-                "pipeline.ipynb", nb_json
+                "replicate.py", "x = 42\n"
             )
             write_results.append(result)
             self.closure_tools["Done"](summary="done")
@@ -218,66 +212,52 @@ def test_write_deliverable_creates_file(tmp_path):
         study_dir=str(tmp_path),
     )
     state = _make_state(study_dir=tmp_path)
+    state["required_deliverables"] = ["replicate.py"]
     node(state)
 
     assert write_results
     assert "ERROR" not in write_results[0]
-    assert (tmp_path / "pipeline.ipynb").exists()
-    assert "42" in (tmp_path / "pipeline.ipynb").read_text()
+    assert "42" in (tmp_path / "replicate.py").read_text()
 
 
-def test_write_deliverable_repairs_code_cell_missing_outputs(tmp_path):
+def test_cell_tools_repair_a_code_cell_missing_outputs(tmp_path):
     """A hand-authored notebook missing `outputs` on a code cell (nbformat.
     reads() accepts this with no validation error — confirmed empirically)
-    must not crash a LATER nbformat.write elsewhere with AttributeError:
-    outputs (BACKLOG #28). WriteDeliverable repairs it in place before
-    writing to disk."""
+    must not crash a LATER nbformat.write with AttributeError: outputs
+    (BACKLOG #28). The notebook can no longer be written raw through a tool,
+    but one can still arrive on disk that way, so the cell tools repair it in
+    place on load before writing it back."""
     import json
+
+    import nbformat
 
     from adda._src.nodes import Node
 
-    malformed_nb = json.dumps({
+    (tmp_path / "pipeline.ipynb").write_text(json.dumps({
         "cells": [
-            {"cell_type": "code", "metadata": {}, "source": "x = 1"},
+            {"cell_type": "code", "metadata": {"name": "doe"}, "source": "x = 1"},
         ],
         "metadata": {},
         "nbformat": 4,
         "nbformat_minor": 5,
-    })
-    write_results = []
-
-    class DeliverableAdapter(StubAdapter):
-        def invoke(self, messages):
-            result = self.closure_tools["WriteDeliverable"](
-                "pipeline.ipynb", malformed_nb
-            )
-            write_results.append(result)
-            self.closure_tools["Done"](summary="done")
-            self.closure_tools["Done"](summary="done")
-            return "done"
-
-    adapter = DeliverableAdapter()
-    spec = _minimal_spec()
+    }))
     node = Node(
-        adapter, name="strategizer", outgoing=["implementer"], spec=spec,
-        study_dir=str(tmp_path),
+        StubAdapter(), name="strategizer", outgoing=["implementer"],
+        spec=_minimal_spec(), study_dir=str(tmp_path),
     )
-    state = _make_state(study_dir=tmp_path)
-    node(state)
+    out = node.adapter.closure_tools["WriteCell"]("problem", content="p")
+    assert "ERROR" not in out
 
-    assert write_results
-    assert "ERROR" not in write_results[0]
-
-    import nbformat
     nb_on_disk = nbformat.read(str(tmp_path / "pipeline.ipynb"), as_version=4)
-    assert "outputs" in nb_on_disk.cells[0]
+    code = [c for c in nb_on_disk.cells if c.cell_type == "code"][0]
+    assert "outputs" in code
     # The repaired notebook must itself be writable again without crashing —
     # this is the exact call that raised AttributeError: outputs before the fix.
     nbformat.write(nb_on_disk, str(tmp_path / "pipeline.ipynb"))
 
 
 def test_write_deliverable_rejects_bad_extension(tmp_path):
-    """WriteDeliverable rejects any file that doesn't end in .ipynb."""
+    """WriteDeliverable rejects any file the study did not declare."""
     from adda._src.nodes import Node
 
     (tmp_path / "pipeline.ipynb").write_text("# r\n")
@@ -612,7 +592,7 @@ def test_hypothesis_get_not_found(tmp_path):
 
     class HypGetAdapter(StubAdapter):
         def invoke(self, messages):
-            result = self.closure_tools["HypothesisGet"]("H999")
+            result = self.closure_tools["HypothesisList"](["H999"])
             results.append(result)
             self.closure_tools["Done"](summary="done")
             self.closure_tools["Done"](summary="done")
@@ -919,7 +899,7 @@ def test_done_with_pending_delegations_returns_error(tmp_path):
     # Soft 2-option nudge (not a hard error): still refuses to close, but
     # offers keep-working / wait (GetStatus). Cancel was dropped from production.
     assert "still running" in done_results[0].lower()
-    assert "GetStatus" in done_results[0]
+    assert "Wait" in done_results[0]
     assert "CancelDelegation" not in done_results[0]
     assert not done_results[0].lstrip().startswith("ERROR:")
 

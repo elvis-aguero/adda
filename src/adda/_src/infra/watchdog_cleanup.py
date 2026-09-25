@@ -26,7 +26,7 @@ from pathlib import Path
 # memory watcher's existing 5s poll (check_memory_and_kill already computes each
 # delegation's tree RSS to enforce the cap). A high-water max() per tick — no new
 # poll, no I/O, no thread. The watcher and the readers (delegation footer,
-# GetStatus) live in the SAME process, so this in-memory dict bridges them
+# the status poll) live in the SAME process, so this in-memory dict bridges them
 # without a file. Keyed by delegation_id (one run per process).
 _PEAK_RSS: dict[str, int] = {}
 _PEAK_LOCK = threading.Lock()
@@ -181,7 +181,7 @@ def seconds_since_last_activity(run_dir) -> float:
 
 def delegation_rss(run_dir, delegation_id: str, backend=None) -> int:
     """Total process-tree RSS (bytes) of one delegation's OWNED campaign(s), for
-    GetStatus telemetry so the strategizer can SEE a fat delegation. 0 if none /
+    status-poll telemetry so the strategizer can SEE a fat delegation. 0 if none /
     unknown. Best-effort — never raises."""
     try:
         from .resource_backend import get_resource_backend
@@ -195,7 +195,7 @@ def delegation_rss(run_dir, delegation_id: str, backend=None) -> int:
 def delegation_peak_rss(delegation_id: str) -> int:
     """Peak process-tree RSS (bytes) seen for one delegation across the memory
     watcher's 5s ticks — its high-water memory footprint, for the KPI footer and
-    GetStatus. 0 if the watcher never sampled it (a sub-tick or off-ledger
+    the status poll. 0 if the watcher never sampled it (a sub-tick or off-ledger
     delegation). Lower bound: a spike between two ticks is missed."""
     with _PEAK_LOCK:
         return _PEAK_RSS.get(str(delegation_id), 0)

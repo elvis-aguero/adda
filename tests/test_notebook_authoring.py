@@ -26,8 +26,7 @@ class _Stub:
 def _node(study_dir):
     class A(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "AddPipelineMarkdownCell", "AddPipelineCell",
-                           "CheckDeliverable"})
+        tools = frozenset({"Done", "WriteCell", "RunNotebook"})
         description = "strategizer"
 
     class B(Agent):
@@ -54,8 +53,10 @@ def _named(nb):
 
 def test_closures_present_only_when_declared(tmp_path):
     n = _node(tmp_path)
-    assert "AddPipelineMarkdownCell" in n.adapter.closure_tools
-    assert "AddPipelineCell" in n.adapter.closure_tools
+    assert "WriteCell" in n.adapter.closure_tools
+    for retired in ("AddPipelineMarkdownCell", "AddPipelineCell",
+                    "EditPipelineCell", "DeletePipelineCell"):
+        assert retired not in n.adapter.closure_tools  # folded into WriteCell
     assert "SetNotebookIntro" not in n.adapter.closure_tools  # retired
 
 
@@ -63,11 +64,11 @@ def test_set_intro_then_add_pillars_canonical_order(tmp_path):
     n = _node(tmp_path)
     tools = n.adapter.closure_tools
     # Add pillars OUT of order — the notebook must still come out canonical.
-    tools["AddPipelineCell"]("analysis", "derive headline", "print('REPRODUCED: 1.0')")
-    tools["AddPipelineCell"]("doe", "LHS over the box", "domain = ...; sampler = ...")
-    tools["AddPipelineMarkdownCell"]("problem", "minimise f over the 3-box.")
-    tools["AddPipelineMarkdownCell"]("hypotheses", "H1: ... H2: ...")
-    tools["AddPipelineCell"]("data_generation", "evaluate via get_evaluator", "data = ...")
+    tools["WriteCell"]("analysis", why="derive headline", code="print('REPRODUCED: 1.0')")
+    tools["WriteCell"]("doe", why="LHS over the box", code="domain = ...; sampler = ...")
+    tools["WriteCell"]("problem", content="minimise f over the 3-box.")
+    tools["WriteCell"]("hypotheses", content="H1: ... H2: ...")
+    tools["WriteCell"]("data_generation", why="evaluate via get_evaluator", code="data = ...")
 
     nb = _read(tmp_path)
     names = [c.metadata.get("name") for c in nb.cells if c.metadata.get("name")]
@@ -95,10 +96,10 @@ def test_verdict_cell_orders_immediately_before_analysis(tmp_path):
     cell."""
     n = _node(tmp_path)
     tools = n.adapter.closure_tools
-    tools["AddPipelineCell"]("doe", "LHS over the box", "domain = ...; sampler = ...")
-    tools["AddPipelineCell"]("analysis", "derive headline", "print('REPRODUCED: 1.0')")
-    tools["AddPipelineMarkdownCell"]("verdict", "H1 SUPPORTED because ...")
-    tools["AddPipelineMarkdownCell"]("problem", "minimise f over the 3-box.")
+    tools["WriteCell"]("doe", why="LHS over the box", code="domain = ...; sampler = ...")
+    tools["WriteCell"]("analysis", why="derive headline", code="print('REPRODUCED: 1.0')")
+    tools["WriteCell"]("verdict", content="H1 SUPPORTED because ...")
+    tools["WriteCell"]("problem", content="minimise f over the 3-box.")
 
     nb = _read(tmp_path)
     names = [c.metadata.get("name") for c in nb.cells if c.metadata.get("name")]
@@ -110,13 +111,13 @@ def test_verdict_cell_orders_immediately_before_analysis(tmp_path):
 
 
 def test_add_pillar_is_create_only_on_recall(tmp_path):
-    # AddPipelineCell is create-only: re-calling an existing phase errors
-    # (directing to EditPipelineCell) instead of blindly overwriting it.
+    # Re-writing an existing cell in full is an edit, and an edit that does
+    # not name the rev it saw errors instead of blindly overwriting it.
     n = _node(tmp_path)
     tools = n.adapter.closure_tools
-    tools["AddPipelineCell"]("doe", "first", "v = 1")
-    out = tools["AddPipelineCell"]("doe", "second", "v = 2")
-    assert "already exists" in out and "EditPipelineCell" in out
+    tools["WriteCell"]("doe", why="first", code="v = 1")
+    out = tools["WriteCell"]("doe", why="second", code="v = 2")
+    assert out.startswith("ERROR:") and "expected_rev" in out
     nb = _read(tmp_path)
     does = [c for c in nb.cells if c.metadata.get("name") == "doe"]
     assert len(does) == 1 and "v = 1" in does[0].source  # unchanged
@@ -128,10 +129,9 @@ def test_unknown_phase_proceeds_with_tip_as_custom_cell(tmp_path):
     The deliverable's shape must not constrain what science can be expressed."""
     n = _node(tmp_path)
     tools = n.adapter.closure_tools
-    tools["AddPipelineCell"]("doe", "LHS", "domain = ...")
+    tools["WriteCell"]("doe", why="LHS", code="domain = ...")
     # Custom phase: added on the FIRST call (not refused, not two-shot), with a tip.
-    out = tools["AddPipelineCell"]("ellipse_sweep", "explore ellipse phase",
-                                   "data = ...")
+    out = tools["WriteCell"]("ellipse_sweep", why="explore ellipse phase", code="data = ...")
     assert not out.startswith("ERROR:") and not out.startswith("[CONFIRM]")
     assert "custom" in out.lower()
     nb = _read(tmp_path)
@@ -144,19 +144,19 @@ def test_unknown_phase_proceeds_with_tip_as_custom_cell(tmp_path):
 def test_add_pillar_requires_why_and_code(tmp_path):
     n = _node(tmp_path)
     tools = n.adapter.closure_tools
-    assert tools["AddPipelineCell"]("doe", "  ", "code").startswith("ERROR:")
-    assert tools["AddPipelineCell"]("doe", "why", "").startswith("ERROR:")
+    assert tools["WriteCell"]("doe", why="  ", code="code").startswith("ERROR:")
+    assert tools["WriteCell"]("doe", why="why", code="").startswith("ERROR:")
 
 
 def test_markdown_cells_are_per_cell_and_create_only(tmp_path):
-    # AddPipelineMarkdownCell authors problem/hypotheses INDEPENDENTLY (no
-    # bundling) and is create-only — re-adding errors (use EditPipelineCell).
+    # WriteCell authors problem/hypotheses INDEPENDENTLY (no bundling), and a
+    # blind re-write errors — an edit must name the rev it saw.
     n = _node(tmp_path)
     tools = n.adapter.closure_tools
-    assert "Added problem" in tools["AddPipelineMarkdownCell"]("problem", "p1")
-    assert "Added hypotheses" in tools["AddPipelineMarkdownCell"]("hypotheses", "h1")
-    out = tools["AddPipelineMarkdownCell"]("problem", "p2")  # re-add
-    assert "already exists" in out and "EditPipelineCell" in out
+    assert "Added problem" in tools["WriteCell"]("problem", content="p1")
+    assert "Added hypotheses" in tools["WriteCell"]("hypotheses", content="h1")
+    out = tools["WriteCell"]("problem", content="p2")  # blind re-write
+    assert out.startswith("ERROR:") and "expected_rev" in out
     nb = _read(tmp_path)
     by = _named(nb)
     assert "p1" in by["problem"].source  # unchanged by the failed re-add
@@ -164,10 +164,10 @@ def test_markdown_cells_are_per_cell_and_create_only(tmp_path):
     # a non-reserved name is a custom narrative cell, not an error — the
     # deliverable's structure must not block what an agent needs to say
     # (mirrors AddPipelineCell's own custom-phase philosophy)
-    assert "Added custom" in tools["AddPipelineMarkdownCell"]("intro", "x")
+    assert "Added custom" in tools["WriteCell"]("intro", content="x")
     # only a pillar name / <pillar>__why collides and is rejected
-    assert tools["AddPipelineMarkdownCell"]("doe", "x").startswith("ERROR:")
-    assert tools["AddPipelineMarkdownCell"]("doe__why", "x").startswith("ERROR:")
+    assert tools["WriteCell"]("doe", content="x").startswith("ERROR:")
+    assert tools["WriteCell"]("doe__why", content="x").startswith("ERROR:")
 
 
 def test_authored_notebook_passes_the_gate(tmp_path):
@@ -198,9 +198,9 @@ def test_authored_notebook_passes_the_gate(tmp_path):
     n._study_dir = tmp_path
     n._current_notes_dir = run_dir / "debug" / "strategizer_notes"
     tools = n.adapter.closure_tools
-    tools["AddPipelineMarkdownCell"]("problem", "minimise f")
-    tools["AddPipelineMarkdownCell"]("hypotheses", "H1")
-    tools["AddPipelineCell"]("analysis", "derive", "print('REPRODUCED: 1.0')")
+    tools["WriteCell"]("problem", content="minimise f")
+    tools["WriteCell"]("hypotheses", content="H1")
+    tools["WriteCell"]("analysis", why="derive", code="print('REPRODUCED: 1.0')")
     assert n._reproduction_gate({"study_dir": str(tmp_path)}) is None
 
 
@@ -243,11 +243,11 @@ def test_check_deliverable_sees_evals_in_a_design_namespace_only(tmp_path):
     n._study_dir = tmp_path
     n._current_notes_dir = run_dir / "debug" / "strategizer_notes"
     tools = n.adapter.closure_tools
-    tools["AddPipelineMarkdownCell"]("problem", "minimise f")
-    tools["AddPipelineMarkdownCell"]("hypotheses", "H1")
-    tools["AddPipelineCell"]("analysis", "derive", "print('REPRODUCED: 1.0')")
+    tools["WriteCell"]("problem", content="minimise f")
+    tools["WriteCell"]("hypotheses", content="H1")
+    tools["WriteCell"]("analysis", why="derive", code="print('REPRODUCED: 1.0')")
 
-    result = tools["CheckDeliverable"]()
+    result = tools["RunNotebook"](gate=True)
     assert "no evaluations yet" not in result, (
         f"CheckDeliverable falsely blocked a namespace-only run: {result!r}"
     )

@@ -78,11 +78,7 @@ def _node(tmp_path):
         role = "strategizer"
         # Declaration-driven exposure: declare the capability tools this stub
         # exercises (hypothesis + milestone closures are no longer injected).
-        tools = frozenset({
-            "Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList",
-            "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList",
-            "MilestonePropose", "MilestoneComplete", "MilestoneSkip",
-            "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "strategizer"
 
     class Lit(Agent):
@@ -132,7 +128,7 @@ def test_milestone_propose_tool_does_not_crash(tmp_path):
     and assert it returns a milestone id, and that the proposed milestone is
     pending (so it genuinely joins the implementer-gating backlog)."""
     n = _node(tmp_path)
-    mid = n.adapter.closure_tools["MilestonePropose"]("verify both stage gates")
+    mid = n.adapter.closure_tools["MilestoneSet"](description="verify both stage gates")
     assert mid.startswith("M"), mid
     pending_ids = {m["id"] for m in n._milestones.pending()}
     assert mid in pending_ids
@@ -186,8 +182,8 @@ def test_milestone_nudge_recurs_per_namespace(tmp_path):
 def test_milestone_complete_requires_a_brief(tmp_path):
     n = _node(tmp_path)
     mid = n._milestones.propose("my step")
-    assert "ERROR" in n.adapter.closure_tools["MilestoneComplete"](mid, "")
-    ok = n.adapter.closure_tools["MilestoneComplete"](mid, "done via D2")
+    assert "ERROR" in n.adapter.closure_tools["MilestoneSet"](mid, "DONE", note="")
+    ok = n.adapter.closure_tools["MilestoneSet"](mid, "DONE", note="done via D2")
     assert "ERROR" not in ok and n._milestones.get(mid)["status"] == "DONE"
 
 
@@ -196,7 +192,7 @@ def test_done_blocked_until_backlog_resolved(tmp_path):
     out = n.adapter.closure_tools["Done"](summary="done")
     assert "Cannot close yet" in out
     for m in n._milestones.list_all():
-        n.adapter.closure_tools["MilestoneSkip"](m["id"], "n/a")
+        n.adapter.closure_tools["MilestoneSet"](m["id"], "SKIPPED", note="n/a")
     out2 = n.adapter.closure_tools["Done"](summary="done")
     assert "Cannot close yet" not in out2
 
@@ -206,7 +202,7 @@ def test_render_backlog_announcement(tmp_path):
     bl = render_backlog(n._milestones)
     assert "<process_backlog>" in bl
     assert "f3dasm implementer" in bl
-    assert "MilestoneSkip" in bl
+    assert "MilestoneSet" in bl and "SKIPPED" in bl
     # the three milestones are listed
     for kw in ("Pipeline", "literature", "oracle"):
         assert kw.lower() in bl.lower()
@@ -214,6 +210,20 @@ def test_render_backlog_announcement(tmp_path):
 
 def test_milestone_closures_registered(tmp_path):
     n = _node(tmp_path)
-    for tool in ("MilestoneList", "MilestonePropose", "MilestoneComplete",
-                 "MilestoneSkip"):
+    for tool in ("MilestoneList", "MilestoneSet"):
         assert tool in n.adapter.closure_tools
+
+
+def test_milestone_set_adds_completes_and_skips(tmp_path):
+    """Three outcomes of one write: add (no id), close DONE, close SKIPPED —
+    and a close with no note is refused, so closing stays auditable."""
+    n = _node(tmp_path)
+    ms = n.adapter.closure_tools["MilestoneSet"]
+    mid = ms(description="validate the oracle on one sample")
+    assert mid.startswith("M")
+    assert ms(mid, "DONE").startswith("ERROR")          # no note
+    assert "DONE" in ms(mid, "DONE", note="D002 validated it")
+    other = ms(description="read the prior art")
+    assert "SKIPPED" in ms(other, "skipped", note="no prior art exists")
+    assert ms(mid, "OPEN", note="x").startswith("ERROR")  # not a close
+    assert ms(description="x", status="DONE").startswith("ERROR")

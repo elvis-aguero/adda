@@ -88,7 +88,7 @@ class ScriptedStrategistAdapter:
         # (the gate blocks the implementer until it's cleared).
         if "MilestoneList" in tools:
             for mid in re.findall(r"M\d{3}", tools["MilestoneList"]()):
-                tools["MilestoneSkip"](mid, "not applicable to this scripted test")
+                tools["MilestoneSet"](mid, "SKIPPED", note="not applicable to this scripted test")
 
         # Step 2: delegate to implementer to test H1
         result = tools["Delegate"](
@@ -101,7 +101,7 @@ class ScriptedStrategistAdapter:
 
         # Step 3: poll until done
         for _ in range(200):
-            status = tools["GetStatus"](d1_id)
+            status = tools["Wait"](d1_id, block=False)
             if not status.strip().startswith("Working"):
                 break
             time.sleep(0.05)
@@ -126,7 +126,7 @@ class ScriptedStrategistAdapter:
         d2_id = re.search(r"D\d{3}", result2).group()
 
         for _ in range(200):
-            status = tools["GetStatus"](d2_id)
+            status = tools["Wait"](d2_id, block=False)
             if not status.strip().startswith("Working"):
                 break
             time.sleep(0.05)
@@ -142,15 +142,10 @@ class ScriptedStrategistAdapter:
         # Author the required deliverable (pipeline.ipynb) before Done(). Must
         # satisfy the controlled reproduction gate: a code cell printing a
         # verifiable 'REPRODUCED: <value>' sentinel.
-        if "WriteDeliverable" in tools:
-            import nbformat
-            from adda._src.evaluation.notebook_exec import build_notebook
-            nb = build_notebook([
-                {"type": "markdown", "source": "# Problem\nminimise f."},
-                {"type": "code", "name": "analysis",
-                 "source": "print('REPRODUCED: 0.0')"},
-            ])
-            tools["WriteDeliverable"]("pipeline.ipynb", nbformat.writes(nb))
+        if "WriteCell" in tools:
+            tools["WriteCell"]("problem", content="minimise f.")
+            tools["WriteCell"]("analysis", why="Report the headline.",
+                               code="print('REPRODUCED: 0.0')")
             # Seed the canonical store so the reproduction gate can verify
             # grounding (the mock worker never calls get_evaluator()).
             _run = self._run

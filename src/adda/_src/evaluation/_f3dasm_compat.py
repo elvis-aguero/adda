@@ -10,7 +10,7 @@ using only the public surface (``to_pandas``, ``len``, the on-disk layout):
    returned array stays float instead of decaying to ``object`` dtype.
 2. ``store()`` refuses a write that would SHRINK a PROTECTED store (a project
    dir marked with ``PROTECTED_STORE_SENTINEL``), so a stray partial
-   ``.store()`` cannot clobber the metered canonical ledger.
+   ``.store()`` cannot clobber the metered canonical store.
 
 Both are idempotent. Applied on top of a f3dasm that already has them, the
 underscore drop is a no-op and the guard raises identically. The patch is

@@ -47,8 +47,7 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so behaviour tests still exercise them even
         # though production agents no longer grant them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                           "GetStatus", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -196,7 +195,7 @@ def test_strategizer_delegate_returns_task_id():
 def test_done_blocked_while_delegation_pending():
     """Done returns a soft 2-option nudge (not a hard error) when called while
     a delegation is still Working — it still refuses to close, but offers the
-    keep-working / wait (GetStatus) paths (cancel dropped from production)."""
+    keep-working / wait paths (cancel dropped from production)."""
     from adda._src.nodes import Node
 
     results: list[str] = []
@@ -230,7 +229,7 @@ def test_done_blocked_while_delegation_pending():
 
     # Done should have refused with the soft 2-option nudge (not a hard error)
     assert results and "still running" in results[0]
-    assert "GetStatus" in results[0]  # offers the wait + GetStatus path
+    assert "Wait" in results[0]  # offers the wait path
     assert "CancelDelegation" not in results[0]  # cancel dropped from production
     assert not results[0].lstrip().startswith("ERROR:")  # soft, not an error
 
@@ -380,8 +379,7 @@ def test_strategizer_delegate_prepends_edge_preamble():
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so behaviour tests still exercise them even
         # though production agents no longer grant them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                           "GetStatus", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -471,8 +469,7 @@ def test_parallel_two_delegations_both_complete():
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; the
         # test strategizer opts in so behaviour tests still exercise them even
         # though production agents no longer grant them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                           "GetStatus", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -528,10 +525,10 @@ def test_get_status_returns_working_then_done():
             task_id = m.group()
 
             # Poll immediately — should be Working
-            status_snapshots.append(self.closure_tools["GetStatus"](task_id))
+            status_snapshots.append(self.closure_tools["Wait"](task_id, block=False))
             # Wait and poll again — should be Done
             time.sleep(0.5)
-            status_snapshots.append(self.closure_tools["GetStatus"](task_id))
+            status_snapshots.append(self.closure_tools["Wait"](task_id, block=False))
             self.closure_tools["Done"](summary="polled")
             return "Done."
 
@@ -596,7 +593,7 @@ def test_get_status_unknown_id_returns_error():
 
     class PollUnknownAdapter(StubAdapter):
         def invoke(self, messages):
-            result = self.closure_tools["GetStatus"]("D999")
+            result = self.closure_tools["Wait"]("D999", block=False)
             errors.append(result)
             self.closure_tools["Done"](summary="done")
             return "Done."
@@ -632,7 +629,7 @@ def test_errored_status_contains_traceback():
             m = _re.search(r"D[0-9]{3}", result); task_id = m.group() if m else None; assert task_id, f"No D### ID in: {result!r}"
             # Poll until resolved
             for _ in range(50):
-                status = self.closure_tools["GetStatus"](task_id)
+                status = self.closure_tools["Wait"](task_id, block=False)
                 if not status.startswith("Working"):
                     status_seen.append(status)
                     break
@@ -686,7 +683,7 @@ def test_delegation_still_working_returns_working_status():
             assert task_id, f"No D### ID in: {result!r}"
             worker_started.wait(timeout=2)
             # Poll while worker is still held — must return Working, not Timeout
-            status = self.closure_tools["GetStatus"](task_id)
+            status = self.closure_tools["Wait"](task_id, block=False)
             status_seen.append(status)
             # Release the worker and wait for it to finish
             allow_finish.set()
@@ -1884,7 +1881,7 @@ def _spec_with_critic():
 
     class S(Agent):
         role = "strategizer"
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"})
         description = "Test strategizer."
 
     class W(Agent):
@@ -2448,7 +2445,7 @@ def _spec_with_write_deliverable():
     class A(Agent):
         role = "strategizer"
         tools = frozenset(
-            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"}
+            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "WriteCell", "ShowNotebook", "RunNotebook", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"}
         )
         description = "Test strategizer."
 
@@ -2574,9 +2571,11 @@ def test_write_deliverable_absent_when_not_in_tools():
 def test_notebook_tools_stripped_when_pipeline_deliverable_false(tmp_path):
     """pipeline_deliverable: false removes the notebook-authoring tools
     themselves, not just the injected prompt preamble (BACKLOG #30) --
-    declaring WriteDeliverable in agent.tools is not enough to get the
-    closure once this flag is off. Done must stay available regardless
-    (still needed to close a run with no notebook at all)."""
+    declaring WriteCell in agent.tools is not enough to get the closure once
+    this flag is off. Done must stay available regardless (still needed to
+    close a run with no notebook at all), and so must WriteDeliverable: it
+    writes the study's declared EXTRA files, which the Done() gate requires
+    notebook or not."""
     from adda._src.runtime import settings
     from adda._src.nodes import Node
 
@@ -2588,8 +2587,10 @@ def test_notebook_tools_stripped_when_pipeline_deliverable_false(tmp_path):
             adapter, name="strategizer", outgoing=["implementer"], spec=spec,
             notes_dir=tmp_path,
         )
-        assert "WriteDeliverable" not in node.adapter.closure_tools
+        for t in ("WriteCell", "ShowNotebook", "RunNotebook"):
+            assert t not in node.adapter.closure_tools
         assert "Done" in node.adapter.closure_tools
+        assert "WriteDeliverable" in node.adapter.closure_tools
     finally:
         settings.configure(None)
 
@@ -2610,12 +2611,11 @@ def test_notebook_tools_present_by_default(tmp_path):
     assert "WriteDeliverable" in node.adapter.closure_tools
 
 
-def test_write_deliverable_writes_notebook(tmp_path):
-    """WriteDeliverable writes pipeline.ipynb directly to study_dir/."""
-    import nbformat
-
+def test_write_deliverable_writes_declared_extras_not_the_notebook(tmp_path):
+    """WriteDeliverable writes the study's declared extra files verbatim to
+    study_dir/, and refuses the notebook: writing it raw would bypass the
+    structure the cell tools enforce."""
     from adda._src.nodes import Node
-    from adda._src.evaluation.notebook_exec import build_notebook
 
     study_dir = tmp_path / "study"
     study_dir.mkdir()
@@ -2629,16 +2629,16 @@ def test_write_deliverable_writes_notebook(tmp_path):
         study_dir=study_dir, notes_dir=notes_dir,
     )
     node._current_notes_dir = notes_dir
+    node._required_deliverables = ["replicate.py"]
+    write = node.adapter.closure_tools["WriteDeliverable"]
 
-    nb = build_notebook([{"type": "code", "name": "analysis",
-                          "source": "import f3dasm\nprint('hello')"}])
-    result = node.adapter.closure_tools["WriteDeliverable"](
-        "pipeline.ipynb", nbformat.writes(nb)
-    )
+    result = write("replicate.py", "import f3dasm\nprint('hello')")
     assert result.startswith("Written:"), f"Unexpected result: {result!r}"
-    written = study_dir / "pipeline.ipynb"
-    assert written.exists(), f"File not found at {written}"
-    assert "import f3dasm" in written.read_text()
+    assert "import f3dasm" in (study_dir / "replicate.py").read_text()
+
+    refused = write("pipeline.ipynb", "{}")
+    assert refused.startswith("ERROR:") and "cell" in refused
+    assert not (study_dir / "pipeline.ipynb").exists()
 
 
 def test_write_deliverable_rejects_py_script(tmp_path):
@@ -3274,7 +3274,7 @@ def _spec_with_critic_and_deliverable():
     class S(Agent):
         role = "strategizer"
         tools = frozenset(
-            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "HypothesisGet", "LinkFalsificationAttempt", "MilestoneList", "MilestonePropose", "MilestoneComplete", "MilestoneSkip", "RecallStore", "QueryStore"}
+            {"Done", "FollowUp", "WriteNote", "ReadNote", "WriteDeliverable", "HypothesisPropose", "HypothesisUpdate", "HypothesisList", "MilestoneList", "MilestoneSet", "RecallStore", "QueryStore"}
         )
         description = "Test strategizer."
 
@@ -3405,8 +3405,7 @@ def test_done_critic_gate_embeds_ledger_and_falsification_flags(tmp_path):
             if "MilestoneList" in self.closure_tools:
                 for _mid in _re.findall(
                         r"M\d{3}", self.closure_tools["MilestoneList"]()):
-                    self.closure_tools["MilestoneSkip"](
-                        _mid, "n/a for this test")
+                    self.closure_tools["MilestoneSet"](_mid, "SKIPPED", note="n/a for this test")
             # 5. Two-shot Done()
             self.closure_tools["Done"](summary="H1 is supported; below 1.0.")
             self.closure_tools["Done"](summary="H1 is supported; below 1.0.")
@@ -3535,8 +3534,7 @@ def test_done_gate_mode_critic_call_is_logged_as_a_delegation(tmp_path):
             if "MilestoneList" in self.closure_tools:
                 for _mid in _re.findall(
                         r"M\d{3}", self.closure_tools["MilestoneList"]()):
-                    self.closure_tools["MilestoneSkip"](
-                        _mid, "n/a for this test")
+                    self.closure_tools["MilestoneSet"](_mid, "SKIPPED", note="n/a for this test")
             self.closure_tools["Done"](summary="H1 is supported.")
             self.closure_tools["Done"](summary="H1 is supported.")
             return "Done."
@@ -3670,8 +3668,7 @@ def test_gate_and_feedback_critic_messages_carry_problem_statement(tmp_path):
             if "MilestoneList" in self.closure_tools:
                 for _mid in _re.findall(
                         r"M\d{3}", self.closure_tools["MilestoneList"]()):
-                    self.closure_tools["MilestoneSkip"](
-                        _mid, "n/a for this test")
+                    self.closure_tools["MilestoneSet"](_mid, "SKIPPED", note="n/a for this test")
             self.closure_tools["Done"](summary="H1 is supported.")
             self.closure_tools["Done"](summary="H1 is supported.")
             return "Done."

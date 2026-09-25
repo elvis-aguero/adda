@@ -323,7 +323,7 @@ def _three_tier_graph():
     class Mid(Agent):
         role = "implementer"
         description = "mid-tier node with its own outgoing edge"
-        tools = frozenset({"HypothesisList", "HypothesisGet"})
+        tools = frozenset({"HypothesisList"})
 
     class Leaf(Agent):
         role = "implementer"
@@ -389,7 +389,7 @@ def test_build_graph_non_entry_node_declared_read_tools_work(monkeypatch, tmp_pa
 
 def test_build_graph_non_entry_node_has_no_undeclared_write_path(monkeypatch, tmp_path):
     """mid owns a real ledger/milestone-ledger object now, but it never
-    declared the WRITE tools — HypothesisPropose/Update/Milestone* must stay
+    declared the WRITE tools — HypothesisPropose/Update/MilestoneSet must stay
     absent from its exposed closures. Write access is gated by the Agent's
     own declared `tools`, never by ledger ownership (CLAUDE.md §4: verdict
     mutation stays the strategizer's)."""
@@ -397,8 +397,7 @@ def test_build_graph_non_entry_node_has_no_undeclared_write_path(monkeypatch, tm
     mid = built["mid"]
 
     for write_tool in (
-        "HypothesisPropose", "HypothesisUpdate", "LinkFalsificationAttempt",
-        "MilestonePropose", "MilestoneComplete", "MilestoneSkip",
+        "HypothesisPropose", "HypothesisUpdate", "MilestoneSet",
     ):
         assert write_tool not in mid.adapter.closure_tools, write_tool
 

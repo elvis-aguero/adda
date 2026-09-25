@@ -38,8 +38,7 @@ def _minimal_spec(name: str = "strategizer", target: str = "implementer") -> Gra
         role = "strategizer"
         # GetStatus/CancelDelegation are opt-in (plug-and-play) post-audit; opt
         # in so behaviour tests still exercise them.
-        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote",
-                           "GetStatus", "CancelDelegation"})
+        tools = frozenset({"Done", "FollowUp", "WriteNote", "ReadNote", "Wait", "CancelDelegation"})
         description = "Test strategizer."
 
     class B(Agent):
@@ -266,7 +265,7 @@ def test_getstatus_includes_budget_warning_when_over_80_pct():
             )
             did = re.search(r"D\d{3}", did_str).group(0)
             delegation_started.wait(timeout=2)
-            result = self.closure_tools["GetStatus"](did)
+            result = self.closure_tools["Wait"](did, block=False)
             getstatus_results.append(result)
             self.closure_tools["Done"](summary="partial")
             self.closure_tools["Done"](summary="partial")
@@ -396,7 +395,7 @@ def test_getstatus_unknown_id_returns_error():
 
     class GetStatusAdapter(StubAdapter):
         def invoke(self, messages):
-            result = self.closure_tools["GetStatus"]("D999")
+            result = self.closure_tools["Wait"]("D999", block=False)
             results.append(result)
             self.closure_tools["Done"](summary="done")
             self.closure_tools["Done"](summary="done")

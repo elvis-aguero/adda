@@ -406,7 +406,7 @@ def test_literature_review_wet(tmp_path, capfd):
             if m:
                 d_id = m.group()
                 for _ in range(2400):  # 2400 × 0.5s = 20 min ceiling
-                    status = self.closure_tools["GetStatus"](d_id)
+                    status = self.closure_tools["Wait"](d_id, block=False)
                     if not status.strip().startswith("Working"):
                         worker_report = re.sub(r"^Done\s*\n+", "", status, flags=re.DOTALL)
                         break
@@ -415,12 +415,9 @@ def test_literature_review_wet(tmp_path, capfd):
             summary = worker_report or "Literature review complete."
             # pipeline.ipynb is a hard Done() requirement — author it via the
             # structured tools (a minimal self-asserting analysis cell).
-            if "AddPipelineCell" in self.closure_tools:
-                self.closure_tools["AddPipelineMarkdownCell"](
-                    "problem", "Literature review of the problem.")
-                self.closure_tools["AddPipelineCell"](
-                    "analysis", "re-run the literature review delegation",
-                    "print('REPRODUCED: 0.0')")
+            if "WriteCell" in self.closure_tools:
+                self.closure_tools["WriteCell"]("problem", content="Literature review of the problem.")
+                self.closure_tools["WriteCell"]("analysis", why="re-run the literature review delegation", code="print('REPRODUCED: 0.0')")
             # Two-shot Done(): first call → warning; second → closes.
             # If delegation is still working, wait briefly and retry.
             r1 = self.closure_tools["Done"](summary=summary)

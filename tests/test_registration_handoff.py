@@ -182,13 +182,15 @@ def test_extends_canonical_still_records_who_touched_the_oracle(tmp_path):
     )
     _drop_in_place_manifest(run_dir, tmp_path / "study", "D001")
 
-    closures["Delegate"](
+    # The notice reaches the agent with the delegation's own result: every
+    # tool call delivers what is queued, via the dispatch wrapper.
+    out = closures["Delegate"](
         target="datagen", intent="extend the canonical generator",
         expected_report="", wait=True,
     )
 
     with node._notifications_lock:
-        notes = "\n".join(node._notifications)
+        notes = out + "\n".join(node._notifications)
     assert "extended in place" in notes
     assert "D001" in notes
     assert "canonical_gen.py" in notes
@@ -202,7 +204,9 @@ def test_a_normal_manifest_still_repoints_and_names_its_author(tmp_path):
     )
     _drop_manifest(run_dir, "D001")
 
-    closures["Delegate"](
+    # The notice reaches the agent with the delegation's own result: every
+    # tool call delivers what is queued, via the dispatch wrapper.
+    out = closures["Delegate"](
         target="datagen", intent="build oracle",
         expected_report="", wait=True,
     )
@@ -210,5 +214,5 @@ def test_a_normal_manifest_still_repoints_and_names_its_author(tmp_path):
     cfg = json.loads(cfg_path.read_text())
     assert cfg["evaluator_entrypoint"].endswith("D001/generators/x.py:x_gen")
     with node._notifications_lock:
-        notes = "\n".join(node._notifications)
+        notes = out + "\n".join(node._notifications)
     assert "registered" in notes and "D001" in notes

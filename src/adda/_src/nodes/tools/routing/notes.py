@@ -6,24 +6,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ....prompts.tool_catalog import tool_examples
+
 
 def build_notes_closures(node) -> dict:
     study_dir = node._study_dir
 
+    @tool_examples(
+        "WriteNote('why_D005.md', body='Chose TPE over a second LHS because the landscape is mapped: ...')",
+    )
     def WriteNote(path: str, body: str) -> str:
         """Write a Markdown (.md) note to strategizer_notes/ — free-form
         reasoning: why you chose each Delegate, interim findings, open issues.
         Do NOT write code in notes (embed it in Delegate().intent as plain
         text), and do NOT record priors/posteriors here — those live ONLY in
         the hypothesis ledger (HypothesisPropose/Update)."""
-        prefix = node._drain_notifications()
         notes_dir = node._current_notes_dir
         if notes_dir is None:
             return "ERROR: notes_dir not set (run_dir missing from state)."
         bare = Path(path).name
         if bare.endswith(".ipynb"):
             if study_dir is None:
-                return prefix + "ERROR: study_dir not set — cannot write .ipynb."
+                return "ERROR: study_dir not set — cannot write .ipynb."
             target = Path(study_dir).resolve() / bare
         else:
             if not bare.endswith(".md"):
@@ -31,16 +35,19 @@ def build_notes_closures(node) -> dict:
             target = Path(notes_dir) / bare
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(body, encoding="utf-8")
-        return prefix + f"Written: {target}"
+        return f"Written: {target}"
 
 
+    @tool_examples(
+        "ReadNote('PROBLEM_STATEMENT.md')",
+        "ReadNote('workspace/D004')",
+    )
     def ReadNote(path: str) -> str:
         """Read a file — or LIST a directory — from the study directory. Use it
         to load PROBLEM_STATEMENT.md, review prior notes, and (importantly) to
         reuse the implementers' work: point it at a delegation workspace
         (workspace_dir/D###/) to LIST its files, then read the script you want
         to consolidate into pipeline.ipynb. Read what you need, not everything."""
-        prefix = node._drain_notifications()
         if study_dir is None:
             return "ERROR: study_dir not set."
         # Contain to the study directory. An absolute or ..-escaping path — e.g.
@@ -53,12 +60,12 @@ def build_notes_closures(node) -> dict:
         try:
             target.relative_to(study_root)
         except ValueError:
-            return prefix + (
+            return (
                 f"ERROR: {path!r} resolves outside the study directory; "
                 "use a path within it (e.g. 'PROBLEM_STATEMENT.md' or 'D001/')."
             )
         if not target.exists():
-            return prefix + f"NOT FOUND: {target}"
+            return f"NOT FOUND: {target}"
         if target.is_dir():
             # List files recursively so the agent can discover what an
             # implementer wrote — but BOUND the walk: stop after _MAX files so a
@@ -78,11 +85,11 @@ def build_notes_closures(node) -> dict:
             listing = "\n".join(f"  {e}" for e in entries) or "  (empty)"
             if truncated:
                 listing += "\n  … (more files — narrow the path)"
-            return prefix + (
+            return (
                 f"{target} is a directory. Files (read one with "
                 f"ReadNote('{path.rstrip('/')}/<file>')):\n{listing}"
             )
-        return prefix + target.read_text(encoding="utf-8")
+        return target.read_text(encoding="utf-8")
 
 
     return {

@@ -6,7 +6,7 @@ from ..backends.base import Agent
 
 DEBUGGER_SYSTEM_PROMPT = """\
 <role>
-You are the Debugger in the agentic-f3dasm research system.
+You are the Debugger in adda, a specialist-team research system built on f3dasm.
 Your job is to diagnose failures, trace errors to their root cause, and
 report findings precisely.  You do NOT form hypotheses about the science
 or propose new research directions.  You receive a debugging Task from the
@@ -18,8 +18,8 @@ the debug/delegations/{delegation_id}/ folder assigned for this delegation.
 Your exact, callable tools are listed in the <tools> catalog appended to this
 prompt — that is the single authoritative source, generated from the tools
 the runtime actually registered. Beyond the standard file/shell tools, you
-also have read-only ledger access (RecallStore/QueryStore/OracleStatus,
-HypothesisList/HypothesisGet) to check whether a failure is entangled with
+also have read-only store access (RecallStore/QueryStore/OracleStatus,
+HypothesisList) to check whether a failure is entangled with
 what has been measured or an open hypothesis, and job control
 (BashOutput/KillShell) for a long-running command you started that gets
 backgrounded past its timeout.
@@ -107,7 +107,7 @@ class DebuggerAgent(Agent):
     tools = frozenset({"Bash", "Read", "Grep", "Edit", "Write",
                        # read-only ledger/store access for diagnosis
                        "RecallStore", "QueryStore", "OracleStatus",
-                       "HypothesisList", "HypothesisGet",
+                       "HypothesisList",
                        # manage a backgrounded job: poll it / stop it
                        "BashOutput", "KillShell",
                        "ReadProblemStatement"})

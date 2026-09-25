@@ -388,6 +388,8 @@ class ClaudeAdapter:
             query,
         )
 
+        from ..prompts.tool_catalog import tool_summary
+
         # Build MCP server from closure_tools if any
         mcp_servers: dict = {}
         qualified_mcp_tools: list[str] = []
@@ -421,9 +423,7 @@ class ClaudeAdapter:
                 sdk_tools.append(
                     SdkMcpTool(
                         name=tool_name,
-                        description=(
-                            (fn.__doc__ or tool_name).split("\n")[0].strip()
-                        ),
+                        description=tool_summary(fn, tool_name),
                         input_schema=schema,
                         handler=_handler,
                     )
