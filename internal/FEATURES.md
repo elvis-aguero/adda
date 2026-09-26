@@ -301,6 +301,29 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **Where:** `backends/base.py`'s `Agent.build_closure_tools` default.
   **Status:** core.
 
+### Retrieval degradation is a diagnostics event, not just a log line
+- **What:** when `ConsultLiterature`'s dense embedder is unavailable (fastembed
+  unimportable in-process AND the out-of-process embed-worker probe failed —
+  the sandboxed/Slurm case), retrieval silently downgraded to BM25 (lexical)
+  only, and the only trace was a `log.warning()` nobody watching a run would
+  see — not even the agent doing the searching. `LiteratureCorpus` now records
+  *why* on `embedder_fallback_reason` and exposes it exactly once per corpus
+  instance via `pop_diagnostic_event()` (`("RETRIEVAL_DEGRADED", reason)`).
+  `ConsultLiterature` tags itself with its corpus
+  (`fn._adda_diagnostic_source = corpus`); `orchestration.py`'s
+  `_wrap_closure` — the one place with both a per-run diagnostics path and,
+  via the tag, a handle back to the corpus — pops the event, records it to
+  `debug/diagnostics.jsonl` via `_record_intervention` (event `RETRIEVAL_DEGRADED`,
+  same neutral `fault="nudge"` classification as other environment-fact
+  events, not an agent error), and prepends an `<adda-note>`-wrapped notice
+  (`nodes/notices.py`) to that call's result so the agent itself learns its
+  literature coverage is reduced. One diagnostics path, fired once per run —
+  not a second writer, not a node-handle threaded into the corpus module.
+- **Where:** `literature/literature_corpus.py` (`embedder_fallback_reason`,
+  `pop_diagnostic_event`); `agents/literature_tools/corpus.py`
+  (`build_corpus_read_closures` tagging); `nodes/orchestration.py`
+  (`_wrap_closure`). **Status:** core.
+
 ### Delegation-bounded version control of the run workspace
 - **What:** one git repository per run, rooted at the run's own
   `debug/delegations/` workspace, with one commit per delegation (DONE and
