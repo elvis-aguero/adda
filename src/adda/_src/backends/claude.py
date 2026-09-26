@@ -227,6 +227,13 @@ def _build_session_env() -> dict:
       directly; without this the var is empty in the worker shell, so a campaign
       defaults to the wrong namespace and can overwrite another delegation's
       scratch data (audit run 20260624T021359, D005→D006 sim-dir clobber).
+    - ``CLAUDE_CODE_DISABLE_AUTO_MEMORY`` — the bundled CLI injects the
+      developer's personal auto-memory index (keyed off cwd, unrelated to this
+      run) into every agent turn. ``ClaudeAgentOptions.setting_sources=[]``
+      does NOT gate this — it only covers hooks/filesystem settings; the CLI
+      checks this env var independently. Without it, a study agent's context
+      leaks the operator's own MEMORY.md (run 20260926T124841: the strategizer
+      quoted lines from it verbatim in its own reasoning).
     """
     import os
     import sys
@@ -236,7 +243,7 @@ def _build_session_env() -> dict:
         get_namespace,
         get_run_config_path,
     )
-    env: dict = {}
+    env: dict = {"CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
     # The agent's shell must run the SAME interpreter as the agent loop, so
     # `python`/`uv run python` in Bash can import whatever the framework can
     # (f3dasm, adda, the study's deps). Without this, bash `python` resolves

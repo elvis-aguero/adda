@@ -253,6 +253,20 @@ def test_delegation_id_injected_into_session_env(monkeypatch):
     assert "F3DASM_DELEGATION_ID" not in cap["options"]["env"]
 
 
+def test_auto_memory_disabled_in_built_options():
+    """Regression (run 20260926T124841): setting_sources=[] does NOT stop the
+    bundled CLI's auto-memory injection — only CLAUDE_CODE_DISABLE_AUTO_MEMORY
+    does. Assert it on the ACTUAL ClaudeAgentOptions.env this adapter builds
+    (not just _build_session_env's return value), so a second construction
+    site bypassing _build_session_env would also be caught."""
+    cap: dict = {}
+    _install_fake_sdk(query=_capture_options_gen(cap))
+    ClaudeAdapter = _get_adapter()
+    ClaudeAdapter("claude-3", "sys", None, []).invoke(
+        [{"role": "user", "content": "hi"}])
+    assert cap["options"]["env"].get("CLAUDE_CODE_DISABLE_AUTO_MEMORY") == "1"
+
+
 def test_stream_event_types_captured_for_ping_measurement(tmp_path, monkeypatch):
     """Records each non-delta StreamEvent's type + inter-event gap, so a run
     reveals whether ping/lifecycle events arrive during silent phases (the
