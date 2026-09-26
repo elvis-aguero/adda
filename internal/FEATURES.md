@@ -619,6 +619,29 @@ Format per feature: **what** (plain language) · **why** · **where** (files) ·
 - **Status:** done, headless-tested (`tests/test_watchdog_launcher.py`) against
   a trivial sub-second child, including a grandchild-reap assertion.
 
+### `--entrypoint`: the watchdog CLI can launch a study's own script
+- **What:** `python -m adda.watchdog <study-dir>` always builds
+  `AgenticRun`'s built-in DEFAULT graph — it never forwards a custom
+  `graph=`. A study whose own `run.py` declares a different `Graph` (extra
+  roles, different edges — e.g. `studies/lcp_matlab_regression/run.py`'s
+  6-node graph, which adds `math_expert` and isn't reachable through
+  `python -m adda` at all) used to be launch-protectable only by hand-calling
+  `run_under_watchdog` directly, which is exactly why it wasn't: the Oscar
+  zero-shot harness launched bare `python run.py` and a hang went unwatched
+  (bug report, adda-boss-whopper). `--entrypoint SCRIPT` (a path relative to
+  `study-dir`, e.g. `run.py`) launches that script directly instead of
+  `python -m adda <study-dir>`, under the SAME watchdog protection (deadline,
+  kill, reap, retrospective) — a bug fix to the documented safe launcher, not
+  a new capability. Incompatible with `--model`/`--budget`: an arbitrary
+  entrypoint script takes no CLI arguments of its own to forward them to, so
+  those two must error out together with `--entrypoint` rather than be
+  silently dropped; the deadline still derives from the study's
+  `config.yaml` `budget:`.
+- **Where:** `_src/infra/watchdog_launcher.py` (`_build_parser`, `main`).
+- **Status:** done, headless-tested (`tests/test_watchdog_launcher.py`) —
+  entrypoint spawn, the two-flag rejection, a missing-script error before
+  anything is spawned, and unchanged behaviour when the flag is omitted.
+
 ### Synthetic watchdog retrospective (#12)
 - **What:** a watchdog kill leaves a labelled post-mortem so the analysis protocol
   isn't blind.
